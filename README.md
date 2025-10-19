@@ -40,7 +40,8 @@ We release a series of pretrained models and checkpoints to facilitate reproduct
 
 | Model | Description | WindowX | Link |
 |-------|-------------|------|------|
-| **Qwen2.5-VL-3B-Action** | Qwen2.5-VL with action tokens | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge-RT-1) |
+| **Qwen2.5-VL-3B-Action** | Qwen2.5-VL with action tokens | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
+| **Qwen3-VL-4B-Action** | Qwen2.5-VL with action tokens | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
 | **QWen-FAST-Bridge-RT-1** | QwenVL + fast-tokenizer | 58.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FAST-Bridge-RT-1) |
 | **QWen-OFT-Bridge-RT-1** | QwenVL + OFT action regression | 41.8 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-OFT-Bridge-RT-1) |
 | **QWen-PI-Bridge-RT-1** | QwenVL + flow-matching expert  | 62.5 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FM-Bridge-RT-1) |
