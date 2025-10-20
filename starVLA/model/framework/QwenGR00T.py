@@ -4,7 +4,7 @@
 # Design and Merged by [Jinhui YE / HKUST University] in [2025].
 """
 Qwen-GR00T Framework
-A lightweight implementation that Qwen2.5-vl + Flow-matching head to directly predict continuous actions
+A lightweight implementation that Qwen-VL + Flow-matching head to directly predict continuous actions
 Flow-matching header is copyright from GR00T N1.5,
 """
 from typing import List

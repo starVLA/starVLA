@@ -21,7 +21,7 @@ try:
 except NameError:
     pkg_path = None
 
-# 自动导入所有 framework 子模块 import，触发注册
+# Auto-import all framework submodules to trigger registration
 if pkg_path is not None:
     try:
         for _, module_name, _ in pkgutil.iter_modules(pkg_path):
@@ -40,20 +40,15 @@ def build_framework(cfg):
     """
 
     if not hasattr(cfg.framework, "name"): 
-        cfg.framework.name = cfg.framework.framework_py # 兼容旧配置yaml
-
-    if cfg.framework.name == "InternVLA-M1":
-        from starVLA.model.framework.M1 import InternVLA_M1
-        return InternVLA_M1(cfg)
-    elif cfg.framework.name == "QwenOFT":
+        cfg.framework.name = cfg.framework.framework_py  # Backward compatibility for legacy config yaml
+        
+    if cfg.framework.name == "QwenOFT":
         from starVLA.model.framework.QwenOFT import Qwenvl_OFT
         return Qwenvl_OFT(cfg)
     elif cfg.framework.name == "QwenFast":
         from starVLA.model.framework.QwenFast import Qwenvl_Fast
         return Qwenvl_Fast(cfg)
-    elif cfg.framework.name == "QwenFM":
-        from starVLA.model.framework.QwenFM import Qwenvl_FMHead
-        return Qwenvl_FMHead(cfg)
+
     
     # auto detect from registry
     framework_id = cfg.framework.name

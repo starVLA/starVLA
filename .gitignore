@@ -212,3 +212,4 @@ examples/SimplerEnv/eval_scripts
 starVLA/config/frameworks/*
 starVLA/model/modules/sam_model/*
 assets/SAMv2.txt
+playground/*

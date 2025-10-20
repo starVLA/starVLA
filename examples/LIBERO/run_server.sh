@@ -4,7 +4,7 @@ your_ckpt=playground/Pretrained_models/InternVLA-M1-LIBERO-Goal/checkpoints/step
 base_port=10093
 DEBUG=true
 
-python deployment/model_server/server_policy_M1.py \
+python deployment/model_server/server_policy.py \
     --ckpt_path ${your_ckpt} \
     --port ${base_port} \
     --use_bf16

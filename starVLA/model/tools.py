@@ -121,10 +121,10 @@ class Registry:
         self._registry = {}
 
     def register(self, key: str):
-        """装饰器：注册构建函数或类"""
+        """Decorator: register a builder function or class"""
         def decorator(framework_class):
             if key in self._registry:
-                # print(ImportWarning(f"{key} 已经注册到 {self.name}"))
+                # print(ImportWarning(f"{key} already registered to {self.name}"))
                 pass
             self._registry[key] = framework_class
             return framework_class
@@ -135,8 +135,8 @@ class Registry:
     
     def list(self):
         """
-        查看当前已注册的键; with_values=True 时返回 {key: value_obj} 映射。
-        value 用类名更直观也可以改成 framework.__name__。
+        List currently registered keys; if with_values=True (not used here) return mapping {key: value_obj}.
+        Using class name as value is also intuitive, e.g., framework.__name__.
         """
         return {k: v for k, v in self._registry.items()}
 

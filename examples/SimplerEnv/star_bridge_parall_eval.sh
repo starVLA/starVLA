@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo `which python`
-# 定义环境
+# Define environment
 cd .
 export star_vla_python=~/miniconda3/envs/starvla/bin/python
 export sim_python=~/miniconda3/envs/dinoact/bin/python
@@ -15,13 +15,13 @@ TSET_NUM=4 # repeat each task 4 times
 run_count=0
 
 if [ -z "$MODEL_PATH" ]; then
-  echo "❌ 没传入 MODEL_PATH 作为第一个参数, 使用默认参数"
+  echo "❌ MODEL_PATH not provided as the first argument, using default value"
   export MODEL_PATH="./results/Checkpoints/1007_qwenLargefm/checkpoints/steps_20000_pytorch_model.pt"
 fi
 
 ckpt_path=${MODEL_PATH}
 
-# 定义一个函数来启动服务
+# Define a function to start the service
 policyserver_pids=()
 eval_pids=()
 
@@ -42,53 +42,53 @@ start_service() {
     --use_bf16 \
     > "${svc_log}" 2>&1 &
   
-  local pid=$!          # 立即捕获正确 PID
+  local pid=$!          # Capture the PID immediately
   policyserver_pids+=($pid)
   sleep 10
 }
 
-# 定义一个函数来停止所有服务
+# Define a function to stop all services
 stop_all_services() {
-  # 等待所有评估任务完成
+  # Wait for all evaluation tasks to finish
   if [ "${#eval_pids[@]}" -gt 0 ]; then
-    echo "⏳ 等待评估任务完成..."
+    echo "⏳ Waiting for evaluation tasks to finish..."
     for pid in "${eval_pids[@]}"; do
       if ps -p "$pid" > /dev/null 2>&1; then
         wait "$pid"
         status=$?
         if [ $status -ne 0 ]; then
-            echo "警告: 评估任务 $pid 异常退出 (状态: $status)"
+            echo "Warning: evaluation task $pid exited abnormally (status: $status)"
         fi
       fi
     done
   fi
 
-  # 停止所有服务
+  # Stop all services
   if [ "${#policyserver_pids[@]}" -gt 0 ]; then
-    echo "⏳ 停止服务进程..."
+    echo "⏳ Stopping service processes..."
     for pid in "${policyserver_pids[@]}"; do
       if ps -p "$pid" > /dev/null 2>&1; then
         kill "$pid" 2>/dev/null
         wait "$pid" 2>/dev/null
       else
-        echo "⚠️ 服务进程 $pid 已不存在 (可能已提前退出)"
+        echo "⚠️ Service process $pid no longer exists (may have exited early)"
       fi
     done
   fi
 
-  # 清空 PID 数组
+  # Clear PID arrays
   eval_pids=()
   policyserver_pids=()
-  echo "✅ 所有服务和任务已停止"
+  echo "✅ All services and tasks have stopped"
 }
 
-# 获取当前系统的 CUDA_VISIBLE_DEVICES 列表
-IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # 将逗号分隔的 GPU 列表转换为数组
-NUM_GPUS=${#CUDA_DEVICES[@]}  # 获取可用 GPU 的数量
+# Get the CUDA_VISIBLE_DEVICES list
+IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # Convert the comma-separated GPU list into an array
+NUM_GPUS=${#CUDA_DEVICES[@]}  # Number of available GPUs
 
 
 
-# 打印调试信息
+# Debug info
 echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
 echo "CUDA_DEVICES: ${CUDA_DEVICES[@]}"
 echo "NUM_GPUS: $NUM_GPUS"
@@ -99,7 +99,7 @@ rgb_overlay_path=${SimplerEnv_PATH}/ManiSkill2_real2sim/data/real_inpainting/bri
 robot_init_x=0.147
 robot_init_y=0.028
 
-# 任务列表，每行指定一个 env-name
+# Task list, each item is an env-name
 declare -a ENV_NAMES=(
   StackGreenCubeOnYellowCubeBakedTexInScene-v0
   PutCarrotOnPlateInScene-v0
@@ -114,14 +114,14 @@ for i in "${!ENV_NAMES[@]}"; do
     
     ckpt_dir=$(dirname "${ckpt_path}")
     ckpt_base=$(basename "${ckpt_path}")
-    ckpt_name="${ckpt_base%.*}"  # 去掉 .pt 或 .bin 后缀
+    ckpt_name="${ckpt_base%.*}"  # strip .pt or .bin suffix
 
     tag="run${run_idx}"
     task_log="${ckpt_dir}/${ckpt_name}_infer_${env}.log.${tag}"
 
     echo "▶️ Launching task [${env}] run#${run_idx} on GPU $gpu_id, log → ${task_log}"
     
-    # 启动服务并获取服务进程的 PID
+    # Start the service and record its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -150,7 +150,7 @@ for i in "${!ENV_NAMES[@]}"; do
   done
 done
 
-# V2 同理：PutEggplantInBasketScene-v0 也执行 5 次
+# V2: PutEggplantInBasketScene-v0 also runs TSET_NUM times
 declare -a ENV_NAMES_V2=(
   PutEggplantInBasketScene-v0
 )
@@ -165,7 +165,7 @@ robot_init_y=0.06
 for i in "${!ENV_NAMES_V2[@]}"; do
   env="${ENV_NAMES_V2[i]}"
   for ((run_idx=1; run_idx<=TSET_NUM; run_idx++)); do
-    gpu_id=${CUDA_DEVICES[$(((run_count) % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
+    gpu_id=${CUDA_DEVICES[$(((run_count) % NUM_GPUS))]}  # Map to the GPU ID in CUDA_VISIBLE_DEVICES
     ckpt_dir=$(dirname "${ckpt_path}")
     ckpt_base=$(basename "${ckpt_path}")
     ckpt_name="${ckpt_base%.*}"
@@ -175,7 +175,7 @@ for i in "${!ENV_NAMES_V2[@]}"; do
 
     echo "▶️ Launching V2 task [${env}] run#${run_idx} on GPU $gpu_id, log → ${task_log}"
 
-    # 启动服务并获取服务进程的 PID
+    # Start the service and record its PID
     echo "server start run#${run_idx}"
     port=$((base_port + run_count))
     server_pid=$(start_service ${gpu_id} ${ckpt_path} ${port})
@@ -211,6 +211,6 @@ done
 
 stop_all_services
 wait
-echo "✅ 所有测试完成"
+echo "✅ All tests complete"
 
 

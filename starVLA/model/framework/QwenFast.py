@@ -15,7 +15,6 @@ Key Points:
 
 Note: How to add special tokens to Qwen2.5:
   download our model checkpoint with special tokens added: https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action
-  or /starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md （adpat a little code)
 """
 
 from typing import List
@@ -90,7 +89,7 @@ class Qwenvl_Fast(baseframework):
         **kwargs,
     ) -> Tuple:
         """
-        训练前向：直接next token prediction 预测未来动作（无扩散）。
+        Training forward: directly predict future actions via next-token prediction (no diffusion).
 
         Flow:
           1. Build QwenVL inputs (images + instruction tokens)
@@ -108,9 +107,9 @@ class Qwenvl_Fast(baseframework):
             dict:
                 action_loss (torch.Tensor): Scalar diffusion noise prediction loss.
         """
-        batch_images = [example["image"] for example in examples]  #  [B，[PLT]]
+        batch_images = [example["image"] for example in examples]  #  [B, [PIL]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-        actions = [example["action"] for example in examples]  # label [B， len, 7]
+        actions = [example["action"] for example in examples]  # label [B, len, 7]
         
         # step 0: map_raw_action_to_vlm_action
         vlm_action_tokens = self.action_model.encoder_action2vlmtoken(actions)  # List[str]
@@ -141,7 +140,7 @@ class Qwenvl_Fast(baseframework):
         **kwargs: str,
     ) -> np.ndarray:
         """
-        推理：单次前向直接回归未来动作（无扩散采样）。
+        Inference: single forward pass to obtain future actions (no diffusion sampling).
 
         Steps:
           1. Resize images to training resolution (if specified)
@@ -189,10 +188,10 @@ class Qwenvl_Fast(baseframework):
         generated_ids: torch.LongTensor,
     ) -> List[List[int]]:
         """
-        从生成的 token 序列里抽取动作 token（已加偏移），返回一个二维列表：
+        Extract action tokens (with offset) from the generated token sequence and return a 2D list:
         ret[b] = [vlm_action_token_id_0, vlm_action_token_id_1, ...]
-        规则：保留所有落在 [_ACTION_TOKEN_MIN, _ACTION_TOKEN_MAX] 内的 token，按出现顺序。
-        你可按需要改成“只取首次出现后连续段”。
+        Rule: keep all tokens falling within [_ACTION_TOKEN_MIN, _ACTION_TOKEN_MAX] in order of appearance.
+        You may change it to "take only the first occurrence followed by continuous segment" as needed.
         """
         act_min = self.action_model._ACTION_TOKEN_MIN
         act_max = self.action_model._ACTION_TOKEN_MAX
@@ -203,15 +202,15 @@ class Qwenvl_Fast(baseframework):
             if idx.numel() == 0:
                 results.append([])
                 continue
-            # 全部动作 token
+            # all action tokens
             tokens = generated_ids[b, idx].tolist()
             results.append(tokens)
         return results
 
     def _decode_action_tokens(self, batch_vlm_tokens: List[List[int]]) -> List[Any]:
         """
-        将带偏移的 VLM 动作 token 列表解码回 fast tokenizer 语义。
-        fast_tokenizer.decode 预期输入：原始 fast token id 序列（未加偏移）。
+        Decode the offset VLM action token list back to fast tokenizer semantics.
+        fast_tokenizer.decode expects the original fast token id sequence (without offset).
         """
         act_min = self.action_model._ACTION_TOKEN_MIN
         batch_fast_token_ids = []

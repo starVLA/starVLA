@@ -1,12 +1,11 @@
 # Copyright 2025 starVLA community. All rights reserved.
 # Licensed under the MIT License, Version 1.0 (the "License");
-# Implemented by [Junqiu YU / Fudan University] in [2025]. 
-# Design and Merged by [Jinhui YE / HKUST University] in [2025].
+# Implemented by [Jinhui YE / HKUST University] in [2025]. 
+
 """
 Qwen-Dual Framework
-A lightweight implementation that Qwen2.5-vl + Flow-matching head to directly predict continuous actions
+A lightweight implementation that Qwen2.5-vl + dinov2 + Flow-matching head to directly predict continuous actions
 Flow-matching header is copyright from GR00T N1.5
-A dino as action obs
 """
 from typing import List
 from tqdm import tqdm

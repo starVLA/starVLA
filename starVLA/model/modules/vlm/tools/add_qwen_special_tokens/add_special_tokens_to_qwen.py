@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, Qwen2_5_VLForConditionalGeneration, AutoProcessor
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
+from transformers import Qwen3VLForConditionalGeneration
 
 def add_new_tokens(
     model,
@@ -19,29 +19,29 @@ def add_new_tokens(
     new_tokens: List[str],
     init_strategy: str = "avg",
     as_special: bool = True,
-) -> Tuple[Dict[str, int], int, int, int]:
+        ) -> Tuple[Dict[str, int], int, int, int]:
     """
-    向模型与 tokenizer 中添加新的 tokens（若不存在）。
+    Add new tokens into the model and tokenizer (if they don't already exist).
     init_strategy: avg / normal / zero
-    返回:
-      - mapping: 所有目标 tokens 的 token_id 映射
-      - added_now: 本次实际新增到 tokenizer 的数量
-      - action_token_start_idx: 新增 embedding 起始下标（按模型旧 embedding 大小计算）
-      - action_token_end_idx: 新增 embedding 结束下标（若无新增，则为 start_idx-1）
-    说明:
-      - tokenizer.vocab_size 为基础词表大小（不含已添加的 special/added tokens）
-      - len(tokenizer) 为总词表大小（含 added/special tokens）
-      - 模型的旧 embedding 大小以 model.get_input_embeddings().weight.shape[0] 为准
+    Returns:
+      - mapping: token_id mapping for all target tokens
+      - added_now: number of tokens actually added to the tokenizer this time
+      - action_token_start_idx: start index of newly added embeddings (based on old embedding size)
+      - action_token_end_idx: end index of newly added embeddings (if none added, equals start_idx - 1)
+    Notes:
+      - tokenizer.vocab_size is the base vocabulary size (excluding already added special/added tokens)
+      - len(tokenizer) is the total vocabulary size (including added/special tokens)
+      - The old embedding size of the model is model.get_input_embeddings().weight.shape[0]
     """
-    # 1) 计算需要新增的 tokens（相对 tokenizer 现有 vocab）
-    vocab = tokenizer.get_vocab()  # 含原有的特殊 tokens
+    # 1) Compute tokens to add (relative to current tokenizer vocab)
+    vocab = tokenizer.get_vocab()  # includes existing special tokens
     to_add_tokens = [t for t in new_tokens if t not in vocab]
 
-    # 2) 记录模型当前的 embedding 尺寸（基础大小）
+    # 2) Record current embedding size of the model (base size)
     old_embed = model.get_input_embeddings()
-    old_embed_size = old_embed.weight.shape[0] # 是包括QWen 自留的 token 的
+    old_embed_size = old_embed.weight.shape[0]  # includes Qwen reserved tokens
 
-    # 3) 如有需要，先把 tokens 加到 tokenizer
+    # 3) If needed, add tokens into tokenizer first
     added_now = 0
     if to_add_tokens:
         if as_special:
@@ -49,14 +49,14 @@ def add_new_tokens(
         else:
             added_now = tokenizer.add_tokens(to_add_tokens)
 
-    # 4) 目标总大小（tokenizer 总大小，基础 + 所有已添加）
-    # target_size = len(tokenizer) # 总词表 --> 是否要保留之前预留的 空token？
+    # 4) Target total size (base + newly added)
+    # target_size = len(tokenizer) # total vocab --> whether to keep previously reserved empty tokens?
     target_size = old_embed_size + added_now
-    # 5) 若 tokenizer 总大小大于模型 embedding 大小，则需要 resize 并初始化新增行
-    action_token_start_idx = old_embed_size # 这里是不保留方案
-    action_token_end_idx = old_embed_size - 1  # 默认“无新增”
+    # 5) If tokenizer total size exceeds model embedding size, resize and init new rows
+    action_token_start_idx = old_embed_size  # no-reserve plan here
+    action_token_end_idx = old_embed_size - 1  # default: "no additions"
     if target_size > old_embed_size:
-        model.resize_token_embeddings(target_size) # 这里不该resize target, 会和 tokenizer 不匹配
+        model.resize_token_embeddings(target_size)  # resizing to target size
         new_embed = model.get_input_embeddings()
         with torch.no_grad():
             if init_strategy == "avg":
@@ -70,11 +70,11 @@ def add_new_tokens(
                 for idx in range(old_embed_size, target_size):
                     nn.init.normal_(new_embed.weight[idx], mean=0.0, std=0.02)
             else:
-                raise ValueError(f"未知 init_strategy: {init_strategy}")
+                raise ValueError(f"Unknown init_strategy: {init_strategy}")
 
         action_token_end_idx = target_size - 1
 
-    # 6) 构造映射（返回请求关心的 tokens 的 id）
+    # 6) Build mapping (return ids for requested tokens)
     mapping = {t: tokenizer.convert_tokens_to_ids(t) for t in new_tokens}
     return mapping, added_now, action_token_start_idx, action_token_end_idx
 
@@ -84,27 +84,27 @@ def save_bundle(model, tokenizer, mapping: Dict[str, int], save_dir: str, proces
     tokenizer.save_pretrained(save_dir)
     with open(os.path.join(save_dir, "added_custom_token_id_map.json"), "w", encoding="utf-8") as f:
         json.dump(mapping, f, ensure_ascii=False, indent=2)
-    print(f"[OK] 已保存到: {save_dir}")
+    print(f"[OK] Saved to: {save_dir}")
 
-    # 额外保存 AutoProcessor（生成 preprocessor_config.json），以便 AutoProcessor.from_pretrained(...) 加载
+    # Additionally save AutoProcessor (generate preprocessor_config.json) so AutoProcessor.from_pretrained(...) can load
     try:
         src = processor_src or save_dir
         processor = AutoProcessor.from_pretrained(src, trust_remote_code=True)
-        # 同步 processor.tokenizer 
+        # Sync processor.tokenizer 
         processor.tokenizer = tokenizer
         processor.save_pretrained(save_dir)
-        print(f"[OK] AutoProcessor 已保存到: {save_dir}")
+        print(f"[OK] AutoProcessor saved to: {save_dir}")
     except Exception as e:
-        print(f"[WARN] 保存 AutoProcessor 失败: {e}")
+        print(f"[WARN] Failed to save AutoProcessor: {e}")
 
 def reload_and_check(save_dir: str, tokens: List[str]) -> bool:
     tok = AutoTokenizer.from_pretrained(save_dir, trust_remote_code=True)
     vocab = tok.get_vocab()
     missing = [t for t in tokens if t not in vocab]
     if missing:
-        print(f"[WARN] 重新加载后仍缺失: {missing}")
+        print(f"[WARN] Still missing after reload: {missing}")
         return False
-    print("[OK] 重新加载检查通过，所有 token 均存在。")
+    print("[OK] Reload check passed, all tokens exist.")
     return True
 
 def parse_tokens(args) -> List[str]:
@@ -117,7 +117,7 @@ def parse_tokens(args) -> List[str]:
                 line = line.strip()
                 if line:
                     tokens.append(line)
-    # 去重保持顺序
+    # De-duplicate while keeping order
     seen = set()
     ordered = []
     for t in tokens:
@@ -128,14 +128,14 @@ def parse_tokens(args) -> List[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="为 Qwen2.5-VL 模型添加特殊 tokens 并保存到本地。"
+        description="Add special tokens to Qwen2.5-VL model and save to local directory."
     )
-    parser.add_argument("--model-id", default="Qwen/Qwen2.5-VL-3B-Instruct", help="HF Hub 模型或本地路径")
-    parser.add_argument("--save-dir", required=True, help="保存目录")
-    parser.add_argument("--tokens", default="", help="逗号分隔 tokens，例如: <loc_x>,<loc_y>")
-    parser.add_argument("--tokens-file", help="包含待添加 token 的文本文件（每行一个）")
-    parser.add_argument("--init-strategy", default="avg", choices=["avg", "normal", "zero"], help="新增 embedding 初始化策略")
-    parser.add_argument("--as-special", action="store_true", help="是否作为 special tokens 添加")
+    parser.add_argument("--model-id", default="Qwen/Qwen2.5-VL-3B-Instruct", help="HF Hub model ID or local path")
+    parser.add_argument("--save-dir", required=True, help="Output directory to save")
+    parser.add_argument("--tokens", default="", help="Comma-separated tokens, e.g., <loc_x>,<loc_y>")
+    parser.add_argument("--tokens-file", help="Text file containing tokens to add (one per line)")
+    parser.add_argument("--init-strategy", default="avg", choices=["avg", "normal", "zero"], help="Initialization strategy for newly added embeddings")
+    parser.add_argument("--as-special", action="store_true", help="Whether to add as special tokens")
     parser.add_argument("--no-as-special", dest="as_special", action="store_false")
     parser.set_defaults(as_special=True)
     parser.add_argument("--padding-side", default="left", choices=["left", "right"])
@@ -144,12 +144,12 @@ def main():
 
     tokens = parse_tokens(args)
     if not tokens:
-        print("未提供任何 token，可使用 --tokens 或 --tokens-file")
+        print("No tokens provided, use --tokens or --tokens-file")
         return
 
-    print(f"[INFO] 待处理 tokens: {tokens}")
+    print(f"[INFO] Tokens to process: {tokens}")
 
-    print(f"[INFO] 加载模型: {args.model_id}")
+    print(f"[INFO] Loading model: {args.model_id}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
     tokenizer.padding_side = args.padding_side
     # model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
@@ -169,10 +169,10 @@ def main():
     processor.tokenizer.padding_side = "left"
 
 
-    # 额外打印三种大小，便于诊断
-    base_tok_size = tokenizer.vocab_size                  # 基础词表大小
-    total_tok_size = len(tokenizer)                       # 总词表大小
-    model_embed_size = model.get_input_embeddings().weight.shape[0]  # 模型当前 embedding 大小
+    # Print sizes for diagnosis
+    base_tok_size = tokenizer.vocab_size                  # base vocab size
+    total_tok_size = len(tokenizer)                       # total vocab size
+    model_embed_size = model.get_input_embeddings().weight.shape[0]  # current model embedding size
     print(f"[DEBUG] tokenizer.vocab_size(base) = {base_tok_size}")
     print(f"[DEBUG] len(tokenizer)(total)     = {total_tok_size}")
     print(f"[DEBUG] model.embed_size(before)  = {model_embed_size}")
@@ -189,12 +189,12 @@ def main():
 
     save_bundle(model, tokenizer, mapping, args.save_dir, processor_src=args.model_id, padding_side=args.padding_side)
 
-    # 重新验证
+    # Re-validate
     reload_and_check(args.save_dir, tokens)
 
-    print(f"[INFO] 本次新增到 tokenizer 的数量: {added}")
-    # print(f"[INFO] Token 映射: {mapping}")
-    print(f"[INFO] Action token idx 范围: [{action_token_start_idx}, {action_token_end_idx}]")
+    print(f"[INFO] Newly added to tokenizer: {added}")
+    # print(f"[INFO] Token mapping: {mapping}")
+    print(f"[INFO] Action token idx range: [{action_token_start_idx}, {action_token_end_idx}]")
     print(f"[DEBUG] model.embed_size(after)   = {new_model_embed_size}")
 
 

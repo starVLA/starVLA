@@ -1,6 +1,6 @@
-# Qwen 特殊 Token 添加脚本
+# Qwen Special Token Addition Script
 
-快速为 Qwen/Qwen2.5-VL-3B-Instruct (或兼容模型) 添加新的特殊 token，并保存成可直接加载的本地目录。
+Quickly add new special tokens to Qwen/Qwen2.5-VL-3B-Instruct (or compatible models) and save them to a locally loadable directory.
 
 ## 运行
 
@@ -19,7 +19,7 @@ python starVLA/model/modules/vlm/tools/add_qwen_special_tokens/add_special_token
   
 ```
 
-`tokens.txt` 示例：
+`tokens.txt` example:
 ```
 <loc_x>
 <loc_y>
@@ -27,21 +27,29 @@ python starVLA/model/modules/vlm/tools/add_qwen_special_tokens/add_special_token
 <bbox_end>
 ```
 
-## 参数
-- --model-id: HF Hub HF 或 已存在的本地模型目录
-- --save-dir: 输出目录
+ 
+## Arguments
+ 
+- --model-id: HF Hub model ID or an existing local model directory
+- --save-dir: Output directory
 - --tokens-file
 - --init-strategy: avg / normal / zero
-- --as-special / --no-as-special: 作为 special token 还是普通 token
+- --as-special / --no-as-special: Add as special tokens or regular tokens
 - --padding-side: left / right
 - --device: cpu / cuda / mps / auto
 
-## 结果
-保存目录包含：
+ 
+## Results
+ 
+The saved directory contains:
+ 
 - config.json / model.safetensors / tokenizer.*
-- added_token_id_map.json (记录新增 token 到 id 的映射)
+- added_token_id_map.json (records the mapping from newly added tokens to IDs)
 
-## 加载
+ 
+ 
+## Load
+ 
 ```python
 from transformers import AutoTokenizer, Qwen2_5_VLForConditionalGeneration
 tok = AutoTokenizer.from_pretrained("./qwen_vl_with_spatial", trust_remote_code=True)

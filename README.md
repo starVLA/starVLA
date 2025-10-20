@@ -16,10 +16,10 @@ In StarVLA (also a pun on “start VLA” ),  each functional component (model, 
 <details open>
 <summary><b>Various VLA Frameworks </b></summary>
 
-- [x] **Qwen-FAST**: Utilizes Qwen2.5-VL-3B with a fast tokenizer to autoregressively generate discrete action tokens conditioned on visual and linguistic inputs (in line with RT-2/OpenVLA/π₀-fast).
+- [x] **Qwen-FAST**: Utilizes Qwen2.5-VL-3B with a fast tokenizer to autoregressively generate discrete action tokens conditioned on visual and linguistic inputs (in line with π₀-fast).
 - [x] **Qwen-OFT**: Combines Qwen2.5-VL-3B with an MLP action head to perform parallel decoding of continuous actions, regressed from the hidden states of predefined special action tokens (in line with OpenVLA-OFT/EO).
-- [x] **Qwen-FM**: Integrates the Flow-Matching (FM) action expert with Qwen2.5-VL-3B, adopting a diffusion-based approach for continuous action prediction (in line with π₀/GR-3).
-- [x] **Qwen-Dual**: Implements a dual-system VLA architecture, where Qwen2.5-VL-3B serves as System2 for high-level vision-language reasoning, while the Flow-Matching module acts as System1 for rapid action prediction (in line with GR00T/InternVLA-M1).
+- [x] **Qwen-PI**: Integrates the Flow-Matching (FM) action expert with Qwen2.5-VL-3B, adopting a diffusion-based approach for continuous action prediction (in line with π₀).
+- [x] **Qwen-GR00T**: Implements a dual-system VLA architecture, where Qwen2.5-VL-3B serves as System2 for high-level vision-language reasoning, while the Flow-Matching module acts as System1 for rapid action prediction (in line with GR00T).
 
 
 
@@ -40,12 +40,12 @@ We release a series of pretrained models and checkpoints to facilitate reproduct
 
 | Model | Description | WindowX | Link |
 |-------|-------------|------|------|
-| **Qwen2.5-VL-3B-Action** | Qwen2.5-VL with action tokens | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
-| **Qwen3-VL-4B-Action** | Qwen2.5-VL with action tokens | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
-| **QWen-FAST-Bridge-RT-1** | QwenVL + fast-tokenizer | 58.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FAST-Bridge-RT-1) |
-| **QWen-OFT-Bridge-RT-1** | QwenVL + OFT action regression | 41.8 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-OFT-Bridge-RT-1) |
-| **QWen-PI-Bridge-RT-1** | QwenVL + flow-matching expert  | 62.5 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FM-Bridge-RT-1) |
-| **QWen-GR00T-Bridge-RT-1** | QwenVL + GR00T N1.5 action header | 63.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge-RT-1) |
+| **Qwen2.5-VL-3B-Action** | Add action tokens to Qwen2.5-VL  | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
+| **Qwen3-VL-4B-Action** | Add action tokens to Qwen3-VL | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
+| **QWen2.5-FAST-Bridge-RT-1** | QwenVL + fast-tokenizer | 58.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FAST-Bridge-RT-1) |
+| **QWen2.5-OFT-Bridge-RT-1** | QwenVL + OFT action regression | 41.8 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-OFT-Bridge-RT-1) |
+| **QWen2.5-PI-Bridge-RT-1** | QwenVL + flow-matching expert  | 62.5 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FM-Bridge-RT-1) |
+| **QWen2.5-GR00T-Bridge-RT-1** | QwenVL + GR00T N1.5 action header | 63.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge-RT-1) |
 | **QWen-GR00T-Bridge** | QwenVL + GR00T N1.5 action header | 71.4 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge) |
 | **QWen3VL-OFT-Bridge-RT-1** | Qwen3VL + OFT action regression | 42.7 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-OFT-Bridge-RT-1) |
 | **QWen3VL-GR00T-Bridge-RT-1** | Qwen3VL + GR00T N1.5 action header | 65.3 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) |
