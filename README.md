@@ -334,6 +334,12 @@ Tip: Before submitting a PR, run make check locally to pass formatting and lint.
 
 
 ##  🙏 Acknowledgements
-References & inspiration: LeRobot, GR00T, DeepSpeed, QWEN.  
-Codebase originally forked from InternVLA-M1
+This project draws inspiration and references from several notable open-source initiatives, including:  
+- [LeRobot](https://github.com/huggingface/lerobot)  
+- [GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)  
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)  
+- [Qwen-VL](https://github.com/QwenLM/Qwen3-VL/tree/main)  
+- [InternVL](https://github.com/OpenGVLab/InternVL)  
+
+The codebase was originally forked from [InternVLA-M1](https://github.com/InternRobotics/InternVLA-M1).
 
