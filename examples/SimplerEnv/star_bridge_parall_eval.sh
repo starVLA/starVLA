@@ -16,7 +16,7 @@ run_count=0
 
 if [ -z "$MODEL_PATH" ]; then
   echo "❌ MODEL_PATH not provided as the first argument, using default value"
-  export MODEL_PATH="./results/Checkpoints/1007_qwenLargefm/checkpoints/steps_20000_pytorch_model.pt"
+  export MODEL_PATH="./StarVLA/Qwen-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt"
 fi
 
 ckpt_path=${MODEL_PATH}

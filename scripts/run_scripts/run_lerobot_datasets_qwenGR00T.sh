@@ -1,5 +1,3 @@
-
-
 export NCCL_SOCKET_IFNAME=bond0
 export NCCL_IB_HCA=mlx5_2,mlx5_3
 
@@ -9,22 +7,23 @@ export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 
 
-Framework_name=InternVLA-M1
+Framework_name=Qwen-Dual
 base_vlm=./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct # must be a local path, due to simpler will run in other where
-freeze_module_list="qwen_vl_interface,dino_encoder" # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
-freeze_module_list="qwen_vl_interface.model.model.visual,dino_encoder" # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
+base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct
 
+freeze_module_list='' # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
+DIT_TYPE="DiT-B"
+# freeze_module_list="qwen_vl_interface.model.model.visual,dino_encoder" # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
 
 llavadata="asv2_conversation_en,asv2_detailed_description_en"
-oxe_data_root=playground/Datasets/OXE_LEROBOT_DATASET
-data_mix=bridge
+oxe_data_root=playground/Datasets/OXE_LEROBOT
+data_mix=bridge_rt_1
 
 run_root_dir=./playground/Checkpoints
-run_id=debug_0910_internM1_cotrain
+run_id=1011_starvla_qwen_dual
 
+export action_input_dim=2
 export WANDB_MODE=disabled
-
-
 
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
@@ -34,24 +33,25 @@ cp $0 ${output_dir}/
 
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
-  --num_processes 1 \
-  starVLA/training/train_starvla_cotrain.py \
-  --config_yaml ./starVLA/config/training/internvla_cotrain_oxe.yaml \
+  --num_processes 8 \
+  starVLA/training/train_starvla.py \
+  --config_yaml ./starVLA/config/training/starvla_contrain_oxe.yaml \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
-  --datasets.vlm_data.dataset_use ${llavadata} \
+  --framework.action_model.action_hidden_dim ${action_input_dim} \
+  --framework.action_model.action_model_type ${DIT_TYPE} \
   --datasets.vla_data.data_root_dir ${oxe_data_root}\
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.per_device_batch_size 16 \
-  --datasets.vlm_data.per_device_batch_size 2 \
-  --trainer.freeze_modules  ${freeze_module_list} \
+  --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 100000 \
   --trainer.save_interval 20000 \
+  --trainer.logging_frequency 10 \
   --trainer.eval_interval 100 \
   --trainer.learning_rate.base 4e-5 \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
-  --wandb_project internvla \
+  --wandb_project starVLA \
   --wandb_entity jinhuiye \
   # --is_debug True
 

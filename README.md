@@ -1,4 +1,11 @@
 # StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing
+
+![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)
+
+We fixed several script links and so everything is smoother now. Thanks to the community for the feedback.
+
+---
+
 StarVLA is a modular and flexible codebase for developing Vision-Language Model (VLM) to Vision-Language-Action (VLA) models.
 In StarVLA (also a pun on “start VLA” ),  each functional component (model, data, trainer, config, evaluation, etc.) follows a top-down, intuitive separation and high cohesion and low coupling principle, which enabling plug-and-play design, rapid prototyping, and independent debugging.
 
@@ -24,9 +31,9 @@ In StarVLA (also a pun on “start VLA” ),  each functional component (model, 
 
 
 <p align="center">
-  <img src="assets/starVLA_tabel_v2.png" alt="SimplerEnv modules" width="85%">
+  <img src="assets/starvla_simpleEnv.png" alt="SimplerEnv modules" width="95%">
 </p>
-* Qwen-FAST and Qwen-OFT were trained on 16×A100 GPUs for 10k steps (~3 hours), while Qwen-FM and Qwen-Dual were trained for 30k steps (~18 hours). 
+
 
 For dynamic updates, see our [🍀 Overleaf](https://www.overleaf.com/read/qqtwrnprctkf#d5bdce), which continuously presents our real-time experimental results.
 
@@ -88,9 +95,9 @@ StarVLA emphasizes a modular model design. Each major framework file can be run 
 
 ```bash
 # model
-python starVLA/model/framework/QwenOFT.py --config_yaml internvla_cotrain_oxe.yaml
+python starVLA/model/framework/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
 # dataloader
-python starVLA/dataloader/lerobot_datasets.py --config_yaml internvla_cotrain_oxe.yaml
+python starVLA/dataloader/lerobot_datasets.py --config_yaml starvla_cotrain_oxe.yaml
 
 ```
 Note: `starVLA/model/framework/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
@@ -164,7 +171,8 @@ python starVLA/model/framework/QwenGR00T.py
 ```
 
 
-It should build successfully and `print(model)`. You can also call `model.forward(fake_data)` and obtain unnormalized actions via `model.predict_action(fake_data)`.
+You should download `./playground/Pretrained_models/Qwen3-VL-4B-Instruct`. It should build successfully and `print(model)`. You can also call `model.forward(fake_data)` and obtain unnormalized actions via `model.predict_action(fake_data)`.
+
 </details>
 
 <details close>
@@ -178,7 +186,7 @@ We also provide a parallel evaluation script:
   bash examples/SimplerEnv/star_bridge_parall_eval.sh ${check_pt}
   ```
 
-Before running, edit these variables directly at the top of `star_bridge.sh`.
+Before running, down [Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) and follow [SimpplerEnv](https://simpler-env.github.io/) prapare a python.  Edit these variables directly at the top of `star_bridge_parall_eval.sh`.
 
 If you don't want parallel testing, please run:
 
@@ -222,7 +230,7 @@ Steps:
       --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
       --num_processes 8 \
       starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/internvla_cotrain_custom.yaml \
+      --config_yaml ./starVLA/config/training/starvla_contrain_oxe.yaml \
       --framework.framework_py ${Framework_name} \
       --framework.qwenvl.base_vlm ${base_vlm} \
       --run_root_dir ${run_root_dir} \
@@ -268,7 +276,7 @@ accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml  \
   --num_processes 8 \
   starVLA/training/train_internvla.py \
-  --config_yaml ./starVLA/config/training/internvla_cotrain_oxe.yaml \
+  --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.action_model.new_module ${module_name} \ # plug-in a new module to action model

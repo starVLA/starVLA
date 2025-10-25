@@ -22,3 +22,6 @@ deepspeed==0.16.9
 qwen-vl-utils
 omegaconf
 numpy==1.26.4
+wandb
+rich
+diffusers
