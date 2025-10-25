@@ -45,7 +45,7 @@ We release a series of pretrained models and checkpoints to facilitate reproduct
 | **QWen2.5-FAST-Bridge-RT-1** | QwenVL + fast-tokenizer | 58.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FAST-Bridge-RT-1) |
 | **QWen2.5-OFT-Bridge-RT-1** | QwenVL + OFT action regression | 41.8 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-OFT-Bridge-RT-1) |
 | **QWen2.5-PI-Bridge-RT-1** | QwenVL + flow-matching expert  | 62.5 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FM-Bridge-RT-1) |
-| **QWen2.5-GR00T-Bridge-RT-1** | QwenVL + GR00T N1.5 action header | 63.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge-RT-1) |
+| **QWen2.5-GR00T-Bridge-RT-1** | QwenVL + GR00T N1.5 action header | 63.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-PI-Bridge-RT-1) |
 | **QWen-GR00T-Bridge** | QwenVL + GR00T N1.5 action header | 71.4 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge) |
 | **QWen3VL-OFT-Bridge-RT-1** | Qwen3VL + OFT action regression | 42.7 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-OFT-Bridge-RT-1) |
 | **QWen3VL-GR00T-Bridge-RT-1** | Qwen3VL + GR00T N1.5 action header | 65.3 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) |
@@ -160,7 +160,7 @@ pip install -e .
 
 ```bash
 # check framework with fake examples
-python starVLA/model/framework/QwenFM.py
+python starVLA/model/framework/QwenGR00T.py
 ```
 
 
@@ -171,16 +171,25 @@ It should build successfully and `print(model)`. You can also call `model.forwar
 <summary><b>🧪 Eval Existing Model
 </b></summary>
 
-The evaluation pipeline is adapted from [InternVLA-M1](https://github.com/InternRobotics/InternVLA-M1/examples/SimplerEnv)
-
 We also provide a parallel evaluation script:
 
   ```bash
-  check_pt=0723_v6_vla_dino_32/checkpoints/steps_10000_pytorch_model.pt
-  bash examples/SimplerEnv/eval_scripts/star_bridge.sh ${check_pt}
+  check_pt=StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
+  bash examples/SimplerEnv/star_bridge_parall_eval.sh ${check_pt}
   ```
 
 Before running, edit these variables directly at the top of `star_bridge.sh`.
+
+If you don't want parallel testing, please run:
+
+```bash
+
+# Terminal 1
+bash ./examples/SimplerEnv/start_server.sh
+# Terminal 2
+bash ./examples/SimplerEnv/start_simpler_env.sh
+```
+
 
 </details>
 
@@ -205,15 +214,15 @@ Steps:
 3) Run with Accelerate:
     ```bash
     base_vlm=Qwen/Qwen2.5-VL-3B-Instruct
-    Framework_name=QwenFM
+    Framework_name=QwenGR00T
     run_root_dir=./results
     run_id=${Framework_name}
 
     accelerate launch \
       --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
       --num_processes 8 \
-      starVLA/training/train_internvla.py \
-      --config_yaml ./starVLA/config/training/internvla_cotrain_oxe.yaml \
+      starVLA/training/train_starvla.py \
+      --config_yaml ./starVLA/config/training/internvla_cotrain_custom.yaml \
       --framework.framework_py ${Framework_name} \
       --framework.qwenvl.base_vlm ${base_vlm} \
       --run_root_dir ${run_root_dir} \
@@ -238,8 +247,15 @@ A: We profiled it: data preprocessing takes <1% time. Keeping it inside the Fram
 <details close>
 <summary><b>Q: Can I use a backbone other than Qwen2.5-VL?</b></summary>
 
-A: Yes. Implement new vision + language modules and compose them inside a Framework; any other existing models can be swapped in. yet, due to framework precessing raw action data, it is very easy to swapped in.
+A: Yes. Implement new vision + language modules and compose them inside a Framework; any other existing models can be swapped in. Yet, due to the framework processing raw action data, it is very easy to swap in.
 </details>
+
+<details close> <summary><b>Q: Why isn't there an abstract interface for the vision tower?</b></summary>
+  
+A: We believe that VLM will become the base model and will inherently possess its own native vision tower.
+
+</details>
+
 
 <details close>
 <summary><b>Q: Can I override or add parameters via the terminal?</b></summary>
