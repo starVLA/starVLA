@@ -197,6 +197,15 @@ bash ./examples/SimplerEnv/start_server.sh
 # Terminal 2
 bash ./examples/SimplerEnv/start_simpler_env.sh
 ```
+---
+
+⚠️ **Common Issues**
+When testing SimplerEnv on NVIDIA A100, you may encounter the following error:
+`libvulkan.so.1: cannot open shared object file: No such file or directory`
+You can refer to this link to fix: [Installation Guide – Vulkan Section](https://maniskill.readthedocs.io/en/latest/user_guide/getting_started/installation.html#vulkan)
+
+When run policy server but `NotImplementedError:Framework QwenGR00T is not implemented`, you may need to `python QwenGR00T.py` to check your env.
+
 
 
 </details>

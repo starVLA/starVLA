@@ -1,16 +1,35 @@
 This document provides instructions for reproducing our **experimental results** with SimplerEnv.  
 
-# 🚀 Eval SimplerEnv
-The evaluation pipeline is adapted from https://github.com/InternRobotics/InternVLA-M1/examples/SimplerEnv
+
+## 📦 1. Environment Setup
+
+To set up the environment, please first follow the official [SimplerEnv repository](https://github.com/simpler-env/SimplerEnv) to install the base `simpler_env` environment. 
+
+Afterwards, inside the `simpler_env` environment, install the following dependencies:  
+
+```bash
+pip install tyro matplotlib mediapy websockets msgpack
+pip install numpy==1.24.4
+```
+
+⚠️ **Common Issues**
+When testing SimplerEnv on NVIDIA A100, you may encounter the following error:
+`libvulkan.so.1: cannot open shared object file: No such file or directory`
+You can refer to this link to fix: [Installation Guide – Vulkan Section](https://maniskill.readthedocs.io/en/latest/user_guide/getting_started/installation.html#vulkan)
+
+---
+
+
+## 🚀 2. Eval SimplerEnv
 
 Steps:
-1) Download the checkpoint:`results/Checkpoints/1_need/0723_v6_vla_dino_32/checkpoints/steps_10000_pytorch_model.pt`
+1) Download the checkpoint:[Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1)
 
 We also provide a parallel evaluation script:
 
 ```bash
-check_pt=0723_v6_vla_dino_32/checkpoints/steps_10000_pytorch_model.pt
-bash examples/SimplerEnv/eval_scripts/star_bridge.sh ${check_pt}
+check_pt=StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
+bash examples/SimplerEnv/star_bridge_parall_eval.sh ${check_pt}
 ```
 
 Before running star_bridge.sh, set the following three paths:
@@ -19,45 +38,6 @@ Before running star_bridge.sh, set the following three paths:
 - SimplerEnv_PATH: Local path to the SimplerEnv project.
 Alternatively, edit these variables directly at the top of `star_bridge.sh`.
 
-
-
-## 📊 Experimental Results
-
-### 1. WidowX Robot
-
-| Task                              | Success Rate (%) |
-| --------------------------------- | ---------------- |
-| Put Spoon on Towel                | 87.5             |
-| Put Carrot on Plate               | 67.9             |
-| Stack Green Block on Yellow Block | 31.3             |
-| Put Eggplant in Yellow Basket     | 100.0            |
-| **Average**                       | **71.7**         |
-
----
-
-### 2. Google Robot (Visual Matching)
-
-| Task                                     | Success Rate (%) |
-| ---------------------------------------- | ---------------- |
-| Pick Coke Can                            | 95.3             |
-| Move Near                                | 90.0             |
-| Open/Close Drawer                        | 75.5             |
-| Open Top Drawer and Place Apple          | 62.0             |
-| **Average**                              | **80.7**         |
-
----
-
-### 3. Google Robot (Variant Aggregation)
-
-| Task                                     | Success Rate (%) |
-| ---------------------------------------- | ---------------- |
-| Pick Coke Can                            | 86.1             |
-| Move Near                                | 82.0             |
-| Open/Close Drawer                        | 72.0             |
-| Open Top Drawer and Place Apple          | 64.0             |
-| **Average**                              | **76.0**         |
-
----
 
 
 
