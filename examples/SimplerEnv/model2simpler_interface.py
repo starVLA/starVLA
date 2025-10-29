@@ -14,9 +14,8 @@ import numpy as np
 from pathlib import Path
 
 
-
-from starVLA.model.framework.share_tools import read_mode_config
-from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.tools import read_mode_config
+# from starVLA.model.framework.base_framework import baseframework
 
 
 class M1Inference:
@@ -228,7 +227,7 @@ class M1Inference:
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)  # read config and norm_stats
 
-        unnorm_key = baseframework._check_unnorm_key(norm_stats, unnorm_key)
+        # unnorm_key = baseframework._check_unnorm_key(norm_stats, unnorm_key) # 其实也是很环境 specific 的
         return norm_stats[unnorm_key]["action"]
 
 

@@ -12,10 +12,7 @@ from typing import Dict
 import numpy as np
 from pathlib import Path
 
-
-
-from starVLA.model.framework.share_tools import read_mode_config
-
+from starVLA.model.tools import read_mode_config
 
 
 class M1Inference:
@@ -25,7 +22,7 @@ class M1Inference:
         unnorm_key: Optional[str] = None,
         policy_setup: str = "franka",
         horizon: int = 0,
-        action_ensemble = True, # @Jinhui
+        action_ensemble = True,
         action_ensemble_horizon: Optional[int] = 3, # different cross sim
         image_size: list[int] = [224, 224],
         use_ddim: bool = True,
@@ -62,6 +59,7 @@ class M1Inference:
         self.num_image_history = 0
 
         self.action_norm_stats = self.get_action_stats(self.unnorm_key, policy_ckpt_path=policy_ckpt_path)
+        self.action_chunk_size = self.get_action_chunk_size(policy_ckpt_path=policy_ckpt_path)
         
 
     def _add_image_to_history(self, image: np.ndarray) -> None:
@@ -81,17 +79,18 @@ class M1Inference:
         self.previous_gripper_action = None
 
 
-    def step( # 这个写给不够好
+    def step(
         self, 
         images, 
         task_description: Optional[str] = None,
+        step: int = 0,
         **kwargs
     ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         """
-        执行一步推理
-        :param image: 输入图像 (H, W, 3) uint8格式
-        :param task_description: 任务描述文本
-        :return: (原始动作, 处理后的动作)
+        Perform one step of inference
+        :param image: Input image in the format (H, W, 3), type uint8
+        :param task_description: Task description text
+        :return: (raw action, processed action)
         """
 
         if task_description is not None:
@@ -109,21 +108,20 @@ class M1Inference:
             "use_ddim": self.use_ddim,
             "num_ddim_steps": self.num_ddim_steps,
         }
-        
-        
 
-        response = self.client.infer(vla_input)
+
+
         
+        action_chunk_size = self.action_chunk_size
+        if step % action_chunk_size == 0:
+            response = self.client.infer(vla_input)
+            # unnormalize the action
+            # import ipdb; ipdb.set_trace()
+            normalized_actions = response["data"]["normalized_actions"] # B, chunk, D        
+            normalized_actions = normalized_actions[0]    
+            self.raw_actions = self.unnormalize_actions(normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats)
         
-        # unnormalize the action
-        normalized_actions = response["data"]["normalized_actions"] # B, chunk, D        
-        normalized_actions = normalized_actions[0]
-        
-        
-        raw_actions = self.unnormalize_actions(normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats)
-        
-        if self.action_ensemble:
-            raw_actions = self.action_ensembler.ensemble_action(raw_actions)[None]
+        raw_actions = self.raw_actions[step % action_chunk_size][None]    
 
         raw_action = {
             "world_vector": np.array(raw_actions[0, :3]),
@@ -135,8 +133,8 @@ class M1Inference:
 
     @staticmethod
     def unnormalize_actions(normalized_actions: np.ndarray, action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
-        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
-        action_high, action_low = np.array(action_norm_stats["q99"]), np.array(action_norm_stats["q01"])
+        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
+        action_high, action_low = np.array(action_norm_stats["max"]), np.array(action_norm_stats["min"])
         normalized_actions = np.clip(normalized_actions, -1, 1)
         normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, 0, 1) 
         actions = np.where(
@@ -158,6 +156,11 @@ class M1Inference:
         unnorm_key = M1Inference._check_unnorm_key(norm_stats, unnorm_key)
         return norm_stats[unnorm_key]["action"]
 
+    @staticmethod
+    def get_action_chunk_size(policy_ckpt_path):
+        model_config, _ = read_mode_config(policy_ckpt_path)  # read config and norm_stats
+        # import ipdb; ipdb.set_trace()
+        return model_config['framework']['action_model']['future_action_window_size'] + 1
 
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:

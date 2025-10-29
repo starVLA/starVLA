@@ -2,7 +2,10 @@
 
 ![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)
 
-We fixed several script links and so everything is smoother now. Thanks to the community for the feedback.
+**[2025/10/30]:** We released the LIBERO Training & Evaluation README. Results are very promising. More detail are in [examples/LIBERO](examples/LIBERO). 
+
+**[2025/10/25]:** We fixed several script links and so everything is smoother now. Thanks to the community for the feedback.
+
 
 ---
 

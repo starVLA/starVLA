@@ -17,6 +17,18 @@ When testing SimplerEnv on NVIDIA A100, you may encounter the following error:
 `libvulkan.so.1: cannot open shared object file: No such file or directory`
 You can refer to this link to fix: [Installation Guide – Vulkan Section](https://maniskill.readthedocs.io/en/latest/user_guide/getting_started/installation.html#vulkan)
 
+
+## 🔧 Verification Method
+We provide a minimal environment verification script:
+
+```bash
+python examples/SimplerEnv/test_your_simplerEnv.py
+
+```
+
+If you see the "✅ Env built successfully" message, it means SimplerEnv is installed correctly and ready to use.
+
+
 ---
 
 
