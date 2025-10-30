@@ -37,6 +37,10 @@ In StarVLA (also a pun on “start VLA” ),  each functional component (model, 
   <img src="assets/starvla_simpleEnv.png" alt="SimplerEnv modules" width="95%">
 </p>
 
+<p align="center">
+  <img src="assets/starvla_LIBERO.png" alt="LIBERO modules" width="84%">
+</p>
+
 
 For dynamic updates, see our [🍀 Overleaf](https://www.overleaf.com/read/qqtwrnprctkf#d5bdce), which continuously presents our real-time experimental results.
 
