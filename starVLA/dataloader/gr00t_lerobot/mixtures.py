@@ -7,14 +7,17 @@ a float "sampling weight"
 
 from typing import Dict, List, Tuple
 
+
+# Dataset mixture name mapped to a list of tuples containing:
+## {nakename: [(data_name, sampling_weight, robot_type)] }
 DATASET_NAMED_MIXTURES = {
 
     "libero_all": [
         ("libero_object_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
         ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
         ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
-        ("libero_90_no_noops_lerobot", 1.0, "libero_franka"),
         ("libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
+                # ("libero_90_no_noops_lerobot", 1.0, "libero_franka"),
     ],
     "libero_goal": [
         ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
@@ -30,7 +33,7 @@ DATASET_NAMED_MIXTURES = {
     ],
     "libero_90": [
         ("libero_90_no_noops_lerobot", 1.0, "libero_franka"),
-        ("libero_90_no_noops_lerobot", 1.0, "libero_ur5"),
+        # ("libero_90_no_noops_lerobot", 1.0, "libero_ur5"),
     ],
 
     "bridge": [
@@ -51,6 +54,10 @@ DATASET_NAMED_MIXTURES = {
     "custom_dataset_2": [
         ("custom_dataset_name_1", 1.0, "custom_robot_config"),
         ("custom_dataset_name_2", 1.0, "custom_robot_config"),
+    ],
+
+    "BEHAVIOR_challenge": [
+        ("BEHAVIOR_challenge", 1.0, "R1Pro"),
     ],
 
 

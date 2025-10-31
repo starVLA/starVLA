@@ -15,49 +15,34 @@ framework:
     vl_hidden_dim: 2048
   dino:
     dino_backbone: dinov2_vits14
-  layer_qformer: 
-    qformer_end_layer: 37
-    qformer_start_layer: 36
-    num_query_tokens: 64
-    input_dim: 2048 
-    ouptput_dim: 768
-    grad_scale: 0.5
   action_model:
     action_model_type: DiT-B
-    action_hidden_dim: 768
-    action_dim: 7
-    use_ema: false
-    future_action_window_size: 15
-    past_action_window_size: 0
-    repeated_diffusion_steps: 8
-  
-  fm_head_config:
-    input_embedding_dim: 1536  # Action embedding after dimension 48 * 32，and DiT's attention_head_dim * attention_heads corresponds to ActionEncoder
-    hidden_size: 1024   # and DiT's last projection corresponds to ActionDecoder
+    action_hidden_dim: 1024     # TODO merge with hidden_size, in config v2
+    hidden_size: 1024     
     add_pos_embed: True
     max_seq_len: 1024
     action_dim: 7
-    future_action_window_size: 15
-    action_horizon: 16
+    state_dim: 7
+    future_action_window_size: 7
+    action_horizon: 8 # need merge with future_action_window_size 
     past_action_window_size: 0
+    repeated_diffusion_steps: 8
     noise_beta_alpha: 1.5
     noise_beta_beta: 1.0
     noise_s: 0.999
     num_timestep_buckets: 1000
     num_inference_timesteps: 4
     num_target_vision_tokens: 32
-    diffusion_model_cfg:    # DiT Transformers parameters
-      attention_head_dim: 48
-      cross_attention_dim: 2048 # VLM dim
+    diffusion_model_cfg:    # DiT Transformers 的参数
+      cross_attention_dim: 2048 # VLM 的 dim
       dropout: 0.2
       final_dropout: true
       interleave_self_attention: true
       norm_type: "ada_norm"
-      num_attention_heads: 32
       num_layers: 16
       output_dim: 1024
       positional_embeddings: null
-  
+
   reduce_in_full_precision: true
 
 
