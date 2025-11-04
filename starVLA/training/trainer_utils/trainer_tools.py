@@ -64,8 +64,22 @@ def build_param_lr_groups(model, cfg):
     lr_cfg = cfg.trainer.learning_rate
     base_lr = lr_cfg.get("base", 1e-4)  # default base learning rate
 
+    freeze_modules = cfg.trainer.get("freeze_modules", "")
+    freeze_patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()] if freeze_modules else []
+
     used_params = set()
+    frozen_params = set()
     param_groups = []
+
+    for freeze_path in freeze_patterns:
+        module = model
+        try:
+            for attr in freeze_path.split("."):
+                module = getattr(module, attr)
+            frozen_params.update(id(p) for p in module.parameters())
+        except AttributeError:
+            print(f"⚠️ freeze module path does not exist: {freeze_path}")
+            continue
 
     for module_name, lr in lr_cfg.items():
         if module_name == "base":
@@ -75,14 +89,16 @@ def build_param_lr_groups(model, cfg):
         try:
             for attr in module_name.split("."):
                 module = getattr(module, attr)
-            params = list(module.parameters())
-            param_groups.append({"params": params, "lr": lr, "name": module_name})
-            used_params.update(id(p) for p in params)
+            # filter out frozen parameters
+            params = [p for p in module.parameters() if id(p) not in frozen_params]
+            if params:  # only add param group if there are trainable parameters
+                param_groups.append({"params": params, "lr": lr, "name": module_name})
+                used_params.update(id(p) for p in params)
         except AttributeError:
             ReferenceError(f"⚠️ module path `{module_name}` not found in vla")
 
-    # assign base learning rate to the remaining unused parameters
-    other_params = [p for p in model.parameters() if id(p) not in used_params]
+    # assign base learning rate to the remaining unused parameters (exclude frozen ones)
+    other_params = [p for p in model.parameters() if id(p) not in used_params and id(p) not in frozen_params]
     if other_params:
         param_groups.append({"params": other_params, "lr": base_lr, "name": "base"})
 
