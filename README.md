@@ -269,6 +269,22 @@ Steps:
       --wandb_entity your_name
     ```
 
+Accelerate natively supports multi‑GPU; the exact launch command depends on your cluster scheduler and setup (e.g., Slurm).
+
+```bash
+
+srun --jobid $SLURM_JOBID bash -c 'accelerate launch \
+  --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
+  --main_process_ip $MASTER_ADDR \
+  --main_process_port $MASTER_PORT \
+  --machine_rank $SLURM_PROCID \
+  --num_machines $SLURM_NNODES \
+  --num_processes=${TOTAL_GPUS} \
+  starVLA/training/train_starvla.py \
+  --config_yaml ${config_yaml} \
+
+```
+
 Note: `run_root_dir` stores the unified config snapshot and data‑processing metadata for reproducibility and quick restarts.
 
 </details>
