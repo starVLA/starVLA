@@ -260,7 +260,7 @@ Steps:
       --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
       --num_processes 8 \
       starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yamll \
+      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
       --framework.framework_py ${Framework_name} \
       --framework.qwenvl.base_vlm ${base_vlm} \
       --run_root_dir ${run_root_dir} \

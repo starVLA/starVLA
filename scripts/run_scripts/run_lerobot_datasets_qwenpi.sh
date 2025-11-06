@@ -33,7 +33,7 @@ accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes 8 \
   starVLA/training/train_starvla.py \
-  --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yamll \
+  --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
   --framework.action_model.action_hidden_dim ${action_input_dim} \

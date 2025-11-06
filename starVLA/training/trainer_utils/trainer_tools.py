@@ -65,7 +65,9 @@ def build_param_lr_groups(model, cfg):
     base_lr = lr_cfg.get("base", 1e-4)  # default base learning rate
 
     freeze_modules = cfg.trainer.get("freeze_modules", "")
-    freeze_patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()] if freeze_modules else []
+    if not isinstance(freeze_modules, str):
+        freeze_modules = ""
+    freeze_patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()]
 
     used_params = set()
     frozen_params = set()
