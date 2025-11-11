@@ -12,7 +12,9 @@ def get_vlm_model(config):
         from .QWen3 import _QWen3_VL_Interface
 
         return _QWen3_VL_Interface(config)
-    
+    elif "florence" in vlm_name.lower(): # temp for some ckpt
+        from .Florence2 import _Florence_Interface 
+        return _Florence_Interface(config)
     else:
         raise NotImplementedError(f"VLM model {vlm_name} not implemented")
 
