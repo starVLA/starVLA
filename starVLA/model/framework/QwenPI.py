@@ -64,7 +64,7 @@ class Qwen_PI(baseframework):
         llm_layers, llm_hidden_size = 36, self.qwen_vl_interface.model.config.hidden_size
 
         DiTConfig = {"num_layers": llm_layers, "input_embedding_dim": 2048, "attention_head_dim": 64, "num_attention_heads": 32}
-        self.config.framework.action_model.hidden_size = 1024 #check what this for?
+        self.config.framework.action_model.hidden_size = llm_hidden_size #check what this for?
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = llm_hidden_size
 
         self.config.framework.action_model.DiTConfig = DiTConfig

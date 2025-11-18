@@ -2,7 +2,7 @@
 
 ![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)
 
-**[2025/10/12]** We now support [Florence-2](https://github.com/anyantudre/Florence-2-Vision-Language-Model) as a smaller VLM for resource-constrained development. StarVLA can now run on a single A100 GPU. See the [  🚀Train with a smaller VLM](#train-smaller-vlm) section for more details. 
+**[2025/11/12]** We now support [Florence-2](https://github.com/anyantudre/Florence-2-Vision-Language-Model) as a smaller VLM for resource-constrained development. StarVLA can now run on a single A100 GPU. See the [  🚀Train with a smaller VLM](#train-smaller-vlm) section for more details. 
 
 
 **[2025/10/30]:** We released the LIBERO Training & Evaluation README. Results are very promising. More detail are in [examples/LIBERO](examples/LIBERO). 
@@ -299,7 +299,11 @@ Note: `run_root_dir` stores the unified config snapshot and data‑processing me
 ```bash
     accelerate launch \
       --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
-      --num_processes 8 \
+      --main_process_ip $MASTER_ADDR \
+      --main_process_port $MASTER_PORT \
+      --machine_rank $SLURM_PROCID \
+      --num_machines $SLURM_NNODES \
+      --num_processes=${TOTAL_GPUS} \
       starVLA/training/train_starvla.py \
       --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
       --framework.framework_py QwenGR00T \

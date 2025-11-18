@@ -85,6 +85,7 @@ Also ensure the environment variables at the top of `eval_libero.sh` are correct
 
 
 # 🚀 LIBERO Training
+
 ## 📦 Step0: Download the training dataset
 Download the datasets to the playground/Datasets/LEROBOT_LIBERO_DATA directory:
 - [LIBERO-spatial](https://huggingface.co/datasets/IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot)
@@ -94,10 +95,16 @@ Download the datasets to the playground/Datasets/LEROBOT_LIBERO_DATA directory:
 
 ## 🚀 Step1: Start Training
 
+Most of the required training files have been organized in [train_files](examples/LIBERO/train_files).  
+The first step is to move `modality.json` to each `$LEROBOT_LIBERO_DATA/meta/modality.json`.
+
+
+Then run the following command to start training:
+
 ```bash
-bash scripts/run_scripts/run_libero_train.sh
+bash examples/LIBERO/train_files/run_libero_train.sh
 ```
-⚠️ **Note:** Please ensure that you specify the correct path in `examples/LIBERO/run_libero_train.sh`
+⚠️ **Note:** Please ensure that you specify the correct path in `examples/LIBERO/train_files/run_libero_train.sh`
 
 ```bash
 

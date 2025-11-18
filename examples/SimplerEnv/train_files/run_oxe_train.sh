@@ -12,11 +12,12 @@ export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 # === Please modify the following paths according to your environment ===
 Framework_name=QwenGR00T
 freeze_module_list=''
-config_yaml=./starVLA/config/training/starvla_cotrain_libero.yaml
-libero_data_root=playground/Datasets/LEROBOT_LIBERO_DATA
-data_mix=libero_all
+base_vlm=Qwen/Qwen2.5-VL-3B-Instruct
+config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
+oxe_data_root=playground/Datasets/OXE_LEROBOT
+data_mix=bridge_rt_1
 run_root_dir=./results/Checkpoints
-run_id=1025_libero4in1_qwengroot
+run_id=1025_bridge_rt_1_qwengroot
 # === End of environment variable configuration ===
 ###########################################################################################
 
@@ -36,7 +37,7 @@ accelerate launch \
   --config_yaml ${config_yaml} \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
-  --datasets.vla_data.data_root_dir ${libero_data_root}\
+  --datasets.vla_data.data_root_dir ${oxe_data_root}\
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.per_device_batch_size 16 \
   --trainer.freeze_modules ${freeze_module_list} \

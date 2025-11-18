@@ -7,21 +7,19 @@ export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 
 
+# === Please modify the following paths according to your environment ===
+###########################################################################################
+
 Framework_name=QwenOFT
-base_vlm=./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct # must be a local path, due to simpler will run in other where
-base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct
-freeze_module_list='' # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
-
-# freeze_module_list="qwen_vl_interface.model.model.visual,dino_encoder" # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
-
-llavadata="asv2_conversation_en,asv2_detailed_description_en"
+base_vlm=StarVLA/Qwen3-VL-4B-Instruct-Action
+action_input_dim=2560
 oxe_data_root=playground/Datasets/OXE_LEROBOT
 data_mix=bridge_rt_1
-
 run_root_dir=./playground/Checkpoints
 run_id=1004_starvla_qwenoft_oxe
+# === End of environment variable configuration ===
+###########################################################################################
 
-export action_input_dim=2048
 export WANDB_MODE=disabled
 
 output_dir=${run_root_dir}/${run_id}
@@ -53,4 +51,25 @@ accelerate launch \
   --wandb_entity jinhuiye \
   # --is_debug True
 
+
+
+###########################################################################################
+####### multi-node launch example #######
+###########################################################################################
+
+# accelerate launch \
+#   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
+#   --main_process_ip $MASTER_ADDR \
+#   --main_process_port $MASTER_PORT \
+#   --machine_rank $SLURM_PROCID \
+#   --num_machines $SLURM_NNODES \
+#   --num_processes=${TOTAL_GPUS} \
+#   starVLA/training/train_starvla.py \
+#   --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+#   --framework.framework_py QwenGR00T \
+#   --framework.qwenvl.base_vlm microsoft/Florence-2-large \
+#   --run_root_dir ${run_root_dir} \
+#   --run_id ${run_id} \
+#   --wandb_project your_project \
+#   --wandb_entity your_name
 

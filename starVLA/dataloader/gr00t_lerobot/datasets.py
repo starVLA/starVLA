@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field, ValidationError
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from PIL import Image
+import random
 
 from starVLA.dataloader.gr00t_lerobot.video import get_all_frames, get_frames_by_timestamps
 
@@ -1553,14 +1554,14 @@ class LeRobotMixtureDataset(Dataset):
                 # Process all video keys dynamically
                 images = []
                 for video_key in dataset.modality_keys["video"]:
-                    image = data[video_key][0]
+
+                    for image in data[video_key]:
+                        # image = data[video_key][0]
+                        # Apply image cropping if enabled and the video key is base_view
+                        # Note: crop_obs_camera functionality has been removed
+                        image = Image.fromarray(image).resize((224, 224))
+                        images.append(image)
                     
-                    # Apply image cropping if enabled and the video key is base_view
-                    # Note: crop_obs_camera functionality has been removed
-                    
-                    image = Image.fromarray(image).resize((224, 224))
-                    images.append(image)
-                
                 # Get language and action data
                 language = data[dataset.modality_keys["language"][0]][0]
                 action = []
@@ -1578,7 +1579,9 @@ class LeRobotMixtureDataset(Dataset):
                     print(f"Retrying with new sample...")
                     # For retry, we can use a slightly different index to get a new sample
                     # This helps avoid getting stuck on the same problematic sample
-                    index = (index + 1) % len(self)
+                    # index = (index + 1) % len(self)
+
+                    index = random.randint(0, len(self) - 1)
                 else:
                     # All retries exhausted
                     print(f"All {max_retries} attempts failed for index {index}")

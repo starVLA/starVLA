@@ -5,6 +5,7 @@ einops
 transformers_stream_generator==0.0.4
 scipy
 torchvision==0.21.0
+setuptools==80.9.0
 pillow
 tensorboard
 matplotlib

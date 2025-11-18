@@ -12,12 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import torch  # noqa: F401 # isort: skip
-import torchvision  # noqa: F401 # isort: skip
+
+
 import av
 import cv2
-import decord  # noqa: F401
 import numpy as np
+
+import torch  # noqa: F401 # isort: skip
+import torchvision  # noqa: F401 # isort: skip
+
+# Import decord with graceful fallback
+try:
+    import decord  # noqa: F401
+
+    DECORD_AVAILABLE = True
+except ImportError:
+    DECORD_AVAILABLE = False
+
+try:
+    import torchcodec
+
+    TORCHCODEC_AVAILABLE = True
+except (ImportError, RuntimeError):
+    TORCHCODEC_AVAILABLE = False
 
 
 def get_frames_by_indices(
@@ -27,9 +44,18 @@ def get_frames_by_indices(
     video_backend_kwargs: dict = {},
 ) -> np.ndarray:
     if video_backend == "decord":
+        if not DECORD_AVAILABLE:
+            raise ImportError("decord is not available.")
         vr = decord.VideoReader(video_path, **video_backend_kwargs)
         frames = vr.get_batch(indices)
         return frames.asnumpy()
+    elif video_backend == "torchcodec":
+        if not TORCHCODEC_AVAILABLE:
+            raise ImportError("torchcodec is not available.")
+        decoder = torchcodec.decoders.VideoDecoder(
+            video_path, device="cpu", dimension_order="NHWC", num_ffmpeg_threads=0
+        )
+        return decoder.get_frames_at(indices=indices).data.numpy()
     elif video_backend == "opencv":
         frames = []
         cap = cv2.VideoCapture(video_path, **video_backend_kwargs)
@@ -61,6 +87,8 @@ def get_frames_by_timestamps(
         np.ndarray: Frames at the specified timestamps.
     """
     if video_backend == "decord":
+        if not DECORD_AVAILABLE:
+            raise ImportError("decord is not available.")
         vr = decord.VideoReader(video_path, **video_backend_kwargs)
         num_frames = len(vr)
         # Retrieve the timestamps for each frame in the video
@@ -70,6 +98,13 @@ def get_frames_by_timestamps(
         indices = np.abs(frame_ts[:, :1] - timestamps).argmin(axis=0)
         frames = vr.get_batch(indices)
         return frames.asnumpy()
+    elif video_backend == "torchcodec":
+        if not TORCHCODEC_AVAILABLE:
+            raise ImportError("torchcodec is not available.")
+        decoder = torchcodec.decoders.VideoDecoder(
+            video_path, device="cpu", dimension_order="NHWC", num_ffmpeg_threads=0
+        )
+        return decoder.get_frames_played_at(seconds=timestamps).data.numpy()
     elif video_backend == "opencv":
         # Open the video file
         cap = cv2.VideoCapture(video_path, **video_backend_kwargs)
@@ -111,15 +146,32 @@ def get_frames_by_timestamps(
         loaded_ts = []
         for frame in reader:
             current_ts = frame["pts"]
-            loaded_frames.append(frame["data"])
+            loaded_frames.append(frame["data"].numpy())
             loaded_ts.append(current_ts)
             if current_ts >= last_ts:
-                break
-            if len(loaded_frames) >= len(timestamps):
                 break
         reader.container.close()
         reader = None
         frames = np.array(loaded_frames)
+        loaded_ts = np.array(loaded_ts)
+
+        # Find the closest frame for each requested timestamp
+        selected_frames = []
+        for target_ts in timestamps:
+            # Find the closest frame before or equal to this timestamp
+            valid_indices = loaded_ts <= target_ts
+            if np.any(valid_indices):
+                # Get the closest frame before or equal to the timestamp
+                valid_ts = loaded_ts[valid_indices]
+                closest_idx = np.abs(valid_ts - target_ts).argmin()
+                # Map back to original index
+                original_idx = np.where(valid_indices)[0][closest_idx]
+                selected_frames.append(frames[original_idx])
+            else:
+                # If no frame is before the timestamp, use the first frame
+                selected_frames.append(frames[0])
+
+        frames = np.array(selected_frames)
         return frames.transpose(0, 2, 3, 1)
     else:
         raise NotImplementedError
@@ -139,8 +191,18 @@ def get_all_frames(
         resize_size (tuple[int, int], optional): Resize size for the frames. Defaults to None.
     """
     if video_backend == "decord":
+        if not DECORD_AVAILABLE:
+            raise ImportError("decord is not available.")
         vr = decord.VideoReader(video_path, **video_backend_kwargs)
         frames = vr.get_batch(range(len(vr))).asnumpy()
+    elif video_backend == "torchcodec":
+        if not TORCHCODEC_AVAILABLE:
+            raise ImportError("torchcodec is not available.")
+        decoder = torchcodec.decoders.VideoDecoder(
+            video_path, device="cpu", dimension_order="NHWC", num_ffmpeg_threads=0
+        )
+        frames = decoder.get_frames_at(indices=range(len(decoder)))
+        return frames.data.numpy(), frames.pts_seconds.numpy()
     elif video_backend == "pyav":
         container = av.open(video_path)
         frames = []
@@ -154,7 +216,7 @@ def get_all_frames(
         reader = torchvision.io.VideoReader(video_path, "video")
         frames = []
         for frame in reader:
-            frames.append(frame["data"])
+            frames.append(frame["data"].numpy())
         frames = np.array(frames)
         frames = frames.transpose(0, 2, 3, 1)
     else:
