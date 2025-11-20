@@ -15,6 +15,9 @@ import pkgutil
 import importlib
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 
+from starVLA.training.trainer_utils import initialize_overwatch
+
+logger = initialize_overwatch(__name__)
 
 try:
     pkg_path = __path__
@@ -27,7 +30,7 @@ if pkg_path is not None:
         for _, module_name, _ in pkgutil.iter_modules(pkg_path):
             importlib.import_module(f"{__name__}.{module_name}")
     except Exception as e:
-        print(f"Warning: Failed to auto-import framework submodules: {e}")
+        logger.log(f"Warning: Failed to auto-import framework submodules: {e}")
         
 def build_framework(cfg):
     """
@@ -49,11 +52,10 @@ def build_framework(cfg):
         from starVLA.model.framework.QwenFast import Qwenvl_Fast
         return Qwenvl_Fast(cfg)
 
-    
     # auto detect from registry
     framework_id = cfg.framework.name
     if framework_id not in FRAMEWORK_REGISTRY._registry:
-        raise NotImplementedError(f"Framework {cfg.framework.name} is not implemented.")
+        raise NotImplementedError(f"Framework {cfg.framework.name} is not implemented. Plz, python yourframework_py to specify framework module.")
     
     MODLE_CLASS = FRAMEWORK_REGISTRY[framework_id]
     return MODLE_CLASS(cfg)

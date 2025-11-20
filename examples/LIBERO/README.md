@@ -41,6 +41,9 @@ scores are averaged over 500 trials for each task suite (10 tasks × 50 episodes
 
 To set up the environment, please first follow the official [LIBERO repository](https://github.com/Lifelong-Robot-Learning/LIBERO) to install the base `LIBERO` environment.  
 
+⚠️ **Common issue:** LIBERO defaults to Python 3.8, but the syntax updates between 3.8 and 3.10 are substantial. We verified that using Python 3.10 avoids many issues. 
+
+
 Afterwards, inside the `LIBERO` environment, install the following dependencies:  
 
 ```bash
