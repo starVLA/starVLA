@@ -129,49 +129,61 @@ def get_frames_by_timestamps(
         frames = np.array(frames)
         return frames
     elif video_backend == "torchvision_av":
-        # set backend
         torchvision.set_video_backend("pyav")
-        # set a video stream reader
-        reader = torchvision.io.VideoReader(video_path, "video")
-        # set the first and last requested timestamps
-        # Note: previous timestamps are usually loaded, since we need to access the previous key frame
-        first_ts = timestamps[0]
-        last_ts = timestamps[-1]
-        # access closest key frame of the first requested frame
-        # Note: closest key frame timestamp is usally smaller than `first_ts` (e.g. key frame can be the first frame of the video)
-        # for details on what `seek` is doing see: https://pyav.basswood-io.com/docs/stable/api/container.html?highlight=inputcontainer#av.container.InputContainer.seek
-        reader.seek(first_ts, keyframes_only=True)
-        # load all frames until last requested frame
         loaded_frames = []
         loaded_ts = []
-        for frame in reader:
-            current_ts = frame["pts"]
-            loaded_frames.append(frame["data"].numpy())
-            loaded_ts.append(current_ts)
-            if current_ts >= last_ts:
-                break
-        reader.container.close()
+        
         reader = None
+        try:
+            reader = torchvision.io.VideoReader(video_path, "video")
+            
+            for target_ts in timestamps:
+                # Reset reader state
+                reader.seek(target_ts, keyframes_only=True)
+                
+                closest_frame = None
+                closest_ts_diff = float('inf')
+                
+                for frame in reader:
+                    current_ts = frame["pts"]
+                    current_diff = abs(current_ts - target_ts)
+                    
+                    if closest_frame is None:
+                        closest_frame = frame
+                    
+                    if current_diff < closest_ts_diff:
+                        # Release previous frame reference
+                        if closest_frame is not None:
+                            del closest_frame
+                        closest_ts_diff = current_diff
+                        closest_frame = frame
+                    else:
+                        # Difference started growing, stop search
+                        break
+                
+                if closest_frame is not None:
+                    frame_data = closest_frame["data"]
+                    if isinstance(frame_data, torch.Tensor):
+                        frame_data = frame_data.cpu().numpy()
+                    loaded_frames.append(frame_data)
+                    loaded_ts.append(closest_frame["pts"])
+                    
+                    # Immediately release frame reference
+                    del closest_frame
+                    
+        finally:
+            # Thoroughly clean resources
+            if reader is not None:
+                if hasattr(reader, '_c'):
+                    reader._c = None
+                if hasattr(reader, 'container'):
+                    reader.container.close()
+                    reader.container = None
+            # Force garbage collection
+            import gc
+            gc.collect()
+        
         frames = np.array(loaded_frames)
-        loaded_ts = np.array(loaded_ts)
-
-        # Find the closest frame for each requested timestamp
-        selected_frames = []
-        for target_ts in timestamps:
-            # Find the closest frame before or equal to this timestamp
-            valid_indices = loaded_ts <= target_ts
-            if np.any(valid_indices):
-                # Get the closest frame before or equal to the timestamp
-                valid_ts = loaded_ts[valid_indices]
-                closest_idx = np.abs(valid_ts - target_ts).argmin()
-                # Map back to original index
-                original_idx = np.where(valid_indices)[0][closest_idx]
-                selected_frames.append(frames[original_idx])
-            else:
-                # If no frame is before the timestamp, use the first frame
-                selected_frames.append(frames[0])
-
-        frames = np.array(selected_frames)
         return frames.transpose(0, 2, 3, 1)
     else:
         raise NotImplementedError
