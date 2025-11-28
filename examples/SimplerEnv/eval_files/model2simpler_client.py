@@ -8,7 +8,7 @@ import numpy as np
 from transforms3d.euler import euler2axangle
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 
-from examples.SimplerEnv.adaptive_ensemble import AdaptiveEnsembler
+from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from typing import Dict
 import numpy as np
 from pathlib import Path
@@ -18,7 +18,7 @@ from starVLA.model.tools import read_mode_config
 # from starVLA.model.framework.base_framework import baseframework
 
 
-class M1Inference:
+class ModelClient:
     def __init__(
         self,
         policy_ckpt_path,

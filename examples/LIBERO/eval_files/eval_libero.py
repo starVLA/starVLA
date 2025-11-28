@@ -16,7 +16,7 @@ import tyro
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-from examples.LIBERO.model2libero_interface import M1Inference
+from examples.LIBERO.eval_files.model2libero_client import ModelClient
 
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
@@ -84,7 +84,7 @@ def eval_libero(args: Args) -> None:
     else:
         raise ValueError(f"Unknown task suite: {args.task_suite_name}")
 
-    model = M1Inference(
+    model = ModelClient(
         policy_ckpt_path=args.pretrained_path, # to get unnormalization stats
         host=args.host,
         port=args.port,

@@ -1,8 +1,8 @@
 import os
 
 # from IPython import embed; embed()
-from examples.SimplerEnv.custom_argparse import get_args
-from examples.SimplerEnv.model2simpler_interface import M1Inference
+from examples.SimplerEnv.eval_files.custom_argparse import get_args
+from examples.SimplerEnv.eval_files.model2simpler_client import ModelClient
 
 from simpler_env.evaluation.maniskill2_evaluator import maniskill2_evaluator
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     #     print("Waiting for debugger to attach...")
     #     debugpy.wait_for_client()  # wait for VS Code attach
 
-    model = M1Inference(
+    model = ModelClient(
         policy_ckpt_path=args.ckpt_path, # to get unnormalization stats
         policy_setup=args.policy_setup,
         port=args.port,

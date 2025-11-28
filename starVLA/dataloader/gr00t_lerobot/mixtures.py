@@ -33,7 +33,6 @@ DATASET_NAMED_MIXTURES = {
     ],
     "libero_90": [
         ("libero_90_no_noops_lerobot", 1.0, "libero_franka"),
-        # ("libero_90_no_noops_lerobot", 1.0, "libero_ur5"),
     ],
 
     "bridge": [

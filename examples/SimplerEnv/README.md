@@ -59,7 +59,7 @@ The evaluation should be run **from the repository root** using **two separate t
 In the first terminal, activate the `starVLA` conda environment and run:  
 
 ```bash
-bash examples/SimplerEnv/start_server.sh
+bash examples/SimplerEnv/eval_files/start_server.sh
 ```
 
 ⚠️ **Note:** Please ensure that you specify the correct checkpoint path in  

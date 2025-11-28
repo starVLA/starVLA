@@ -7,7 +7,7 @@ import numpy as np
 
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 
-from examples.SimplerEnv.adaptive_ensemble import AdaptiveEnsembler
+from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from typing import Dict
 import numpy as np
 from pathlib import Path
@@ -15,7 +15,7 @@ from pathlib import Path
 from starVLA.model.tools import read_mode_config
 
 
-class M1Inference:
+class ModelClient:
     def __init__(
         self,
         policy_ckpt_path,
@@ -153,7 +153,7 @@ class M1Inference:
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)  # read config and norm_stats
 
-        unnorm_key = M1Inference._check_unnorm_key(norm_stats, unnorm_key)
+        unnorm_key = ModelClient._check_unnorm_key(norm_stats, unnorm_key)
         return norm_stats[unnorm_key]["action"]
 
     @staticmethod

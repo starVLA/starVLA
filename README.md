@@ -55,7 +55,7 @@ We release a series of pretrained models and checkpoints to facilitate reproduct
 
 #### ✅ Available Checkpoints
 
-| Model | Description | WindowX | Link |
+| Model | Description | WidowX | Link |
 |-------|-------------|------|------|
 | **Qwen2.5-VL-3B-Action** | Add action tokens to Qwen2.5-VL  | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
 | **Qwen3-VL-4B-Action** | Add action tokens to Qwen3-VL | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
@@ -217,7 +217,7 @@ If you don't want parallel testing, please run:
 ```bash
 
 # Terminal 1
-bash ./examples/SimplerEnv/start_server.sh
+bash ./examples/SimplerEnv/eval_files/start_server.sh
 # Terminal 2
 bash ./examples/SimplerEnv/start_simpler_env.sh
 ```
