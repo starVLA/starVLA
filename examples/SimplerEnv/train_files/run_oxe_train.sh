@@ -17,7 +17,7 @@ config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
 oxe_data_root=playground/Datasets/OXE_LEROBOT
 data_mix=bridge_rt_1
 run_root_dir=./results/Checkpoints
-run_id=1025_bridge_rt_1_qwengroot
+run_id=1025_${data_mix}_qwengroot
 # === End of environment variable configuration ===
 ###########################################################################################
 

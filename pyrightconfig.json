@@ -11,8 +11,8 @@
       "playground",
       "cogact.egg-info",
       "eval",
-      "example",
-      "deployment"
+      // "example",
+      // "deployment"
     ],
     "typeCheckingMode": "off",
     "remote.downloadExtensionsLocally": true,

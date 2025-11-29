@@ -344,13 +344,12 @@ class VLATrainer(TrainerUtils):
             score = 0.0
             num_samples = len(examples)
 
-            batch_images = [example["image"] for example in examples]
-            instructions = [example["lang"] for example in examples]  # [B, str]
+
             actions = [example["action"] for example in examples]  # label
 
             # Predict actions using the model
             output_dict = self.model.predict_action(
-                batch_images=batch_images, instructions=instructions, use_ddim=True, num_ddim_steps=20
+                examples=examples, use_ddim=True, num_ddim_steps=20
             )
 
             normalized_actions = output_dict["normalized_actions"]  # B, T, D

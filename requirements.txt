@@ -27,3 +27,4 @@ wandb
 rich
 diffusers
 timm
+tyro

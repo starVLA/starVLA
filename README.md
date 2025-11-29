@@ -181,6 +181,8 @@ pip list | grep -E 'torch|transformers|flash-attn'
 
 If issues persist, pick a flash-attn release that matches your versions (CUDA and torch) or ask chatGPT with searching function for help with the outputs above.
 
+We have verified that `flash-attn==2.7.4.post1` works well with nvcc versions `12.0` and `12.4`.
+
 </details>
 
 <details close>

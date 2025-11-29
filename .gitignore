@@ -216,3 +216,4 @@ playground/*
 qwen_talk.md
 assets/R1Pro.py
 examples/SPVLA
+examples/SimplerEnv/eval_files/eval_scripts

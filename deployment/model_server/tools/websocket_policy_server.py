@@ -11,7 +11,6 @@ import websockets.frames
 
 # from openpi_client import base_policy as _base_policy
 from . import msgpack_numpy
-from . import image_tools
 
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
@@ -74,28 +73,20 @@ class WebsocketPolicyServer:
         - Supports messages of form:
             {"type": "ping|init|infer|reset", "request_id": "...", "payload": {...}}
           or a flat dict (will be treated as payload).
-        - Always returns a dict containing:
-            {
-              "status": "ok" | "error",
-              "ok": bool,
-              "type": <str>,
-              "request_id": <str>,
-              ... (data | error)
-            }
         - Does NOT raise inside this function: all exceptions are caught and encoded in response.
         """
         req_id = msg.get("request_id", "default")
         mtype = msg.get("type", "infer")          # default = infer
-        payload = msg.get("payload", msg)         # when no explicit payload, treat top-level as payload
+        msg       # when no explicit payload, treat top-level as payload
 
         # ping
         if mtype == "ping":
             return {"status": "ok", "ok": True, "type": "ping", "request_id": req_id}
 
-        # infer
-        elif mtype == "infer":
+        # infer --> framework.predict_action
+        elif mtype == "infer" or mtype == "predict_action":
             # Basic payload sanity
-            if not isinstance(payload, dict):
+            if not isinstance(msg, dict):
                 return {
                     "status": "error",
                     "ok": False,
@@ -104,8 +95,8 @@ class WebsocketPolicyServer:
                     "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))}
                 }
             try:
-                payload["batch_images"] = image_tools.to_pil_preserve(payload["batch_images"])
-                ouput_dict = self._policy.predict_action(**payload)
+
+                ouput_dict = self._policy.predict_action(**msg)
             except Exception as e:
                 logging.exception("Policy inference error (request_id=%s)", req_id)
                 logging.exception(e)

@@ -7,6 +7,14 @@ Qwen-GR00T Framework
 A lightweight implementation that Qwen-VL + Flow-matching head to directly predict continuous actions
 Flow-matching header is copyright from GR00T N1.5,
 """
+import sys
+from pathlib import Path
+
+# Add workspace root to Python path if not already there
+_workspace_root = Path(__file__).parent.parent.parent.parent
+if str(_workspace_root) not in sys.path:
+    sys.path.insert(0, str(_workspace_root))
+
 from typing import List
 from tqdm import tqdm
 from typing import List, Optional, Tuple
@@ -19,6 +27,7 @@ from PIL import Image
 
 
 from starVLA.training.trainer_utils import initialize_overwatch
+from deployment.model_server.tools.image_tools import to_pil_preserve
 
 logger = initialize_overwatch(__name__)
 
@@ -30,6 +39,7 @@ from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.modules.action_model.GR00T_ActionHeader import get_action_model, FlowmatchingActionHead
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 from starVLA.model.tools import FRAMEWORK_REGISTRY
+
 
 @FRAMEWORK_REGISTRY.register("QwenGR00T")
 class Qwen_GR00T(baseframework):
@@ -99,7 +109,6 @@ class Qwen_GR00T(baseframework):
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
-            # 标签对齐：取最后 chunk_len 段
             actions = torch.tensor(
                 np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype
             )  # [B, T_full, action_dim]
@@ -127,31 +136,25 @@ class Qwen_GR00T(baseframework):
     @torch.inference_mode()
     def predict_action(
         self,
-        batch_images: List[List[Image.Image]],  # Batch of PIL Image list as [view1, view2]
-        instructions: List[str],
-        state: Optional[np.ndarray] = None,
+        examples: List[dict],
         **kwargs: str,
     ) -> np.ndarray:
         """
-        推理：单次前向直接回归未来动作（无扩散采样）。
-
         Steps:
           1. Resize images to training resolution (if specified)
           2. Encode with QwenVL (hidden states retained)
           6. Return normalized action trajectory
-
-        Args:
-            batch_images: List of samples; each sample is List[PIL.Image] (multi-view).
-            instructions: List[str] natural language task instructions.
-            cfg_scale: >1 enables classifier-free guidance (scales conditional vs unconditional).
-            use_ddim: Whether to use DDIM deterministic sampling.
-            num_ddim_steps: Number of DDIM steps if enabled.
-            **kwargs: Reserved.
-
         Returns:
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
+        if type(examples) is not list:
+            examples = [examples]
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        instructions = [example["lang"] for example in examples]  # [B, str]
+    
+        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+        
         train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
@@ -165,10 +168,12 @@ class Qwen_GR00T(baseframework):
                 output_hidden_states=True,
                 return_dict=True,
             )
+
             # last_hidden_state: [B, seq_len, H]
             last_hidden = qwenvl_outputs.hidden_states[-1]   # [B, L, H]
 
         state = torch.from_numpy(np.array(state)).to(last_hidden.device, dtype=last_hidden.dtype) if state is not None else None
+        
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action(last_hidden, state)  # (B, chunk_len, action_dim)
@@ -192,8 +197,11 @@ if __name__ == "__main__":
 
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct"
-     
+    cfg.framework.action_model.action_hidden_dim = 2048
+
+    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
+    
+
     model: Qwen_GR00T = Qwen_GR00T(cfg)
     print(model)
 
@@ -204,9 +212,9 @@ if __name__ == "__main__":
     # Create a sample
     sample = {
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
-        "lang": "This is a fake for testing.",
-        "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
+        "image": [image], # three views
+        "lang": "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room.",
+        # "state" : np.random.uniform(-1, 1, size=(1, 44)).astype(np.float16), # chunk, state_dim
     }
 
     batch  = [sample, sample]  # batch size 2
@@ -217,40 +225,33 @@ if __name__ == "__main__":
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
-    predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]], state=[batch[0]["state"]])
+    predict_output = model.predict_action(examples=[sample]) #, state=[batch[0]["state"]]
     normalized_actions = predict_output['normalized_actions']
     print(f"Unnormalized Action: {normalized_actions}")
 
     # # Advance: try forward model with dataloader
     # # can be fake sample， but here get from dataloader for simpler
-    # from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+    vla_dataset_cfg = cfg.datasets.vla_data
+    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
 
-    # vla_dataset_cfg = cfg.datasets.vla_data
-    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    from torch.utils.data import DataLoader
+    from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+    
+    train_dataloader = DataLoader(
+        dataset,
+        batch_size=2,
+        num_workers=1,  # For Debug
+        collate_fn=collate_fn,
+    )
+    # 
+    for batch in tqdm(train_dataloader, desc="Processing Batches"):
+        batch
+        break
 
-    # from torch.utils.data import DataLoader
+    # try get model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model(batch)
 
-    # train_dataloader = DataLoader(
-    #     dataset,
-    #     batch_size=2,
-    #     num_workers=1,  # For Debug
-    #     collate_fn=collate_fn,
-    # )
-    # # 
-    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
-    #     batch
-    #     break
-
-    # # try get model
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model = model.to(device)
-    # model(batch)
-
-    # action = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
-
-    # # fake state
-    # for ba in batch:
-    #     ba["state"] = ba["action"][0][None]
-
-    # model(batch)
-    # action = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]], state=[batch[0]["state"]])
+    action = model.predict_action(examples=batch)
+    print("Finished")

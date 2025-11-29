@@ -30,7 +30,7 @@ class WebsocketClientPolicy:
     def get_server_metadata(self) -> Dict:
         return self._server_metadata
 
-    def _wait_for_server(self, timeout: float = 600) -> Tuple[websockets.sync.client.ClientConnection, Dict]:
+    def _wait_for_server(self, timeout: float = 300) -> Tuple[websockets.sync.client.ClientConnection, Dict]:
         logging.info(f"Waiting for server at {self._uri}...")
         start_time = time.time()
         
@@ -58,21 +58,14 @@ class WebsocketClientPolicy:
                 logging.info(f"Still waiting for server {self._uri} ...")
                 time.sleep(2)
 
-    def init_device(self, device: str = "cuda") -> Dict:
-        """send one device initialization message, verify protocol and service availability"""
-        payload = {"device": device, "type": "ping"}
-        self._ws.send(self._packer.pack(payload))
-        resp = self._ws.recv()
-        if isinstance(resp, str):
-            raise RuntimeError(f"Server error (init_device):\n{resp}")
-        return msgpack_numpy.unpackb(resp)
-
+    def close(self) -> None:
+        try:
+            self._ws.close()
+        except Exception:
+            pass
+    
     @override
-    def infer(self, obs: Dict) -> Dict:
-        query_info = {
-            "payload": obs,
-            "type": "infer",
-        }
+    def predict_action(self, query_info: Dict) -> Dict:
         data = self._packer.pack(query_info)
         self._ws.send(data)
         response = self._ws.recv()
@@ -80,15 +73,5 @@ class WebsocketClientPolicy:
             raise RuntimeError(f"Error in inference server:\n{response}")
         return msgpack_numpy.unpackb(response)
 
-    @override
-    def reset(self, instruction) -> None:
-        payload = {"instruction": instruction, "reset": True}
-        self._ws.send(self._packer.pack(payload))
-        resp = self._ws.recv()
-        pass
 
-    def close(self) -> None:
-        try:
-            self._ws.close()
-        except Exception:
-            pass
+

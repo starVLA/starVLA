@@ -52,8 +52,8 @@ def start_debugpy_once():
     import debugpy
     if getattr(start_debugpy_once, "_started", False):
         return
-    debugpy.listen(("0.0.0.0", 10091))
-    print("🔍 Waiting for VSCode attach on 0.0.0.0:10091 ...")
+    debugpy.listen(("0.0.0.0", 10095))
+    print("🔍 Waiting for VSCode attach on 0.0.0.0:10095 ...")
     debugpy.wait_for_client()
     start_debugpy_once._started = True
 

@@ -4,18 +4,16 @@ import os
 import cv2 as cv
 import matplotlib.pyplot as plt
 import numpy as np
-
 from transforms3d.euler import euler2axangle
-from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
-
-from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from typing import Dict
 import numpy as np
 from pathlib import Path
 
 
+from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
+from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from starVLA.model.tools import read_mode_config
-# from starVLA.model.framework.base_framework import baseframework
+
 
 
 class ModelClient:
@@ -133,17 +131,28 @@ class ModelClient:
         # image: Image.Image = Image.fromarray(image)
 
         image = self._resize_image(image)
+        example = {
+            "image": [image],
+            "lang": self.task_description,
+        }
+        
         vla_input = {
-            "batch_images": [[image]],
-            "instructions": [self.task_description],
-            "unnorm_key": self.unnorm_key,
+            "examples": [example],
             "do_sample": False,
             "cfg_scale": self.cfg_scale,
             "use_ddim": self.use_ddim,
             "num_ddim_steps": self.num_ddim_steps,
         }
+
+        vla_input = {
+            "examples": [example],
+            "do_sample": False,
+            "use_ddim": self.use_ddim,
+            "num_ddim_steps": self.num_ddim_steps,
+        }
         
-        response = self.client.infer(vla_input)
+   
+        response = self.client.predict_action(vla_input)
         
         
         # unnormalize the action

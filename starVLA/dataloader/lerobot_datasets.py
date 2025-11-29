@@ -44,6 +44,7 @@ def make_LeRobotSingleDataset(
         embodiment_tag = ROBOT_TYPE_TO_EMBODIMENT_TAG[robot_type]
     
     video_backend = data_cfg.get("video_backend", "decord") if data_cfg else "decord"
+    
     return LeRobotSingleDataset(
         dataset_path=dataset_path,
         modality_configs=modality_config,

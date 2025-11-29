@@ -84,7 +84,7 @@ def eval_libero(args: Args) -> None:
     else:
         raise ValueError(f"Unknown task suite: {args.task_suite_name}")
 
-    model = ModelClient(
+    client_model = ModelClient(
         policy_ckpt_path=args.pretrained_path, # to get unnormalization stats
         host=args.host,
         port=args.port,
@@ -110,7 +110,7 @@ def eval_libero(args: Args) -> None:
             logging.info(f"\nTask: {task_description}")
 
             # Reset environment
-            model.reset(task_description=task_description)  # Reset the client connection
+            client_model.reset(task_description=task_description)  # Reset the client connection
             env.reset()
 
             # Set initial states
@@ -164,16 +164,15 @@ def eval_libero(args: Args) -> None:
                 }
 
                 # align key with model API
-                obs_input = {
-                    "images": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
-                    "task_description": observation["instruction"][0],  
-                    "step": step,
+                example_dict = {
+                    "image": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
+                    "lang": observation["instruction"][0],
                 }
 
                 
                 start_time = time.time()
                 
-                response = model.step(**obs_input) 
+                response = client_model.step(example=example_dict) 
                 
                 end_time = time.time()
                 # print(f"time: {end_time - start_time}")
