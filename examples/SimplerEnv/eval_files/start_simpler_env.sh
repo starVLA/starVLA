@@ -2,8 +2,8 @@
 
 echo `which python`
 
-export SimplerEnv_PATH={path_to}/Projects/SimplerEnv
-export PYTHONPATH={path_to}/Envs/miniconda3/envs/dinoact:${PYTHONPATH}
+export SimplerEnv_PATH=/mnt/petrelfs/share/yejinhui/Projects/SimplerEnv
+export PYTHONPATH=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/dinoact:${PYTHONPATH}
 export PYTHONPATH=$(pwd):${PYTHONPATH}
 
 MODEL_PATH=./results/Checkpoints/1120_bridge_rt_1_QwenDual_florence/checkpoints/steps_50000_pytorch_model.pt

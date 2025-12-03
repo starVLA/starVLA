@@ -2,7 +2,7 @@
 # sim_python=~/Envs/miniconda3/envs/starVLA/bin/python
 port=5678
 # export DEBUG=true
-export star_vla_python={path_to}/Envs/miniconda3/envs/starVLA/bin/python
+export star_vla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
 
 your_ckpt=./results/Checkpoints/1120_bridge_rt_1_QwenDual_florence/checkpoints/steps_80000_pytorch_model.pt
 

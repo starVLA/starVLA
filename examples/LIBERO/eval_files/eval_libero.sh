@@ -3,9 +3,9 @@
 
 ###########################################################################################
 # === Please modify the following paths according to your environment ===
-export LIBERO_HOME={path_to}/Projects/LIBERO
+export LIBERO_HOME=/mnt/petrelfs/share/yejinhui/Projects/LIBERO
 export LIBERO_CONFIG_PATH=${LIBERO_HOME}/libero
-export LIBERO_Python={path_to}/Envs/miniconda3/envs/lerobot/bin/python
+export LIBERO_Python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/lerobot/bin/python
 
 export PYTHONPATH=$PYTHONPATH:${LIBERO_HOME} # let eval_libero find the LIBERO tools
 export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from main repo

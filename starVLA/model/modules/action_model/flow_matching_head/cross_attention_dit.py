@@ -168,8 +168,7 @@ class BasicTransformerBlock(nn.Module):
         attn_output = self.attn1( #@BUG @JinhuiYE
             norm_hidden_states, # 查看groot  为什么能够通过？
             encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
-            # encoder_attention_mask=encoder_attention_mask,
+            attention_mask=encoder_attention_mask, #@JinhuiYE original attention_mask=attention_mask
         )
         if self.final_dropout:
             attn_output = self.final_dropout(attn_output)
@@ -268,6 +267,7 @@ class DiT(ModelMixin, ConfigMixin):
         encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D)
         timestep: Optional[torch.LongTensor] = None,
         return_all_hidden_states: bool = False,
+        encoder_attention_mask=None
     ):
         # Encode timesteps
         temb = self.timestep_encoder(timestep)
@@ -293,7 +293,7 @@ class DiT(ModelMixin, ConfigMixin):
                     hidden_states,
                     attention_mask=None,
                     encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=None,
+                    encoder_attention_mask=encoder_attention_mask,
                     temb=temb,
                 )
             all_hidden_states.append(hidden_states)
