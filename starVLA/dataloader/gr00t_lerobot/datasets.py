@@ -1366,6 +1366,7 @@ class LeRobotMixtureDataset(Dataset):
         balance_dataset_weights: bool = True,
         balance_trajectory_weights: bool = True,
         seed: int = 42,
+        use_state: bool = False,
         metadata_config: dict = {
             "percentile_mixing_method": "min_max",
         },
@@ -1398,6 +1399,7 @@ class LeRobotMixtureDataset(Dataset):
         self.balance_trajectory_weights = balance_trajectory_weights
         self.seed = seed
         self.mode = mode
+        self.use_state = use_state
 
         # Set properties for sampling
 
@@ -1568,6 +1570,13 @@ class LeRobotMixtureDataset(Dataset):
                 for action_key in dataset.modality_keys["action"]:
                     action.append(data[action_key])
                 action = np.concatenate(action, axis=1).astype(np.float16)
+
+                if self.use_state:
+                    state = []
+                    for state_key in dataset.modality_keys["state"]:
+                        state.append(data[state_key])
+                    state = np.concatenate(state, axis=1).astype(np.float16)
+                    return dict(action=action, image=images, lang=language, state=state)
                 
                 return dict(action=action, image=images, lang=language)
                 

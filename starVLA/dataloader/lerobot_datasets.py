@@ -51,6 +51,7 @@ def get_vla_dataset(
     balance_trajectory_weights: bool = False,
     seed: int = 42,
     delete_pause_frame: bool = True,
+    use_state: bool = False,
     **kwargs: dict,
 ) -> LeRobotMixtureDataset:
     """
@@ -79,6 +80,7 @@ def get_vla_dataset(
         balance_dataset_weights=balance_dataset_weights,
         balance_trajectory_weights=balance_trajectory_weights,
         seed=seed,
+        use_state=use_state,
         **kwargs,
     )
 
