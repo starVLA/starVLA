@@ -16,7 +16,7 @@ import tyro
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-from examples.LIBERO.eval_files.model2libero_client import ModelClient
+from examples.LIBERO.eval_files.model2libero_interface import ModelClient
 
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
@@ -163,7 +163,7 @@ def eval_libero(args: Args) -> None:
                     "instruction": [str(task_description)],
                 }
 
-                # align key with model API
+                # align key with model API --> 这里给了两个图像 --> check training
                 example_dict = {
                     "image": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
                     "lang": observation["instruction"][0],

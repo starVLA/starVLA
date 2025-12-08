@@ -19,7 +19,7 @@ def collate_fn(batch):
 def make_LeRobotSingleDataset(
     data_root_dir: Path | str,
     data_name: str,
-    robot_type: str,  # 新增参数
+    robot_type: str,
     delete_pause_frame: bool = False,
     data_cfg: dict | None = None,
 ) -> LeRobotSingleDataset:
@@ -50,7 +50,7 @@ def make_LeRobotSingleDataset(
         modality_configs=modality_config,
         transforms=transforms,
         embodiment_tag=embodiment_tag,
-        video_backend=video_backend, # decord is more efficiency |torchvision_av for av 
+        video_backend=video_backend, # decord is more efficiency | torchvision_av for video.av1
         delete_pause_frame=delete_pause_frame,
         data_cfg=data_cfg,
     )
@@ -107,12 +107,12 @@ if __name__ == "__main__":
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Rank 0 waiting for debugger attach on port 10092...")
     debugpy.wait_for_client()
-
+    args.config_yaml = "examples/LIBERO/train_files/starvla_cotrain_libero.yaml"
     cfg = OmegaConf.load(args.config_yaml)
 
     vla_dataset_cfg = cfg.datasets.vla_data
-    vla_dataset_cfg.data_root_dir = "./playground/Datasets/behavior-1k"
-    vla_dataset_cfg.include_state = True
+    # vla_dataset_cfg.data_root_dir = "./playground/Datasets/behavior-1k"
+    # vla_dataset_cfg.include_state = True
     # vla_dataset_cfg.data_mix = "BEHAVIOR_dual_base_depth"
     vla_dataset_cfg.task_id = 1
     for task_id in ["all"]:

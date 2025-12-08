@@ -24,9 +24,8 @@ VIDEO_TOKEN_INDEX = 151656
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_VIDEO_TOKEN = "<video>"
 
-# [151936, 153984]
-_ACTION_TOKEN_MIN = 151936 # how can we know this range? --> we has other way for this, but is slower see qwenhelix branch
-_ACTION_TOKEN_MAX = 153984 # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
+_ACTION_TOKEN_MIN = 151669 # how can we know this range? check how you add fast tokens into VLM
+_ACTION_TOKEN_MAX = 153716 # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
 
 
 import torch.nn as nn
@@ -70,6 +69,11 @@ class _QWen3_VL_Interface(nn.Module):
 
         # alin qwen3 with qwen2.5
         self.model.config.hidden_size = self.model.config.text_config.hidden_size
+
+        # only for fast base model
+        if "-Action" in model_id:
+            self._ACTION_TOKEN_MIN = _ACTION_TOKEN_MIN
+            self._ACTION_TOKEN_MAX = _ACTION_TOKEN_MAX
 
     def forward(
         self,

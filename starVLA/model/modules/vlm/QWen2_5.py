@@ -26,7 +26,7 @@ VIDEO_TOKEN_INDEX = 151656
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_VIDEO_TOKEN = "<video>"
 
-_ACTION_TOKEN_MIN = 151665 # how can we know this range? --> we has other way for this, but is slower see qwenhelix branch
+_ACTION_TOKEN_MIN = 151665 # how can we know this range?
 _ACTION_TOKEN_MAX = 153712 # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
 
 

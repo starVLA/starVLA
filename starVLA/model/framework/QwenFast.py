@@ -40,7 +40,7 @@ IGNORE_INDEX = -100
 from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.modules.action_model.fast_ActionHeader import get_action_model
-from starVLA.training.trainer_utils.trainer_tools import resize_images
+
 
 @FRAMEWORK_REGISTRY.register("QwenFast")
 class Qwenvl_Fast(baseframework):
@@ -112,8 +112,10 @@ class Qwenvl_Fast(baseframework):
         actions = [example["action"] for example in examples]  # label [B, len, 7]
         
         # step 0: map_raw_action_to_vlm_action
-        vlm_action_tokens = self.action_model.encoder_action2vlmtoken(actions)  # List[str]
+        batch_fast_tokens = self.action_model.encoder_action2fastoken(actions)  # List[str]
 
+        # batch_fast_tokens = [self.fast_tokenizer(raw_action)[0] for raw_action in raw_actions]
+        vlm_action_tokens = [self.map_fast_token_to_vlm_action(fast_tokens) for fast_tokens in batch_fast_tokens]
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions, solutions=vlm_action_tokens)
@@ -155,9 +157,9 @@ class Qwenvl_Fast(baseframework):
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
     
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
-        if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+        # train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        # if train_obs_image_size:
+        #     batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         instructions = [instruction for instruction in instructions]
 
 
@@ -167,7 +169,7 @@ class Qwenvl_Fast(baseframework):
         with torch.autocast("cuda", dtype=torch.bfloat16):
             generated_ids = self.qwen_vl_interface.model.generate(
                 **qwen_inputs,
-                max_length=4096,
+                max_length=2048,
             )
         # --- Extract and decoder vlm_action to continue actions ---
         # --- extrace token (index based on VLM) ---
@@ -189,8 +191,8 @@ class Qwenvl_Fast(baseframework):
         Rule: keep all tokens falling within [_ACTION_TOKEN_MIN, _ACTION_TOKEN_MAX] in order of appearance.
         You may change it to "take only the first occurrence followed by continuous segment" as needed.
         """
-        act_min = self.action_model._ACTION_TOKEN_MIN
-        act_max = self.action_model._ACTION_TOKEN_MAX
+        act_min = self.qwen_vl_interface._ACTION_TOKEN_MIN
+        act_max = self.qwen_vl_interface._ACTION_TOKEN_MAX
         mask = (generated_ids >= act_min) & (generated_ids <= act_max)  # [B, L]
         results = []
         for b in range(generated_ids.size(0)):
@@ -208,7 +210,7 @@ class Qwenvl_Fast(baseframework):
         Decode the offset VLM action token list back to fast tokenizer semantics.
         fast_tokenizer.decode expects the original fast token id sequence (without offset).
         """
-        act_min = self.action_model._ACTION_TOKEN_MIN
+        act_min = self.qwen_vl_interface._ACTION_TOKEN_MIN
         batch_fast_token_ids = []
         for seq in batch_vlm_tokens:
             if not seq:
@@ -220,6 +222,11 @@ class Qwenvl_Fast(baseframework):
         
         return batch_fast_token_ids
 
+    def map_fast_token_to_vlm_action(self, tokens) -> str:
+        """Maps fast action tokens to the VLM action format.
+        Action token 0 is mapped to the string <robot_action_0>  ... and so on 
+        """
+        return ''.join([f"<robot_action_{token}>" for token in tokens]) # you should add <robot_action_{token}> to VLM as special tokens, 
 
 
 if __name__ == "__main__":

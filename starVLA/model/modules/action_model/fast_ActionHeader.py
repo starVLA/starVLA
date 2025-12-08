@@ -19,7 +19,7 @@ import os
 import numpy as np
 from transformers import AutoProcessor
 
-from starVLA.model.modules.vlm.QWen2_5 import _ACTION_TOKEN_MAX, _ACTION_TOKEN_MIN
+
 
 class Fast_Action_Tokenizer(nn.Module):
     """One MLP ResNet block with a residual connection."""
@@ -30,16 +30,13 @@ class Fast_Action_Tokenizer(nn.Module):
             fast_tokenizer_name, trust_remote_code=True
         )
 
-        self._ACTION_TOKEN_MIN = _ACTION_TOKEN_MIN
-        self._ACTION_TOKEN_MAX = _ACTION_TOKEN_MAX
 
-    def encoder_action2vlmtoken(self, raw_actions):
+    def encoder_action2fastoken(self, raw_actions):
         # x: (batch_size, chunck, dim)
         batch_actions = np.stack(raw_actions, axis=0)  # (B, T, D)
         batch_fast_tokens = self.fast_tokenizer(batch_actions)
-        # batch_fast_tokens = [self.fast_tokenizer(raw_action)[0] for raw_action in raw_actions]
-        batch_vlm_actions = [self.map_fast_token_to_vlm_action(fast_tokens) for fast_tokens in batch_fast_tokens]
-        return batch_vlm_actions # List[str]
+
+        return batch_fast_tokens # List[str]
     
     def decoder_action(self, generated_ids):
         # api https://huggingface.co/physical-intelligence/fast
@@ -47,11 +44,6 @@ class Fast_Action_Tokenizer(nn.Module):
         pred_actions = self.fast_tokenizer.decode([generated_ids - self._ACTION_TOKEN_MIN])
         return pred_actions
     
-    def map_fast_token_to_vlm_action(self, tokens) -> str:
-        """Maps fast action tokens to the VLM action format.
-        Action token 0 is mapped to the string <robot_action_0>  ... and so on 
-        """
-        return ''.join([f"<robot_action_{token}>" for token in tokens]) # you should add <robot_action_{token}> to VLM as special tokens, 
 
     def fit_tokenizer_on_datasets(self, action_dataset, datasets_path="<your_local_path>", ):
         # 如果 datasets_path 存在， 直接读取

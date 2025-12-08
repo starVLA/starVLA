@@ -45,7 +45,6 @@ accelerate launch \
   --trainer.save_interval 10000 \
   --trainer.logging_frequency 100 \
   --trainer.eval_interval 1000 \
-  --trainer.learning_rate.base 4e-5 \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
   --wandb_project starVLA \

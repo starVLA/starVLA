@@ -109,10 +109,6 @@ class ModelClient:
             "num_ddim_steps": self.num_ddim_steps,
         }
         
-        # query_info = {
-        #     "payload": vla_input,
-        #     "type": "infer",
-        # }
 
         action_chunk_size = self.action_chunk_size
         if step % action_chunk_size == 0:

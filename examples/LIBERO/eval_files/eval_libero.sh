@@ -13,7 +13,8 @@ export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools fro
 host="127.0.0.1"
 base_port=10093
 unnorm_key="franka"
-your_ckpt=results/Checkpoints/1_need/Qwen2.5-FAST-LIBERO-4in1/checkpoints/steps_30000_pytorch_model.pt
+your_ckpt=results/Checkpoints/1201_libero4in1_qwen3fast/checkpoints/steps_50000_pytorch_model.pt
+
 folder_name=$(echo "$your_ckpt" | awk -F'/' '{print $(NF-2)"_"$(NF-1)"_"$NF}')
 # === End of environment variable configuration ===
 ###########################################################################################

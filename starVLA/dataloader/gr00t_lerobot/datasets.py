@@ -1035,7 +1035,7 @@ class LeRobotSingleDataset(Dataset):
         else:
             raise ValueError(f"Invalid modality: {modality}")
 
-    def save_dataset_statistics(self, save_path: Path | str, format: str = "json") -> None:
+    def _save_dataset_statistics_(self, save_path: Path | str, format: str = "json") -> None:
         """
         Save dataset statistics to specified path in the required format.
         Only includes statistics for keys that are actually used in the dataset.
@@ -1862,8 +1862,12 @@ class LeRobotMixtureDataset(Dataset):
         
         for dataset in self.datasets:
             used_action_keys, used_state_keys = get_used_modality_keys(dataset.modality_keys)
-            all_used_action_keys.append(used_action_keys)
-            all_used_state_keys.append(used_state_keys)
+            for used_action_key in used_action_keys:
+                if used_action_key not in all_used_action_keys:
+                    all_used_action_keys.append(used_action_key)
+            for used_state_key in used_state_keys:
+                if used_state_key not in all_used_state_keys:
+                    all_used_state_keys.append(used_state_key)
         
         # Organize statistics by tag
         for tag, merged_metadata in self.merged_metadata.items():
@@ -1873,16 +1877,13 @@ class LeRobotMixtureDataset(Dataset):
             if hasattr(merged_metadata.statistics, 'action') and merged_metadata.statistics.action:
                 action_stats = merged_metadata.statistics.action
                 
-                # Filter and reorder keys
+                # Filter and reorder keys - iterate in all_used_action_keys order
                 non_gripper_keys = []
                 gripper_keys = []
                 
-                for key in action_stats.keys():
-                    if key in all_used_action_keys:
-                        if "gripper" in key.lower():
-                            gripper_keys.append(key)
-                        else:
-                            non_gripper_keys.append(key)
+                for key in all_used_action_keys:
+                    if key in action_stats:
+                        non_gripper_keys.append(key)
                 
                 reordered_keys = non_gripper_keys + gripper_keys
                 
@@ -1904,16 +1905,13 @@ class LeRobotMixtureDataset(Dataset):
             if hasattr(merged_metadata.statistics, 'state') and merged_metadata.statistics.state:
                 state_stats = merged_metadata.statistics.state
                 
-                # Filter and reorder keys
+                # Filter and reorder keys - iterate in all_used_state_keys order
                 non_gripper_keys = []
                 gripper_keys = []
                 
-                for key in state_stats.keys():
-                    if key in all_used_state_keys:
-                        if "gripper" in key.lower():
-                            gripper_keys.append(key)
-                        else:
-                            non_gripper_keys.append(key)
+                for key in all_used_state_keys:
+                    if key in state_stats:
+                        non_gripper_keys.append(key)
                 
                 reordered_keys = non_gripper_keys + gripper_keys
                 
@@ -1942,6 +1940,7 @@ class LeRobotMixtureDataset(Dataset):
         print(f"Merged dataset statistics saved to: {save_path}")
         print(f"Used action keys (reordered): {list(all_used_action_keys)}")
         print(f"Used state keys (reordered): {list(all_used_state_keys)}")
+
 
     def _combine_modality_stats(self, modality_stats: dict) -> dict:
         """Backward compatibility wrapper."""
