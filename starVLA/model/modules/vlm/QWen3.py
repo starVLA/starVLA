@@ -58,7 +58,6 @@ class _QWen3_VL_Interface(nn.Module):
             model_id,
             attn_implementation="flash_attention_2",
             dtype=torch.bfloat16,
-            device_map="cuda",
         )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.padding_side = "left"

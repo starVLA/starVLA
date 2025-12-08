@@ -337,23 +337,17 @@ class VLATrainer(TrainerUtils):
         :return: Average metric score across the evaluation dataset.
         """
 
+        examples = self._get_next_batch()
+        score = 0.0
+        num_samples = len(examples)
+        actions = [example["action"] for example in examples]  # label
+        # Predict actions using the model
+        output_dict = self.model.predict_action(
+            examples=examples, use_ddim=True, num_ddim_steps=20
+        )
+
         if self.accelerator.is_main_process:
-
-            examples = self._get_next_batch()
-
-            score = 0.0
-            num_samples = len(examples)
-
-
-            actions = [example["action"] for example in examples]  # label
-
-            # Predict actions using the model
-            output_dict = self.model.predict_action(
-                examples=examples, use_ddim=True, num_ddim_steps=20
-            )
-
             normalized_actions = output_dict["normalized_actions"]  # B, T, D
-
             actions = np.array(actions)  # convert actions to numpy.ndarray
             # B, Chunk, dim = actions.shape
             num_pots = np.prod(actions.shape)
@@ -361,7 +355,8 @@ class VLATrainer(TrainerUtils):
             score = TrainerUtils.euclidean_distance(normalized_actions, actions)
             average_score = score / num_pots
             step_metrics["mse_score"] = average_score
-        pass
+
+        del examples
         dist.barrier()  # ensure all processes are synchronized
         return step_metrics
 
