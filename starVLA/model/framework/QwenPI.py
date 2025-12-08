@@ -15,6 +15,8 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 
+
+
 from starVLA.training.trainer_utils import initialize_overwatch
 from deployment.model_server.tools.image_tools import to_pil_preserve
 
@@ -28,6 +30,10 @@ from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.modules.action_model.LayerwiseFM_ActionHeader import get_action_model, LayerwiseFlowmatchingActionHead
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 from starVLA.model.tools import FRAMEWORK_REGISTRY
+
+####################################################
+# ⚠️ Warning: This framework has been restructured and is NOT compatible with checkpoints created before 2025-10-20.
+####################################################
 
 @FRAMEWORK_REGISTRY.register("QwenPI")
 class Qwen_PI(baseframework):
@@ -60,14 +66,11 @@ class Qwen_PI(baseframework):
         self.qwen_vl_interface = get_vlm_model(config=self.config)
 
         # dynamic get llm config
-        llm_layers, llm_hidden_size = 36, self.qwen_vl_interface.model.config.hidden_size
+        num_vl_layers, llm_hidden_size = 36, self.qwen_vl_interface.model.config.hidden_size
+        self.config.framework.qwenvl.vl_hidden_dim = llm_hidden_size
+        self.config.framework.qwenvl.num_vl_layers = num_vl_layers
 
-        DiTConfig = {"num_layers": llm_layers, "input_embedding_dim": 2048, "attention_head_dim": 64, "num_attention_heads": 32}
-        self.config.framework.action_model.hidden_size = llm_hidden_size #check what this for?
-        self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = llm_hidden_size
-
-        self.config.framework.action_model.DiTConfig = DiTConfig
-        self.action_model: LayerwiseFlowmatchingActionHead = get_action_model(config=self.config)  # 修复后续引用
+        self.action_model: LayerwiseFlowmatchingActionHead = get_action_model(config=self.config)
 
         self.future_action_window_size = config.framework.action_model.future_action_window_size
         self.past_action_window_size = config.framework.action_model.past_action_window_size
@@ -80,20 +83,11 @@ class Qwen_PI(baseframework):
         **kwargs,
     ) -> Tuple:
         """
-        训练前向：直接回归未来动作（无扩散）。
-
-        Flow:
-          1. Build QwenVL inputs (images + instruction tokens)
-          2. Extract hidden states from configured layer range
-          7. Predict action and compute L1 loss
-
         Args:
             examples: List[dict], each dict requires:
                 - image: List[PIL.Image] (multi-view)
                 - lang: str instruction
                 - action: np.ndarray or list shaped [T, action_dim]
-            **kwargs: Reserved.
-
         Returns:
             dict:
                 action_loss (torch.Tensor): Scalar diffusion noise prediction loss.
@@ -150,10 +144,9 @@ class Qwen_PI(baseframework):
         return {"action_loss": action_loss}
 
     @torch.inference_mode()
-    def predict_action(
+    def predict_action( # TODO align  predict_action with forward, make api more flexible
         self,
         examples: List[dict] = None,
-        state: Optional[np.ndarray] = None,
         **kwargs: str,
     ) -> np.ndarray:
         """
@@ -164,20 +157,16 @@ class Qwen_PI(baseframework):
           2. Encode with QwenVL (hidden states retained)
           6. Return normalized action trajectory
 
-        Args:
-            batch_images: List of samples; each sample is List[PIL.Image] (multi-view).
-            instructions: List[str] natural language task instructions.
-            cfg_scale: >1 enables classifier-free guidance (scales conditional vs unconditional).
-            use_ddim: Whether to use DDIM deterministic sampling.
-            num_ddim_steps: Number of DDIM steps if enabled.
-            **kwargs: Reserved.
-
         Returns:
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
+        from deployment.model_server.tools.image_tools import to_pil_preserve
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
+    
+        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+        
         train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
@@ -224,6 +213,8 @@ if __name__ == "__main__":
     
 
     model = Qwen_PI(cfg)
+    # ckpt="/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1011_qwenpi/checkpoints/need_steps_10000_pytorch_model.pt"
+    # model = Qwen_PI.from_pretrained(ckpt)
     print(model)
 
 
@@ -245,7 +236,7 @@ if __name__ == "__main__":
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
-    predict_output = model.predict_action(sample)
+    predict_output = model.predict_action([sample])
     normalized_actions = predict_output['normalized_actions']
     print(f"Unnormalized Action: {normalized_actions}")
 
