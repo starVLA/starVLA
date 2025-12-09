@@ -1,60 +1,75 @@
-# StarVLA 测试评测框架使用指南
+# StarVLA Evaluation Framework Usage Guide
 
-## 1. 总览
-StarVLA 在真机 / 仿真评测中的标准化推理接入流程（Pipeline）使用 WebSocket 做数据穿透，以最小改动将新模型集成到现有评测环境。
-
-
-## 2. 架构示意
-
-```
-+--------------------+                   +---------------------------+
-|  Eval Env (Sim/Real)|  ---->  request(example) -> |   Model Server (StarVLA)  |
-|  - 采集多视角图像      |          WebSocket         |  - framework.predict_action |
-|  - 语言指令           | <---- response(actions)   -|
-
-```
-
-## 3. 数据协议（Example 字典约定）
+## 1. Overview
+StarVLA standardizes the inference pipeline for real-robot or simulation evaluations by tunneling data through WebSocket, enabling new models to be integrated into existing evaluation environments with minimal changes.
 
 
-最小伪代码示例（评测侧 Client）：
+
+## 2. Architecture Diagram
+
+
+The StarVLA framework uses a client-server architecture to separate the Evaluation Environment (Client) from the Policy Server (Model).
+
+![](../assets/starVLA_PolicyServer.png)
+
+
+
+<details close>
+<summary><b>Component Description </b></summary>
+
+| Component             | Color Code | Description                                                                 |
+|-----------------------|------------|-----------------------------------------------------------------------------|
+| Sim / Real Controller | Grey       | External to StarVLA: Contains the core loop of the evaluation environment or robot controller, handling observation collection (`get_obs()`) and action execution (`apply_action()`). |
+| PolicyClient.py & WebSocket & PolicyServer      | Blue       | Standard Communication Flow: Client-side wrapper responsible for data transmission (tunneling) and interfacing the environment with the server. |
+| Framework.py          | Orange     | Model Infer Core: Contains the user-defined model inference function (`Framework.predict_action`), which is the main logic for generating actions. |
+
+</details>
+
+
+## 3. Data Protocol (Example dictionary contract)
+
+Minimal pseudo-code example (evaluation-side client):
 
 ```python
-
 import WebsocketClientPolicy
 
 client = WebsocketClientPolicy(
-    host="127.0.0.0",
+    host="127.0.0.1",
     port=10092
 )
 
 while True:
-    images = capture_multiview()          # 返回 List[np.ndarray]
-    lang = get_instruction()              # 可能来自任务脚本
+    images = capture_multiview()          # returns List[np.ndarray]
+    lang = get_instruction()              # may come from task scripts
     example = {
         "image": images,
         "lang": lang,
     }
 
-    result = client.predict_action(example) #--> 直通到 framework.predict_action
-    action = result["normalized_actions"][0]   # 取 batch 第一条
+    result = client.predict_action(example)  # --> forwarded to framework.predict_action
+    action = result["normalized_actions"][0] # take the first item in the batch
     apply_action(action)
 ```
 
-```
-
-注意：
-
-
-
-
-## 7. 常见问题 FAQ
-
-Q: 为什么examples 文件夹下面会事例存在 model2{bench}_client.py？
-A: 因为 policy 到 sim apply action 中间还存在很多 bench / 用户特有的操作， 然后 delta action --> abs action。
+### Notes
+- Ensure every field in `example` is JSON-serializable or convertible (lists, floats, ints, strings); convert custom objects explicitly.
+- Images must be sent as `np.ndarray`. Perform `PIL.Image -> np.ndarray` before transmission and convert back on the server (`to_pil_preserve`) if required.
+- Keep auxiliary metadata (episode IDs, timestamps, etc.) in dedicated keys so the framework can forward or log them without collisions.
 
 
-Q: 为什么模型需要的是 PIL，但是传输的时候是 ndarray？
+### PolicyClient Interface Design
 
-Q: 因为 WebSocket 图像不直接传 PIL，需要在 Client 侧转换（`PIL.Image -> np.ndarray`），Server 再还原（内部使用 `to_pil_preserve`）
+![](../assets/starVLA_PolicyInterface.png)
 
+
+The [`*2model_interface.py`](./LIBERO/eval_files/model2libero_client.py) interface is designed to wrap and abstract any variations originating from the simulation or real-world environment. It also supports user-defined controllers, such as converting delta actions to absolute joint positions.
+
+## 7. FAQ
+
+Q: Why do examples contain files such as `model2{bench}_client.py`?  
+A: They encapsulate benchmark-specific alignment, e.g., action ensembling, converting delta actions to absolute actions, or bridging simulator quirks, so the model server can stay generic.
+
+Q: Why does the model expect PIL images while the transport uses `ndarray`?  
+A: WebSocket payloads do not serialize PIL objects directly. Convert to `np.ndarray` on the client side and restore to PIL inside the framework if the model requires it.
+
+Feedback on environment-specific needs is welcome via issues.

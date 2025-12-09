@@ -1,6 +1,9 @@
 # StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing
 
-![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)
+<!-- [![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)](https://github.com/starVLA/starVLA) -->
+[![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA)
+
+**[2025/12/09]** Be the first open-source repository that can train with [train your vlm](starVLA/training/train_starvlm.py), [train your vla](starVLA/training/train_starvla.py), and [train your vla with vlm](starVLA/training/train_starvla_cotrain.py). Check out how to co-train your VLA with multimodal data in [examples/CoTrainVLM](examples/CoTrainVLM/README.md).
 
 **[2025/11/12]** We now support [Florence-2](https://github.com/anyantudre/Florence-2-Vision-Language-Model) as a smaller VLM for resource-constrained development. StarVLA can now run on a single A100 GPU. See the [🚀Train with a smaller VLM](#train-smaller-vlm) section for more details. 
 

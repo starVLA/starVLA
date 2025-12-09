@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Tuple
 from torch.utils.data import DataLoader
 import numpy as np
+import time
 
 # Third-Party Libraries
 import torch
@@ -37,6 +38,7 @@ from starVLA.dataloader import build_dataloader
 from starVLA.training.trainer_utils.trainer_tools import normalize_dotlist_args
 from starVLA.model.framework import build_framework
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils
+from starVLA.training.trainer_utils.trainer_tools import build_param_lr_groups
 
 deepspeed_plugin = DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
@@ -225,12 +227,6 @@ class VLAMTrainer(TrainerUtils):
             self.completed_steps % self.config.trainer.logging_frequency == 0
         ):  # some parameters should be initialized for the class
             if dist.get_rank() == 0:
-                # calculate gradient norm
-                # total_norm = 0.0
-                # for p in self.model.parameters():
-                #     if p.grad is not None:
-                #         total_norm += p.grad.data.norm(2).item() ** 2
-                # metrics["grad_norm"] = total_norm ** 0.5
 
                 # add learning rate
                 metrics["learning_rate"] = self.lr_scheduler.get_last_lr()[0]
@@ -287,21 +283,33 @@ class VLAMTrainer(TrainerUtils):
         # main training loop
         while self.completed_steps < self.config.trainer.max_train_steps:
             # get data batch
+            t_start_data = time.perf_counter()
             batch_vla, batch_vlm = self._get_next_batch()
-
+            t_end_data = time.perf_counter()
             # execute training step
+            t_start_model = time.perf_counter()
             step_metrics = self._train_step(batch_vla, batch_vlm)
-
+            t_end_model = time.perf_counter()
             # update progress
             if self.accelerator.sync_gradients:
                 progress_bar.update(1)
                 self.completed_steps += 1
+            
+            if self.accelerator.is_local_main_process:
+                progress_bar.set_postfix(
+                        {
+                            "data_times": f"{t_end_data - t_start_data:.3f}",
+                            "model_times": f"{t_end_model - t_start_model:.3f}",
+                        }
+                    )
 
             # evaluate model
             if self.completed_steps % self.config.trainer.eval_interval == 0:
                 step_metrics = self.eval_action_model(step_metrics)
 
             # record metrics
+            step_metrics["data_time"] = t_end_data - t_start_data
+            step_metrics["model_time"] = t_end_model - t_start_model
             self._log_metrics(step_metrics)
 
             # save checkpoint
@@ -334,14 +342,11 @@ class VLAMTrainer(TrainerUtils):
 
             score = 0.0
             num_samples = len(examples)
-
-            batch_images = [example["image"] for example in examples]
-            instructions = [example["lang"] for example in examples]  # [B, str]
             actions = [example["action"] for example in examples]  # label
 
             # Predict actions using the model
             output_dict = self.model.predict_action(
-                batch_images=batch_images, instructions=instructions, use_ddim=True, num_ddim_steps=20
+                examples=examples
             )
 
             normalized_actions = output_dict["normalized_actions"]  # B, T, D
@@ -362,7 +367,7 @@ class VLAMTrainer(TrainerUtils):
         if self.accelerator.is_main_process:
             logger.info("***** Training Configuration *****")
             logger.info(f"  Total optimization steps = {self.config.trainer.max_train_steps}")
-            logger.info(f" Per device batch size = {self.config.datasets.vla_data.per_device_batch_size}")
+            logger.info(f"  Per device batch size = {self.config.datasets.vla_data.per_device_batch_size}")
             logger.info(f"  Gradient accumulation steps = {self.config.trainer.gradient_accumulation_steps}")
             logger.info(f"  Total batch size = {self.total_batch_size}")
 
@@ -379,7 +384,7 @@ class VLAMTrainer(TrainerUtils):
                 total_loss = action_loss
             self.accelerator.backward(total_loss)
 
-            dist.barrier()  # @DEBUG
+            
             pass
             # VLM task forward propagation
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -390,7 +395,7 @@ class VLAMTrainer(TrainerUtils):
 
             pass
 
-            # dist.barrier() #@DEBUG
+            
             # gradient clipping
             if self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
@@ -422,9 +427,6 @@ class VLAMTrainer(TrainerUtils):
             wandb.finish()
 
         self.accelerator.wait_for_everyone()
-
-
-from starVLA.training.trainer_utils.trainer_tools import build_param_lr_groups
 
 
 def main(cfg) -> None:

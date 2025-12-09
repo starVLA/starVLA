@@ -576,7 +576,6 @@ def make_vlm_dataloader(cfg):
     image_processor.min_pixels = int(data_args.min_pixels)
     image_processor.size["longest_edge"] = int(data_args.max_pixels)
     image_processor.size["shortest_edge"] = int(data_args.min_pixels)
-    data_args.model_type = "qwen2.5vl"
     data_args_ns = SimpleNamespace(**OmegaConf.to_container(data_args, resolve=True))
     data_args_ns.image_processor = image_processor  # TODO later remove the logic bound to model
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args_ns)
@@ -604,7 +603,7 @@ if __name__ == "__main__":
     import debugpy
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument("--config_yaml", type=str, default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -630,7 +629,7 @@ if __name__ == "__main__":
     image_processor.min_pixels = data_args.min_pixels
     image_processor.size["longest_edge"] = data_args.max_pixels
     image_processor.size["shortest_edge"] = data_args.min_pixels
-    data_args.model_type = "qwen2.5vl"
+
     data_args_ns = SimpleNamespace(**OmegaConf.to_container(data_args, resolve=True))
     data_args_ns.image_processor = image_processor
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args_ns)
