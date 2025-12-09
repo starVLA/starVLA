@@ -10,19 +10,19 @@ export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 
 ###########################################################################################
 # === Please modify the following paths according to your environment ===
-Framework_name=QwenGR00T
+Framework_name=QwenPI
 freeze_module_list=''
-base_vlm=Qwen/Qwen2.5-VL-3B-Instruct
+base_vlm=playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
 config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
 oxe_data_root=playground/Datasets/OXE_LEROBOT
 data_mix=bridge_rt_1
 run_root_dir=./results/Checkpoints
-run_id=1025_${data_mix}_qwengroot
+run_id=1208_${data_mix}_qwen3_PI
 # === End of environment variable configuration ===
 ###########################################################################################
 
 
-# export WANDB_MODE=disabled
+export WANDB_MODE=disabled
 
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
@@ -39,7 +39,7 @@ accelerate launch \
   --framework.qwenvl.base_vlm ${base_vlm} \
   --datasets.vla_data.data_root_dir ${oxe_data_root}\
   --datasets.vla_data.data_mix ${data_mix} \
-  --datasets.vla_data.per_device_batch_size 16 \
+  --datasets.vla_data.per_device_batch_size 8 \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 100000 \
   --trainer.save_interval 10000 \

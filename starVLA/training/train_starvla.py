@@ -238,7 +238,7 @@ class VLATrainer(TrainerUtils):
         """record training metrics"""
         if self.completed_steps % self.config.trainer.logging_frequency == 0:
             if dist.get_rank() == 0:
-                # add learning rate --> 怎么获得 qwenvl lr
+                # add learning rate 
                 metrics["learning_rate"] = self.lr_scheduler.get_last_lr()[0] # see lr group in yaml.trainer.learning_rate
 
                 # add epoch info
