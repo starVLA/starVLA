@@ -151,7 +151,7 @@ class VLAMTrainer(TrainerUtils):
 
     def _save_checkpoint(self):
         """Save current training state."""
-        if accelerator.is_main_process:
+        if self.accelerator.is_main_process:
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
             state_dict = self.accelerator.get_state_dict(self.model)
             torch.save(state_dict, checkpoint_path + "_pytorch_model.pt")
@@ -159,7 +159,7 @@ class VLAMTrainer(TrainerUtils):
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
             self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
-        accelerator.wait_for_everyone()
+        self.accelerator.wait_for_everyone()
 
     def eval_action_model(self, step_metrics=None):
         """No-op evaluation for VLM-only training."""
