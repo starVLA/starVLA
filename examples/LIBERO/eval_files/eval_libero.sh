@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd /mnt/petrelfs/yejinhui/Projects/starVLA
+conda activate starVLA
 
 ###########################################################################################
 # === Please modify the following paths according to your environment ===
@@ -10,16 +12,31 @@ export LIBERO_Python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/lerobot/b
 export PYTHONPATH=$PYTHONPATH:${LIBERO_HOME} # let eval_libero find the LIBERO tools
 export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from main repo
 
-host="127.0.0.1"
-base_port=10093
-unnorm_key="franka"
-your_ckpt=results/Checkpoints/1201_libero4in1_qwen3fast/checkpoints/steps_50000_pytorch_model.pt
 
+
+host="127.0.0.1"
+base_port=6880
+unnorm_key="franka"
+your_ckpt=/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1201_libero4in1_norafast/checkpoints/steps_60000_pytorch_model.pt
+export CUDA_VISIBLE_DEVICES=4
+
+base_port=$((base_port + CUDA_VISIBLE_DEVICES))
 folder_name=$(echo "$your_ckpt" | awk -F'/' '{print $(NF-2)"_"$(NF-1)"_"$NF}')
 # === End of environment variable configuration ===
 ###########################################################################################
 
 # export DEBUG=true
+
+################# star Policy Server ######################
+
+export star_vla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
+
+${star_vla_python} deployment/model_server/server_policy.py \
+    --ckpt_path ${your_ckpt} \
+    --port ${base_port} \
+    --use_bf16 &
+
+# #################################
 
 LOG_DIR="logs/$(date +"%Y%m%d_%H%M%S")"
 mkdir -p ${LOG_DIR}
@@ -35,52 +52,52 @@ ${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
     --args.port $base_port \
     --args.task-suite-name "$task_suite_name" \
     --args.num-trials-per-task "$num_trials_per_task" \
-    --args.video-out-path "$video_out_path"
+    --args.video-out-path "$video_out_path" &
 
-
+sleep 5
 # ##########  eval libero_spatial ##########
 
 # # set it in background to run multiple evals in parallel with &
 
-# task_suite_name=libero_spatial
-# num_trials_per_task=50
-# video_out_path="results/${task_suite_name}/${folder_name}"
+task_suite_name=libero_spatial
+num_trials_per_task=50
+video_out_path="results/${task_suite_name}/${folder_name}"
 
-# ${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
-#     --args.pretrained-path ${your_ckpt} \
-#     --args.host "$host" \
-#     --args.port $base_port \
-#     --args.task-suite-name "$task_suite_name" \
-#     --args.num-trials-per-task "$num_trials_per_task" \
-#     --args.video-out-path "$video_out_path" &
+${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
+    --args.pretrained-path ${your_ckpt} \
+    --args.host "$host" \
+    --args.port $base_port \
+    --args.task-suite-name "$task_suite_name" \
+    --args.num-trials-per-task "$num_trials_per_task" \
+    --args.video-out-path "$video_out_path" &
 
+sleep 5
+##########  eval libero_object ##########
 
-# ##########  eval libero_object ##########
+task_suite_name=libero_object
+num_trials_per_task=50
+video_out_path="results/${task_suite_name}/${folder_name}"
 
-# task_suite_name=libero_object
-# num_trials_per_task=50
-# video_out_path="results/${task_suite_name}/${folder_name}"
+${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
+    --args.pretrained-path ${your_ckpt} \
+    --args.host "$host" \
+    --args.port $base_port \
+    --args.task-suite-name "$task_suite_name" \
+    --args.num-trials-per-task "$num_trials_per_task" \
+    --args.video-out-path "$video_out_path" &
 
-# ${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
-#     --args.pretrained-path ${your_ckpt} \
-#     --args.host "$host" \
-#     --args.port $base_port \
-#     --args.task-suite-name "$task_suite_name" \
-#     --args.num-trials-per-task "$num_trials_per_task" \
-#     --args.video-out-path "$video_out_path" &
+sleep 5
 
+##########  eval libero_long ##########
 
+task_suite_name=libero_10
+num_trials_per_task=50
+video_out_path="results/${task_suite_name}/${folder_name}"
 
-# ##########  eval libero_long ##########
-
-# task_suite_name=libero_10
-# num_trials_per_task=50
-# video_out_path="results/${task_suite_name}/${folder_name}"
-
-# ${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
-#     --args.pretrained-path ${your_ckpt} \
-#     --args.host "$host" \
-#     --args.port $base_port \
-#     --args.task-suite-name "$task_suite_name" \
-#     --args.num-trials-per-task "$num_trials_per_task" \
-#     --args.video-out-path "$video_out_path" &
+${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
+    --args.pretrained-path ${your_ckpt} \
+    --args.host "$host" \
+    --args.port $base_port \
+    --args.task-suite-name "$task_suite_name" \
+    --args.num-trials-per-task "$num_trials_per_task" \
+    --args.video-out-path "$video_out_path" &

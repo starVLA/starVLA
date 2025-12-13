@@ -97,6 +97,9 @@ class _QWen_VL_Interface(nn.Module):
         self.processor = processor
         self.config = config
 
+        self._ACTION_TOKEN_MIN = _ACTION_TOKEN_MIN
+        self._ACTION_TOKEN_MAX = _ACTION_TOKEN_MAX
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

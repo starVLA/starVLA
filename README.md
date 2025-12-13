@@ -212,20 +212,11 @@ We also provide a parallel evaluation script:
 
   ```bash
   check_pt=StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
-  bash examples/SimplerEnv/star_bridge_parall_eval.sh ${check_pt}
+  bash /mnt/petrelfs/yejinhui/Projects/starVLA/examples/LIBERO/eval_files/eval_libero.sh
   ```
 
-Before running, down [Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) and follow [SimpplerEnv](https://simpler-env.github.io/) prapare a python.  Edit these variables directly at the top of `star_bridge_parall_eval.sh`.
+Before running, down [Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) and follow [SimpplerEnv](https://simpler-env.github.io/) prapare a python.  Edit these variables directly at the top of `eval_libero.sh`.
 
-If you don't want parallel testing, please run:
-
-```bash
-
-# Terminal 1
-bash ./examples/SimplerEnv/eval_files/start_server.sh
-# Terminal 2
-bash ./examples/SimplerEnv/start_simpler_env.sh
-```
 ---
 
 ⚠️ **Common Issues**
@@ -245,11 +236,16 @@ When run policy server but `NotImplementedError:Framework QwenGR00T is not imple
 </b></summary>
 
 
-Our training pipeline follows [InternVLA-M1](https://github.com/InternRobotics/InternVLA-M1/examples/SimplerEnv).
-
 Steps:
-1) Prepare a LeRobot-format OXE dataset, including `modality.json`. Refer to [GR00T N1.5](https://github.com/NVIDIA/Isaac-GR00T/tree/main/examples/SimplerEnv).
-2) Add your dataset path to `config.yaml`:
+1) Download a LeRobot-format OXE dataset 
+- [bridge_orig_lerobot](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot)
+- [fractal20220817_data_lerobot](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot)
+
+2) Including `modality.json` in each `*lerobot/meta/modality.json`
+- [bridge modality](examples/SimplerEnv/train_files/modality.json)
+- [fractal modality](examples/SimplerEnv/train_files/fractal_modality.json). Rename as `modality.json` and put it as `fractal20220817_data_lerobot/meta/modality.json`
+
+3) Add your dataset path to `config.yaml`:
     ```yaml
     datasets:
       vla_data:

@@ -63,7 +63,7 @@ datasets:
   vla_data:
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
-    data_mix: libero_goal # libero_goal
+    data_mix: libero_all # libero_goal
     action_type: delta_qpos
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
     CoT_answer: bbox
