@@ -389,7 +389,7 @@ class StateActionTransform(InvertibleModalityTransform):
 
         # Check that all state keys specified in apply_to have their modality_metadata
         for key in self.apply_to:
-            split_key = key.split(".")
+            split_key = key.split(".", 1)
             assert len(split_key) == 2, "State keys should have two parts: 'modality.key'"
             if key not in self.modality_metadata:
                 modality, state_key = split_key
@@ -401,7 +401,7 @@ class StateActionTransform(InvertibleModalityTransform):
 
         # Check that all state keys specified in normalization_modes have their statistics in state_statistics
         for key in self.normalization_modes:
-            split_key = key.split(".")
+            split_key = key.split(".", 1)
             assert len(split_key) == 2, "State keys should have two parts: 'modality.key'"
             modality, state_key = split_key
             assert hasattr(dataset_statistics, modality), f"{modality} statistics not found"
@@ -432,7 +432,7 @@ class StateActionTransform(InvertibleModalityTransform):
 
         # Initialize the normalizers
         for key in self.normalization_modes:
-            modality, state_key = key.split(".")
+            modality, state_key = key.split(".", 1)
             # If the state has a nontrivial rotation, we need to handle it more carefully
             # For absolute rotations, we need to convert them to the target representation and normalize them using min_max mode,
             # since we can infer the bounds by the representation

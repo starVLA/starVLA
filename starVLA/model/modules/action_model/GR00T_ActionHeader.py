@@ -244,7 +244,7 @@ class FlowmatchingActionHead(nn.Module):
             hidden_size=self.input_embedding_dim,
         )
         self.action_decoder = MLP(
-            input_dim=self.hidden_size,
+            input_dim=self.model.config.output_dim,
             hidden_dim=self.hidden_size,
             output_dim=self.action_dim,
         )

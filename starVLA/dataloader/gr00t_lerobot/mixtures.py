@@ -60,4 +60,10 @@ DATASET_NAMED_MIXTURES = {
     ],
 
 
+    "SO101_pick": [
+        ("pick_dataset_name", 1.0, "SO101"),
+    ],
+
+
+
 }

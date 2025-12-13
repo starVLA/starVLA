@@ -594,11 +594,96 @@ class SingleFrankaRobotiqDeltaJointsDataConfig:
 
 
 
+###########################################################################################
+
+class SO101Config:
+    #input
+    video_keys = [
+        "video.primary_image",
+        "video.wrist_image",
+    ]
+    
+    state_keys = [
+        "state.shoulder_pan.pos",
+        "state.shoulder_lift.pos",
+        "state.elbow_flex.pos",
+        "state.wrist_flex.pos",
+        "state.wrist_roll.pos",
+        "state.gripper.pos",
+    ]
+    language_keys = ["annotation.human.action.task_description"]
+
+    # output
+    action_keys = [
+        "action.shoulder_pan.pos",
+        "action.shoulder_lift.pos",
+        "action.elbow_flex.pos",
+        "action.wrist_flex.pos",
+        "action.wrist_roll.pos",
+        "action.gripper.pos",
+    ]
+    
+
+    observation_indices = [0]
+    action_indices = list(range(16))
+
+
+    def modality_config(self):
+        video_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.video_keys,
+        )
+        state_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.state_keys,
+        )
+        action_modality = ModalityConfig(
+            delta_indices=self.action_indices,
+            modality_keys=self.action_keys,
+        )
+        language_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.language_keys,
+        )
+        modality_configs = {
+            "video": video_modality,
+            "state": state_modality,
+            "action": action_modality,
+            "language": language_modality,
+        }
+        return modality_configs
+
+    def transform(self):
+        transforms = [
+            # state transforms
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={
+                    key: "min_max" for key in self.state_keys
+                },
+            ),
+            # action transforms
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={
+                    key: "min_max" for key in self.action_keys
+                },
+            ),
+        ]
+
+        return ComposedModalityTransform(transforms=transforms)
+
+###########################################################################################
+
+
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "oxe_droid": OxeDroidDataConfig(),
     "oxe_bridge": OxeBridgeDataConfig(),
     "oxe_rt1": OxeRT1DataConfig(),
+    "SO101": SO101Config(),
     "demo_sim_franka_delta_joints": SingleFrankaRobotiqDeltaJointsDataConfig(),
-    "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig()
+    "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
 }
