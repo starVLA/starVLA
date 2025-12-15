@@ -1,7 +1,7 @@
-# 使用所有 8 个 GPU 并将 EvalOverlay 任务挂到后台运行
-# 因此总共会实际运行 12 次 main_inference.py。
+# Use all 8 GPUs and run EvalOverlay tasks in the background
+# This results in 12 executions of main_inference.py.
 
-# 定义环境
+# Environment setup
 cd /mnt/petrelfs/yejinhui/Projects/llavavla
 export starvla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starvlaSAM/bin/python
 export sim_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/dinoact/bin/python
@@ -11,15 +11,15 @@ base_port=5500
 
 MODEL_PATH=$1
 
-# 可选：判断是否传入了参数
+# Optional: allow overriding via argument
 if [ -z "$MODEL_PATH" ]; then
-  echo "❌ 没传入 MODEL_PATH 作为第一个参数, 使用默认参数"
+  echo "❌ MODEL_PATH not provided as the first argument; using default"
   export MODEL_PATH="/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1003_qwenfast/checkpoints/steps_10000_pytorch_model.pt"
 fi
 
 export ckpt_path=${MODEL_PATH}
 
-# 定义一个函数来启动服务
+# Helper to launch policy servers
 policyserver_pids=()
 eval_pids=()
 
@@ -42,49 +42,49 @@ start_service() {
     --use_bf16 \
     > "${svc_log}" 2>&1 &
   
-  local pid=$!          # 立即捕获正确 PID
+  local pid=$!          # capture PID immediately
   policyserver_pids+=($pid)
   sleep 20
 }
 
-# 定义一个函数来停止所有服务
+# Helper to stop every service
 stop_all_services() {
-  # 等待所有评估任务完成
-  echo "⏳ 等待评估任务完成..."
+  # Wait for every evaluation job to complete
+  echo "⏳ Waiting for evaluation jobs to finish..."
   for pid in "${eval_pids[@]}"; do
     if ps -p "$pid" > /dev/null 2>&1; then
       wait "$pid"
       status=$?
       if [ $status -ne 0 ]; then
-          echo "警告: 评估任务 $pid 异常退出 (状态: $status)"
+          echo "Warning: evaluation job $pid exited abnormally (status: $status)"
       fi
     fi
   done
 
-  # 停止所有服务
-  echo "⏳ 停止服务进程..."
+  # Stop all services
+  echo "⏳ Stopping service processes..."
   for pid in "${policyserver_pids[@]}"; do
     if ps -p "$pid" > /dev/null 2>&1; then
       kill "$pid" 2>/dev/null
       wait "$pid" 2>/dev/null
     else
-      echo "⚠️ 服务进程 $pid 已不存在 (可能已提前退出)"
+      echo "⚠️ Service process $pid no longer exists (might have exited early)"
     fi
   done
 
 
-  # 清空 PID 数组
+  # Clear PID arrays
   eval_pids=()
   policyserver_pids=()
-  echo "✅ 所有服务和任务已停止"
+  echo "✅ All services and tasks stopped"
 }
 
 
 
 
-# 获取当前系统的 CUDA_VISIBLE_DEVICES 列表
-IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # 将逗号分隔的 GPU 列表转换为数组
-NUM_GPUS=${#CUDA_DEVICES[@]}  # 获取可用 GPU 的数量
+# Retrieve CUDA_VISIBLE_DEVICES list on this host
+IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # convert comma-separated GPU list to an array
+NUM_GPUS=${#CUDA_DEVICES[@]}  # count available GPUs
 
 
 declare -a ckpt_paths=(
@@ -98,14 +98,14 @@ declare -a env_names=(
 # URDF variations
 declare -a urdf_version_arr=("recolor_cabinet_visual_matching_1" "recolor_tabletop_visual_matching_1" "recolor_tabletop_visual_matching_2" None)
 
-# 轮转分配用的变量
+# Variables for round-robin assignment
 total_gpus=8
 run_count=0
 
-# EvalOverlay 函数：使用 ${gpu_id} 执行三次 main_inference，A0/B0/C0
+# EvalOverlay runs main_inference three times (A0/B0/C0) on ${gpu_id}
 EvalOverlay() {
   echo "${ckpt_path} ${env_name} (URDF=${urdf_version}) on GPU ${gpu_id}"
-  # 启动服务并获取服务进程的 PID
+  # Launch service and capture its PID
   port=$((base_port + run_count))
   start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -149,7 +149,7 @@ for urdf_version in "${urdf_version_arr[@]}"; do
 
   for ckpt_path in "${ckpt_paths[@]}"; do
     for env_name in "${env_names[@]}"; do
-      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
+  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # map to GPU ID in CUDA_VISIBLE_DEVICES
       
       EvalOverlay &
       eval_pids+=($!)
@@ -158,8 +158,8 @@ for urdf_version in "${urdf_version_arr[@]}"; do
   done
 done
 
-# 等待所有后台任务完成
+# Wait for all background jobs
 stop_all_services
-echo "✅ 所有测试完成"
+echo "✅ All evaluations finished"
 
 

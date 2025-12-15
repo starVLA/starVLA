@@ -63,7 +63,7 @@ echo "Evaluation completed. Videos saved to ${video_out_path}, logs saved to ${l
 
 
 
-# 结束的时候要 kill 掉 base_port 的程序
+
 if [ -n "$server_pid" ]; then
     echo "Killing server process with PID: $server_pid"
     kill $server_pid

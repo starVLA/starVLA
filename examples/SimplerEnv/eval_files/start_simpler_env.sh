@@ -23,7 +23,7 @@ ckpt_dir=$(dirname "${ckpt_path}")
 ckpt_base=$(basename "${ckpt_path}")
 ckpt_name="${ckpt_base%.*}"
 
-# 创建 output 目录
+# Create output directories
 output_server_dir="${ckpt_dir}/output_server"
 output_eval_dir="${ckpt_dir}/output_eval"
 mkdir -p "${output_server_dir}"
@@ -55,7 +55,7 @@ declare -a ENV_NAMES=(
 for i in "${!ENV_NAMES[@]}"; do
   env="${ENV_NAMES[i]}"
   for ((run_idx=1; run_idx<=TSET_NUM; run_idx++)); do
-    # 日志文件路径
+  # Path for log file
     task_log="${output_eval_dir}/${ckpt_name}_${env}_run${run_idx}.log"
     echo "▶️ Launching task [${env}] run#${run_idx}, log → ${task_log}"
 
@@ -96,7 +96,7 @@ robot_init_y=0.06
 for i in "${!ENV_NAMES_V2[@]}"; do
   env="${ENV_NAMES_V2[i]}"
   for ((run_idx=1; run_idx<=TSET_NUM; run_idx++)); do
-    # 日志文件路径
+  # Path for log file
     task_log="${output_eval_dir}/${ckpt_name}_${env}_run${run_idx}.log"
     echo "▶️ Launching V2 task [${env}] run#${run_idx}, log → ${task_log}"
 

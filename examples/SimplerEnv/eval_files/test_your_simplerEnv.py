@@ -1,7 +1,7 @@
 
-# 可选：输出更详细信息用于调试
+# Optional: print more diagnostics for debugging
 # from sapien import disable_renderer
-# disable_renderer()  # <-- 添加这一行跳过渲染器
+# disable_renderer()  # <-- Uncomment to skip the renderer
 
 
 

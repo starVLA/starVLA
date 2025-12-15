@@ -47,7 +47,6 @@ The evaluation should be run **from the repository root** using **two separate t
 - **simpler_env environment**: runs the simulation eval code.  
 
 
-
 ### Step 0. Download offical checkpoint
 
 1) Download the checkpoint:[Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1)
@@ -82,35 +81,34 @@ This script will automatically launch the WidowX Robot evaluation tasks, reprodu
 `start_simpler_env.sh`  
 
 
+⚠️ **Common Issues**
 
-We also provide a parallel evaluation script:
+When run policy server but `NotImplementedError:Framework QwenGR00T is not implemented`, you may need to `python QwenGR00T.py` to check your env.
 
-```bash
-check_pt=StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
-bash examples/SimplerEnv/star_bridge_parall_eval.sh ${check_pt}
-```
 
-Before running star_bridge.sh, set the following three paths:
-- star_vla_python: Python interpreter for the StarVLA environment.
-- sim_python: Python interpreter for the SimplerEnv environment.
-- SimplerEnv_PATH: Local path to the SimplerEnv project.
-Alternatively, edit these variables directly at the top of `star_bridge.sh`.
 
 # 🚀 Training on OXE
 
 ## Data Preparation
 
-1. Prepare the OXE data following the GR00T / Open-X Embodiment procedure (download + convert). Keep only the subsets you need (e.g. bridge / rt1, etc.).
-2. Move `./train_files/modality.json` to your `${lerobot_data}/meta/modality.json`
-3. YAML parameter snippet: (`examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml`)
 
-```
-datasets:
-  vla_data:
-    dataset_py: lerobot_datasets
-    data_root_dir: playground/Datasets/OXE_LEROBOT_DATASET
-    data_mix: bridge_rt_1   # change or extend if you add more mixture
-```
+Steps:
+1) Download a LeRobot-format OXE dataset 
+- [bridge_orig_lerobot](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot)
+- [fractal20220817_data_lerobot](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot)
+
+2) Including `modality.json` in each `*lerobot/meta/modality.json`
+- [bridge modality](./train_files/modality.json). Rename as modality.json and put it as `bridge_orig_lerobot/meta/modality.json`
+- [fractal modality](./train_files/fractal_modality.json). Rename as `modality.json` and put it as `fractal20220817_data_lerobot/meta/modality.json`
+
+3) Add your dataset path to `config.yaml`:
+    ```yaml
+    datasets:
+      vla_data:
+        dataset_py: lerobot_datasets
+        data_root_dir: playground/Datasets/OXE_LEROBOT_DATASET  # path to your dataset
+        data_mix: bridge_rt_1
+    ```
 
 
 ### Check Your Dataoader

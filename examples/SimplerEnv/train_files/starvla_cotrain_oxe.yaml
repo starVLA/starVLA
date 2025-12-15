@@ -17,7 +17,7 @@ framework:
 
   action_model:
     action_model_type: DiT-B
-    hidden_size: 1024     # 和 DiT 最后的 projection 对应，用于 ActionDecoder
+  hidden_size: 1024     # Matches the final DiT projection, used by the ActionDecoder
     add_pos_embed: True
     max_seq_len: 1024
     action_dim: 7
@@ -32,8 +32,8 @@ framework:
     num_timestep_buckets: 1000
     num_inference_timesteps: 4
     num_target_vision_tokens: 32
-    diffusion_model_cfg:    # DiT Transformers 的参数
-      cross_attention_dim: 2048 # VLM 的 dim
+    diffusion_model_cfg:    # Parameters for the DiT transformer
+      cross_attention_dim: 2048 # Dimension of the VLM
       dropout: 0.2
       final_dropout: true
       interleave_self_attention: true

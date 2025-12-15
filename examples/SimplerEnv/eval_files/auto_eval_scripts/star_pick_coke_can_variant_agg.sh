@@ -1,6 +1,4 @@
-
-
-# 定义环境
+# Environment setup
 cd /mnt/petrelfs/yejinhui/Projects/llavavla
 export starvla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starvlaSAM/bin/python
 export sim_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/dinoact/bin/python
@@ -10,15 +8,15 @@ base_port=5500
 
 MODEL_PATH=$1
 
-# 可选：判断是否传入了参数
+# Optional: allow overriding via argument
 if [ -z "$MODEL_PATH" ]; then
-  echo "❌ 没传入 MODEL_PATH 作为第一个参数, 使用默认参数"
+  echo "❌ MODEL_PATH not provided as the first argument; using default"
   export MODEL_PATH="/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1003_qwenfast/checkpoints/steps_10000_pytorch_model.pt"
 fi
 
 export ckpt_path=${MODEL_PATH}
 
-# 定义一个函数来启动服务
+# Helper to launch policy servers
 policyserver_pids=()
 eval_pids=()
 
@@ -39,52 +37,50 @@ start_service() {
     --use_bf16 \
     > "${svc_log}" 2>&1 &
   
-  local pid=$!          # 立即捕获正确 PID
+  local pid=$!          # Capture PID immediately
   policyserver_pids+=($pid)
   sleep 20
 }
 
-# 定义一个函数来停止所有服务
+# Helper to stop all services
 stop_all_services() {
-  # 等待所有评估任务完成
-  echo "⏳ 等待评估任务完成..."
+  # Wait for evaluation jobs to finish
+  echo "⏳ Waiting for evaluation jobs to finish..."
   for pid in "${eval_pids[@]}"; do
     if ps -p "$pid" > /dev/null 2>&1; then
       wait "$pid"
       status=$?
       if [ $status -ne 0 ]; then
-          echo "警告: 评估任务 $pid 异常退出 (状态: $status)"
+          echo "⚠️ Warning: evaluation job $pid exited abnormally (status: $status)"
       fi
     fi
   done
 
-  # 停止所有服务
-  echo "⏳ 停止服务进程..."
+  # Stop policy servers
+  echo "⏳ Stopping service processes..."
   for pid in "${policyserver_pids[@]}"; do
     if ps -p "$pid" > /dev/null 2>&1; then
       kill "$pid" 2>/dev/null
       wait "$pid" 2>/dev/null
     else
-      echo "⚠️ 服务进程 $pid 已不存在 (可能已提前退出)"
+      echo "⚠️ Service process $pid no longer exists (may have exited early)"
     fi
   done
-
-
-  # 清空 PID 数组
+  # Reset PID arrays
   eval_pids=()
   policyserver_pids=()
-  echo "✅ 所有服务和任务已停止"
+  echo "✅ All services and jobs have stopped"
 }
 
 
-# 获取当前系统的 CUDA_VISIBLE_DEVICES 列表
-IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # 将逗号分隔的 GPU 列表转换为数组
-NUM_GPUS=${#CUDA_DEVICES[@]}  # 获取可用 GPU 的数量
+# Derive CUDA device list from CUDA_VISIBLE_DEVICES
+IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # Convert comma-separated GPU list into array
+NUM_GPUS=${#CUDA_DEVICES[@]}  # Count available GPUs
 
 
 declare -a arr=(${MODEL_PATH})
 
-# 轮转分配用的变量
+# Round-robin bookkeeping
 total_gpus=8
 run_count=0
 
@@ -101,8 +97,8 @@ scene_name=google_pick_coke_can_1_v4
 
 for coke_can_option in "${coke_can_options_arr[@]}"; do
   for ckpt_path in "${arr[@]}"; do
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+    # Launch service and capture its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -114,8 +110,8 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
       --robot-init-x 0.35 0.35 1 --robot-init-y 0.20 0.20 1 --obj-init-x -0.35 -0.12 5 --obj-init-y -0.02 0.42 5 \
       --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
       --additional-env-build-kwargs ${coke_can_option} &
-    
-    eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+
+    eval_pids+=($!)  # Track evaluation job PID
     run_count=$((run_count + 1))
   done
 done
@@ -128,10 +124,10 @@ declare -a scene_arr=("Baked_sc1_staging_objaverse_cabinet1_h870" \
 for coke_can_option in "${coke_can_options_arr[@]}"; do
   for scene_name in "${scene_arr[@]}"; do
     for ckpt_path in "${arr[@]}"; do
-      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
-    port=$((base_port + run_count))
-    start_service ${gpu_id} ${ckpt_path} ${port}
+      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+      # Launch service and capture its PID
+      port=$((base_port + run_count))
+      start_service ${gpu_id} ${ckpt_path} ${port}
 
       CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py --ckpt-path ${ckpt_path} \
         --robot google_robot_static \
@@ -142,7 +138,7 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
         --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
         --additional-env-build-kwargs ${coke_can_option} &
       
-      eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+      eval_pids+=($!)  # Track evaluation job PID
       run_count=$((run_count + 1))
     done
   done
@@ -154,8 +150,8 @@ scene_name=google_pick_coke_can_1_v4
 
 for coke_can_option in "${coke_can_options_arr[@]}"; do
   for ckpt_path in "${arr[@]}"; do
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+    # Launch service and capture its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -168,11 +164,11 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
       --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
       --additional-env-build-kwargs ${coke_can_option} &
     
-    eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+    eval_pids+=($!)  # Track evaluation job PID
     run_count=$((run_count + 1))
 
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+    # Launch service and capture its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -185,7 +181,7 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
       --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
       --additional-env-build-kwargs ${coke_can_option} distractor_config=more &
     
-    eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+    eval_pids+=($!)  # Track evaluation job PID
     run_count=$((run_count + 1))
   done
 done
@@ -198,8 +194,8 @@ declare -a bg_scene_arr=("google_pick_coke_can_1_v4_alt_background" \
 for coke_can_option in "${coke_can_options_arr[@]}"; do
   for scene_name in "${bg_scene_arr[@]}"; do
     for ckpt_path in "${arr[@]}"; do
-      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-      # 启动服务并获取服务进程的 PID
+      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+      # Launch service and capture its PID
       port=$((base_port + run_count))
       start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -212,7 +208,7 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
         --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
         --additional-env-build-kwargs ${coke_can_option} &
       
-      eval_pids
+      eval_pids+=($!)  # Track evaluation job PID
       run_count=$((run_count + 1))
     done
   done
@@ -224,8 +220,8 @@ scene_name=google_pick_coke_can_1_v4
 
 for coke_can_option in "${coke_can_options_arr[@]}"; do
   for ckpt_path in "${arr[@]}"; do
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+    # Launch service and capture its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -238,11 +234,11 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
       --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
       --additional-env-build-kwargs ${coke_can_option} slightly_darker_lighting=True &
     
-    eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+  eval_pids+=($!)  # Track evaluation job PID
     run_count=$((run_count + 1))
 
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+  # Launch service and capture its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
     CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py --ckpt-path ${ckpt_path} \
@@ -254,7 +250,7 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
       --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
       --additional-env-build-kwargs ${coke_can_option} slightly_brighter_lighting=True &
     
-    eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+    eval_pids+=($!)  # Track evaluation job PID
     run_count=$((run_count + 1))
   done
 done
@@ -267,8 +263,8 @@ scene_name=google_pick_coke_can_1_v4
 for coke_can_option in "${coke_can_options_arr[@]}"; do
   for env_name in "${env_arr[@]}"; do
     for ckpt_path in "${arr[@]}"; do
-      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-      # 启动服务并获取服务进程的 PID
+      gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to CUDA_VISIBLE_DEVICES GPU ID
+      # Launch service and capture its PID
       port=$((base_port + run_count))
       start_service ${gpu_id} ${ckpt_path} ${port}
       CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py --ckpt-path ${ckpt_path} \
@@ -280,13 +276,13 @@ for coke_can_option in "${coke_can_options_arr[@]}"; do
         --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
         --additional-env-build-kwargs ${coke_can_option} &
       
-      eval_pids+=($!)  # 将评估任务的 PID 添加到数组中
+      eval_pids+=($!)  # Track evaluation job PID
       run_count=$((run_count + 1))
     done
   done
 done
 
-# 等待所有后台任务完成
+# Wait for all background jobs to finish
 stop_all_services
-echo "✅ 所有测试完成"
+echo "✅ All evaluations completed"
 

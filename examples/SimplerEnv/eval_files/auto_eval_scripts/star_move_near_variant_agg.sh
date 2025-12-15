@@ -1,4 +1,4 @@
-# 定义环境
+# Define environment
 cd /mnt/petrelfs/yejinhui/Projects/llavavla
 export starvla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starvlaSAM/bin/python
 export sim_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/dinoact/bin/python
@@ -8,15 +8,15 @@ base_port=5500
 
 MODEL_PATH=$1
 
-# 可选：判断是否传入了参数
+# Optional: check whether MODEL_PATH argument is provided
 if [ -z "$MODEL_PATH" ]; then
-  echo "❌ 没传入 MODEL_PATH 作为第一个参数, 使用默认参数"
+  echo "❌ MODEL_PATH not provided as the first argument, using default value"
   export MODEL_PATH="/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1003_qwenfast/checkpoints/steps_10000_pytorch_model.pt"
 fi
 
 export ckpt_path=${MODEL_PATH}
 
-# 定义一个函数来启动服务
+# Define a function to start the service
 policyserver_pids=()
 eval_pids=()
 
@@ -39,46 +39,46 @@ start_service() {
     --use_bf16 \
     > "${svc_log}" 2>&1 &
   
-  local pid=$!          # 立即捕获正确 PID
+  local pid=$!          # Capture PID immediately
   policyserver_pids+=($pid)
   sleep 20
 }
 
-# 定义一个函数来停止所有服务
+# Define a function to stop all services
 stop_all_services() {
-  # 等待所有评估任务完成
-  echo "⏳ 等待评估任务完成..."
+  # Wait for all evaluation tasks to complete
+  echo "⏳ Waiting for evaluation tasks to complete..."
   for pid in "${eval_pids[@]}"; do
     if ps -p "$pid" > /dev/null 2>&1; then
       wait "$pid"
       status=$?
       if [ $status -ne 0 ]; then
-          echo "警告: 评估任务 $pid 异常退出 (状态: $status)"
+          echo "Warning: Evaluation task $pid exited abnormally (status: $status)"
       fi
     fi
   done
 
-  # 停止所有服务
-  echo "⏳ 停止服务进程..."
+  # Stop all services
+  echo "⏳ Stopping service processes..."
   for pid in "${policyserver_pids[@]}"; do
     if ps -p "$pid" > /dev/null 2>&1; then
       kill "$pid" 2>/dev/null
       wait "$pid" 2>/dev/null
     else
-      echo "⚠️ 服务进程 $pid 已不存在 (可能已提前退出)"
+      echo "⚠️ Service process $pid no longer exists (may have exited early)"
     fi
   done
 
 
-  # 清空 PID 数组
+  # Clear PID arrays
   eval_pids=()
   policyserver_pids=()
-  echo "✅ 所有服务和任务已停止"
+  echo "✅ All services and tasks stopped"
 }
 
-# 获取当前系统的 CUDA_VISIBLE_DEVICES 列表
-IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # 将逗号分隔的 GPU 列表转换为数组
-NUM_GPUS=${#CUDA_DEVICES[@]}  # 获取可用 GPU 的数量
+# Retrieve the CUDA_VISIBLE_DEVICES list from the current system
+IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # Convert comma-separated GPU list into array
+NUM_GPUS=${#CUDA_DEVICES[@]}  # Get number of available GPUs
 
 
 
@@ -88,7 +88,7 @@ declare -a arr=(
   ${MODEL_PATH}
 )
 
-# 轮转分配用的变量
+# Variables for round-robin allocation
 total_gpus=8
 run_count=0
 
@@ -165,7 +165,7 @@ env_name=MoveNearGoogleInScene-v0
 scene_name=google_pick_coke_can_1_v4
 
 for ckpt_path in "${arr[@]}"; do
-  # 稍微更暗
+  # Slightly darker
   gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
   # 启动服务并获取服务进程的 PID
   port=$((base_port + run_count))
@@ -182,7 +182,7 @@ for ckpt_path in "${arr[@]}"; do
   eval_pids+=($!)
   run_count=$((run_count + 1))
 
-  # 稍微更亮
+  # Slightly brighter
   gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
   # 启动服务并获取服务进程的 PID
   port=$((base_port + run_count))
@@ -208,8 +208,7 @@ declare -a table_scene_arr=("Baked_sc1_staging_objaverse_cabinet1_h870" \
 
 for scene_name in "${table_scene_arr[@]}"; do
   for ckpt_path in "${arr[@]}"; do
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -233,8 +232,7 @@ scene_name=google_pick_coke_can_1_v4
 
 for env_name in "${env_arr[@]}"; do
   for ckpt_path in "${arr[@]}"; do
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -250,8 +248,8 @@ for env_name in "${env_arr[@]}"; do
   done
 done
 
-# 等待所有后台任务完成
+# Wait for all background tasks to finish
 stop_all_services
 # wait
-echo "✅ 所有测试完成"
+echo "✅ All tests completed"
 

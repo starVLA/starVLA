@@ -50,3 +50,22 @@ accelerate launch \
   # --is_debug True
 
 
+
+
+##### Multi-Server Multi-GPU training script #####
+  # accelerate launch \
+  #   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
+  #   --main_process_ip $MASTER_ADDR \
+  #   --main_process_port $MASTER_PORT \
+  #   --machine_rank $SLURM_PROCID \
+  #   --num_machines $SLURM_NNODES \
+  #   --num_processes=${TOTAL_GPUS} \
+  #   starVLA/training/train_starvla.py \
+  #   --config_yaml ${config_yaml} \
+  #   --framework.name ${Framework_name} \
+  #   --framework.qwenvl.base_vlm ${base_vlm} \
+  #   --run_root_dir ${run_root_dir} \
+  #   --run_id ${run_id} \
+  #   --wandb_project your_project \
+  #   --wandb_entity your_name
+##### Multi-Server Multi-GPU training script #####

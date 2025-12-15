@@ -1,18 +1,18 @@
 #!/bin/bash
-# 这个脚本提前检查端口是否可以用，为并行化测试提供前提基础
-# 检查端口范围
+# Check port availability ahead of time to prepare for parallel testing
+# Target port range
 start_port=5400
 end_port=5500
 
-echo "检查端口范围 ${start_port}-${end_port} 是否可用..."
+echo "Checking whether ports ${start_port}-${end_port} are available..."
 
 for port in $(seq $start_port $end_port); do
-  # 检查端口是否被占用
+  # Determine if the port is already in use
   if lsof -iTCP:$port -sTCP:LISTEN > /dev/null 2>&1; then
-    echo "端口 $port 已被占用"
+    echo "Port $port is in use"
   else
-    echo "端口 $port 可用"
+    echo "Port $port is available"
   fi
 done
 
-echo "检查完成！"
+echo "Port check complete!"

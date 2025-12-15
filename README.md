@@ -1,7 +1,9 @@
 # StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing
 
 <!-- [![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)](https://github.com/starVLA/starVLA) -->
-[![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA)
+[![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](assets/starVLA_wechat.jpg)
+
+**[2025/12/15]** Completed a release regression check to ensure the public code runs smoothly. Routine updates—including recent support for the LeRobot dataset v3.0 and DeepSpeed ZeRO-3—will continue to appear in the [🚧 Daily Development Log](https://github.com/starVLA/starVLA/issues/64#issue-3727060165).
 
 **[2025/12/09]** Be the first open-source repository that can train with [train your vlm](starVLA/training/train_starvlm.py), [train your vla](starVLA/training/train_starvla.py), and [train your vla with vlm](starVLA/training/train_starvla_cotrain.py). Check out how to co-train your VLA with multimodal data in [examples/CoTrainVLM](examples/CoTrainVLM/README.md).
 
@@ -54,21 +56,25 @@ For dynamic updates, see our [🍀 Overleaf](https://www.overleaf.com/read/qqtwr
 
 
 ### 📈 Model Zoo
-We release a series of pretrained models and checkpoints to facilitate reproduction and downstream use.
+We release a series of modified models and finetuning checkpoints to facilitate reproduction and downstream use.
 
-#### ✅ Available Checkpoints
+#### ✅ Available Modified Models
 
+| Model | Description  | Link |
+|-------|-------------|------|
+| **Qwen2.5-VL-3B-Action** | Extend Qwen2.5-VL's vocabulary with Fast Tokens  | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
+| **Qwen3-VL-4B-Action** | Extend Qwen3-VL's vocabulary with Fast Tokens | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
+
+#### ✅ Available Finetuning Checkpoints
 | Model | Description | WidowX | Link |
 |-------|-------------|------|------|
-| **Qwen2.5-VL-3B-Action** | Add action tokens to Qwen2.5-VL  | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
-| **Qwen3-VL-4B-Action** | Add action tokens to Qwen3-VL | - | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
-| **QWen2.5-FAST-Bridge-RT-1** | QwenVL + fast-tokenizer | 58.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FAST-Bridge-RT-1) |
-| **QWen2.5-OFT-Bridge-RT-1** | QwenVL + OFT action regression | 41.8 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-OFT-Bridge-RT-1) |
-| **QWen2.5-PI-Bridge-RT-1** | QwenVL + flow-matching expert  | 62.5 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FM-Bridge-RT-1) |
-| **QWen2.5-GR00T-Bridge-RT-1** | QwenVL + GR00T N1.5 action header | 63.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-PI-Bridge-RT-1) |
-| **QWen-GR00T-Bridge** | QwenVL + GR00T N1.5 action header | 71.4 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge) |
-| **QWen3VL-OFT-Bridge-RT-1** | Qwen3VL + OFT action regression | 42.7 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-OFT-Bridge-RT-1) |
-| **QWen3VL-GR00T-Bridge-RT-1** | Qwen3VL + GR00T N1.5 action header | 65.3 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) |
+| **QWen2.5-FAST-Bridge-RT-1** | Training on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) and [Fractal](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot) | 58.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FAST-Bridge-RT-1) |
+| **QWen2.5-OFT-Bridge-RT-1** | Training on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) and [Fractal](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot) | 41.8 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-OFT-Bridge-RT-1) |
+| **QWen2.5-PI-Bridge-RT-1** | Training on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) and [Fractal](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot)  | 62.5 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-FM-Bridge-RT-1) |
+| **QWen2.5-GR00T-Bridge-RT-1** | Training on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) and [Fractal](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot) | 63.6 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-PI-Bridge-RT-1) |
+| **QWen-GR00T-Bridge** | Training only on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) | 71.4 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen-GR00T-Bridge) |
+| **QWen3VL-OFT-Bridge-RT-1** | Training on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) and [Fractal](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot) | 42.7 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-OFT-Bridge-RT-1) |
+| **QWen3VL-GR00T-Bridge-RT-1** | Training on [Bridge](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot) and [Fractal](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot) | 65.3 | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) |
 
 ---
 </details>
@@ -200,124 +206,48 @@ python starVLA/model/framework/QwenGR00T.py
 ```
 
 
-You should download `./playground/Pretrained_models/Qwen3-VL-4B-Instruct`. It should build successfully and `print(model)`. You can also call `model.forward(fake_data)` and obtain unnormalized actions via `model.predict_action(fake_data)`.
+You should download [Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) and put it as `./playground/Pretrained_models/Qwen3-VL-4B-Instruct`. It should build successfully and `print(model)`. You can also call `model.forward(fake_data)` and obtain unnormalized actions via `model.predict_action(fake_data)`.
 
 </details>
 
 <details close>
-<summary><b>🧪 Eval Existing Model
-</b></summary>
+<summary><b>🧪 Evaluate Existing Models</b></summary>
 
-We also provide a parallel evaluation script:
+We publish benchmark-specific evaluation guides inside each folder under [examples](examples).
 
-  ```bash
-  check_pt=StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
-  bash /mnt/petrelfs/yejinhui/Projects/starVLA/examples/LIBERO/eval_files/eval_libero.sh
-  ```
+**Recommended quick start: LIBERO simulator**
 
-Before running, down [Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) and follow [SimpplerEnv](https://simpler-env.github.io/) prapare a python.  Edit these variables directly at the top of `eval_libero.sh`.
-
----
-
-⚠️ **Common Issues**
-When testing SimplerEnv on NVIDIA A100, you may encounter the following error:
-`libvulkan.so.1: cannot open shared object file: No such file or directory`
-You can refer to this link to fix: [Installation Guide – Vulkan Section](https://maniskill.readthedocs.io/en/latest/user_guide/getting_started/installation.html#vulkan)
-
-When run policy server but `NotImplementedError:Framework QwenGR00T is not implemented`, you may need to `python QwenGR00T.py` to check your env.
-
-
-
-</details>
-
-
-<details close>
-<summary><b>🚀 Train Your Own Model
-</b></summary>
-
-
-Steps:
-1) Download a LeRobot-format OXE dataset 
-- [bridge_orig_lerobot](https://huggingface.co/datasets/IPEC-COMMUNITY/bridge_orig_lerobot)
-- [fractal20220817_data_lerobot](https://huggingface.co/datasets/IPEC-COMMUNITY/fractal20220817_data_lerobot)
-
-2) Including `modality.json` in each `*lerobot/meta/modality.json`
-- [bridge modality](examples/SimplerEnv/train_files/modality.json)
-- [fractal modality](examples/SimplerEnv/train_files/fractal_modality.json). Rename as `modality.json` and put it as `fractal20220817_data_lerobot/meta/modality.json`
-
-3) Add your dataset path to `config.yaml`:
-    ```yaml
-    datasets:
-      vla_data:
-        dataset_py: lerobot_datasets
-        data_root_dir: playground/Datasets/OXE_LEROBOT_DATASET  # path to your dataset
-        data_mix: bridge_rt_1
-    ```
-3) Run with Accelerate:
-    ```bash
-    base_vlm=Qwen/Qwen2.5-VL-3B-Instruct
-    Framework_name=QwenGR00T
-    run_root_dir=./results
-    run_id=${Framework_name}
-
-    accelerate launch \
-      --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
-      --num_processes 8 \
-      starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
-      --framework.framework_py ${Framework_name} \
-      --framework.qwenvl.base_vlm ${base_vlm} \
-      --run_root_dir ${run_root_dir} \
-      --run_id ${run_id} \
-      --wandb_project your_project \
-      --wandb_entity your_name
-    ```
-
-Accelerate natively supports multi‑GPU; the exact launch command depends on your cluster scheduler and setup (e.g., Slurm).
+1. Download [Qwen2.5-VL-GR00T-LIBERO-4in1](https://huggingface.co/StarVLA/Qwen2.5-VL-GR00T-LIBERO-4in1).
+2. Follow the [LIBERO Eval](https://github.com/starVLA/starVLA/tree/starVLA/examples/LIBERO#-1-environment-setup) instructions to prepare the Python environment.
+3. Set the environment variables at the top of [`eval_libero.sh`](examples/LIBERO/eval_files/eval_libero.sh) and [`run_policy_server.sh`](examples/LIBERO/eval_files/run_policy_server.sh).
+4. Run:
 
 ```bash
-
-srun --jobid $SLURM_JOBID bash -c 'accelerate launch \
-  --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
-  --main_process_ip $MASTER_ADDR \
-  --main_process_port $MASTER_PORT \
-  --machine_rank $SLURM_PROCID \
-  --num_machines $SLURM_NNODES \
-  --num_processes=${TOTAL_GPUS} \
-  starVLA/training/train_starvla.py \
-  --config_yaml ${config_yaml} \
-
+bash examples/LIBERO/eval_files/run_policy_server.sh &
+bash examples/LIBERO/eval_files/eval_libero.sh
 ```
 
-Note: `run_root_dir` stores the unified config snapshot and data‑processing metadata for reproducibility and quick restarts.
-
+⚠️ **Common issue**  
+If `NotImplementedError: Framework QwenGR00T is not implemented` appears, run `python starVLA/model/framework/QwenGR00T.py` to verify your environment.
 
 </details>
 
-<details id="train-smaller-vlm" close>
-<summary><b>🚀 Train with a smaller VLM</b></summary>
+<details open>
+<summary><b>🚀 Train Your Own Model</b></summary>
+
+We ship benchmark-specific training scripts under [examples](examples). We recommend starting with the  [LIBERO suite](examples/LIBERO/train_files):
+
+1. Edit `run_libero_train.sh` to point to your checkpoint, dataset root, and desired output directory.
+2. Launch training:
 
 ```bash
-    accelerate launch \
-      --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
-      --main_process_ip $MASTER_ADDR \
-      --main_process_port $MASTER_PORT \
-      --machine_rank $SLURM_PROCID \
-      --num_machines $SLURM_NNODES \
-      --num_processes=${TOTAL_GPUS} \
-      starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
-      --framework.framework_py QwenGR00T \
-      --framework.qwenvl.base_vlm microsoft/Florence-2-large \
-      --run_root_dir ${run_root_dir} \
-      --run_id ${run_id} \
-      --wandb_project your_project \
-      --wandb_entity your_name
+bash examples/LIBERO/train_files/run_libero_train.sh
 ```
 
-Note: To ensure better compatibility with already released checkpoints, we are continuing to use `--framework.qwenvl`. This parameter will be unified in the next release.
+⚠️ **Note:** Ensure all absolute paths inside `run_libero_train.sh` match your local environment before launching.
 
 </details>
+
 
 ## 📖 FAQ
 
@@ -402,6 +332,30 @@ Empty `reload_modules` means full load all model. However, starVLA does not save
 </details>
 
 
+<details id="train-smaller-vlm" close>
+<summary><b>🚀 Train with a smaller VLM</b></summary>
+
+```bash
+    accelerate launch \
+      --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
+      --main_process_ip $MASTER_ADDR \
+      --main_process_port $MASTER_PORT \
+      --machine_rank $SLURM_PROCID \
+      --num_machines $SLURM_NNODES \
+      --num_processes=${TOTAL_GPUS} \
+      starVLA/training/train_starvla.py \
+      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+      --framework.framework_py QwenGR00T \
+      --framework.qwenvl.base_vlm microsoft/Florence-2-large \
+      --run_root_dir ${run_root_dir} \
+      --run_id ${run_id} \
+      --wandb_project your_project \
+      --wandb_entity your_name
+```
+
+Note: To ensure better compatibility with already released checkpoints, we are continuing to use `--framework.qwenvl`. This parameter will be unified in the next release.
+
+</details>
 
 
 
