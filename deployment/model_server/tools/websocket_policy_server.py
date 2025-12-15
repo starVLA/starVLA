@@ -5,6 +5,7 @@
 import asyncio
 import logging
 import traceback
+import time
 
 import websockets.asyncio.server
 import websockets.frames
@@ -22,13 +23,17 @@ class WebsocketPolicyServer:
         self,
         policy,
         host: str = "0.0.0.0",
-        port: int = 8000,
+        port: int = 10093,
+        idle_timeout: int = -1,  # 新增参数，单位秒，-1表示永不关闭
         metadata: dict | None = None,
+        
     ) -> None:
         self._policy = policy  #
         self._host = host
         self._port = port
         self._metadata = metadata or {}
+        self._idle_timeout = idle_timeout
+        self._last_active = time.time()
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
     def serve_forever(self) -> None:
@@ -42,7 +47,20 @@ class WebsocketPolicyServer:
             compression=None,
             max_size=None,
         ) as server:
-            await server.serve_forever()
+            if self._idle_timeout > 0:
+                await self._idle_watchdog(server)
+            else:
+                await server.serve_forever()
+
+    async def _idle_watchdog(self, server):
+        """监控空闲时间，超时则关闭服务器"""
+        while True:
+            await asyncio.sleep(5)
+            if time.time() - self._last_active > self._idle_timeout:
+                logging.info(f"Idle timeout ({self._idle_timeout}s) reached, shutting down server.")
+                server.close()
+                await server.wait_closed()
+                break
 
     async def _handler(self, websocket: websockets.asyncio.server.ServerConnection):
         logging.info(f"Connection from {websocket.remote_address} opened")
@@ -53,6 +71,7 @@ class WebsocketPolicyServer:
         while True:
             try:
                 msg = msgpack_numpy.unpackb(await websocket.recv())
+                self._last_active = time.time()  # 每次收到消息刷新活跃时间
                 ret = self._route_message(msg)  # route message
                 await websocket.send(packer.pack(ret))
             except websockets.ConnectionClosed:

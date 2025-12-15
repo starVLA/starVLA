@@ -1,13 +1,16 @@
 #!/bin/bash
-
-your_ckpt=./results/Checkpoints/1207_libero4in1_qwen3fast/checkpoints/steps_10000_pytorch_model.pt
-
-base_port=10093
+export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from main repo
 export star_vla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
 
-# export DEBUG=1
+your_ckpt=results/Checkpoints/1208_libero_all_QwenPI_qwen3/checkpoints/steps_50000_pytorch_model.pt
+gpu_id=7
+port=5694
+################# star Policy Server ######################
 
-python deployment/model_server/server_policy.py \
+# export DEBUG=true
+CUDA_VISIBLE_DEVICES=$gpu_id ${star_vla_python} deployment/model_server/server_policy.py \
     --ckpt_path ${your_ckpt} \
-    --port ${base_port} \
+    --port ${port} \
     --use_bf16
+
+# #################################
