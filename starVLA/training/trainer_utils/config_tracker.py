@@ -57,6 +57,14 @@ class AccessTrackedConfig:
     def __setitem__(self, key: str, value: Any):
         self._cfg[key] = value
     
+    def __contains__(self, key: str) -> bool:
+        """Support 'in' operator"""
+        return key in self._cfg
+    
+    def __len__(self) -> int:
+        """Return number of keys"""
+        return len(self._cfg)
+    
     def __iter__(self):
         """Support iteration (required for dict unpacking {**cfg})"""
         return iter(self._cfg)
@@ -87,6 +95,52 @@ class AccessTrackedConfig:
             return self._children[key]
         
         return value
+    
+    def update(self, other: Any = None, **kwargs):
+        """Update config with values from another dict/config"""
+        if other is not None:
+            # Handle different input types
+            if isinstance(other, AccessTrackedConfig):
+                other = OmegaConf.to_container(other._cfg, resolve=True)
+            elif OmegaConf.is_config(other):
+                other = OmegaConf.to_container(other, resolve=True)
+            elif not isinstance(other, dict):
+                # Try to convert to dict if possible
+                other = dict(other)
+            
+            for key, value in other.items():
+                self._local_accessed.add(key)
+                self._cfg[key] = value
+                # Invalidate child cache if exists
+                if key in self._children:
+                    del self._children[key]
+        
+        for key, value in kwargs.items():
+            self._local_accessed.add(key)
+            self._cfg[key] = value
+            if key in self._children:
+                del self._children[key]
+    
+    def pop(self, key: str, *args):
+        """Remove and return a value"""
+        self._local_accessed.add(key)
+        if key in self._children:
+            del self._children[key]
+        if args:
+            return self._cfg.pop(key, args[0])
+        return self._cfg.pop(key)
+    
+    def setdefault(self, key: str, default: Any = None) -> Any:
+        """Set default value if key doesn't exist"""
+        self._local_accessed.add(key)
+        if key not in self._cfg:
+            self._cfg[key] = default
+        return self.get(key)
+    
+    def copy(self) -> 'AccessTrackedConfig':
+        """Return a shallow copy"""
+        new_cfg = OmegaConf.create(OmegaConf.to_container(self._cfg, resolve=True))
+        return AccessTrackedConfig(new_cfg)
     
     def unwrap(self) -> OmegaConf:
         """Get the underlying OmegaConf object"""
