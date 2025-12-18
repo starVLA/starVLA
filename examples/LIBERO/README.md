@@ -102,10 +102,10 @@ Download the datasets to the playground/Datasets/LEROBOT_LIBERO_DATA directory:
 
 And move `modality.json` to each `$LEROBOT_LIBERO_DATA/subset/meta/modality.json`.
 
-You could quickly prepare these by running：
+You could quickly prepare these by running:
 ```bash
 # Set DEST to the directory where you want to store the data
-export DEST=/project/vonneumann1/wcy/dataset/VLM-VLA
+export DEST=/path/to/your/data/directory
 bash examples/LIBERO/data_preparation.sh
 ```
 

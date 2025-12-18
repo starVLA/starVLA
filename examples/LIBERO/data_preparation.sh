@@ -29,7 +29,7 @@ do
 done
 
 hf download "StarVLA/LLaVA-OneVision-COCO" --repo-type dataset --local-dir "$DEST/LLaVA-OneVision-COCO"
-unzip $DEST/LLaVA-OneVision-COCO/sharegpt4v_coco.zip -d $DEST/LLaVA-OneVision-COCO/
+unzip -- "$DEST/LLaVA-OneVision-COCO/sharegpt4v_coco.zip" -d "$DEST/LLaVA-OneVision-COCO/"
 
 mkdir -p "$CUR/playground/Datasets"
 ln -s "$DEST/libero" "$CUR/playground/Datasets/LEROBOT_LIBERO_DATA"
