@@ -87,6 +87,7 @@ def get_frames_by_timestamps(
         np.ndarray: Frames at the specified timestamps.
     """
     if video_backend == "decord":
+        # For some GPUs, AV format data cannot be read
         if not DECORD_AVAILABLE:
             raise ImportError("decord is not available.")
         vr = decord.VideoReader(video_path, **video_backend_kwargs)
@@ -152,13 +153,13 @@ def get_frames_by_timestamps(
                         closest_frame = frame
                     
                     if current_diff < closest_ts_diff:
-                        # Release previous frame reference
+                        # Release the previous frame
                         if closest_frame is not None:
                             del closest_frame
                         closest_ts_diff = current_diff
                         closest_frame = frame
                     else:
-                        # Difference started growing, stop search
+                        # The time difference starts to increase, stop searching
                         break
                 
                 if closest_frame is not None:

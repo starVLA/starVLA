@@ -23,20 +23,19 @@ In this file, we define 3 types of datasets:
 
 See `scripts/load_dataset.py` for examples on how to use these datasets.
 """
-
+import os
 import hashlib
-import json
+import json, torch
 from collections import defaultdict
 from pathlib import Path
 from typing import Sequence
-
+import os, random
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from PIL import Image
-import random
 
 from starVLA.dataloader.gr00t_lerobot.video import get_all_frames, get_frames_by_timestamps
 
@@ -53,6 +52,7 @@ from functools import partial
 from typing import Tuple, List
 import pickle
 
+# LeRobot v2.0 dataset file names 
 LE_ROBOT_MODALITY_FILENAME = "meta/modality.json"
 LE_ROBOT_EPISODE_FILENAME = "meta/episodes.jsonl"
 LE_ROBOT_TASKS_FILENAME = "meta/tasks.jsonl"
@@ -61,6 +61,11 @@ LE_ROBOT_STATS_FILENAME = "meta/stats_gr00t.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 LE_ROBOT_STEPS_FILENAME = "meta/steps.pkl"
 EPSILON = 5e-4
+
+#  LeRobot v3.0 dataset file names 
+LE_ROBOT3_TASKS_FILENAME = "meta/tasks.parquet"
+LE_ROBOT3_EPISODE_FILENAME = "meta/episodes/*/*.parquet"
+
 
 def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
     """Calculate the dataset statistics of all columns for a list of parquet files."""
@@ -76,6 +81,7 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
         parquet_data = pd.read_parquet(parquet_path)
         parquet_data = parquet_data
         all_low_dim_data_list.append(parquet_data)
+    
     all_low_dim_data = pd.concat(all_low_dim_data_list, axis=0)
     # Compute dataset statistics
     dataset_statistics = {}
@@ -119,6 +125,7 @@ class LeRobotSingleDataset(Dataset):
         video_backend_kwargs: dict | None = None,
         transforms: ComposedModalityTransform | None = None,
         delete_pause_frame: bool = False,
+        **kwargs,
     ):
         """
         Initialize the dataset.
@@ -135,6 +142,8 @@ class LeRobotSingleDataset(Dataset):
         # first check if the path directory exists
         if not Path(dataset_path).exists():
             raise FileNotFoundError(f"Dataset path {dataset_path} does not exist")
+        # indict letobot version
+        self._lerobot_version =  kwargs["data_cfg"].get("lerobot_version", "v2.0") #self._indict_lerobot_version(**kwargs)
 
         self.delete_pause_frame = delete_pause_frame
 
@@ -345,7 +354,14 @@ class LeRobotSingleDataset(Dataset):
             print(f"Calculating dataset statistics for {self.dataset_name}")
             # Get all parquet files in the dataset paths
             parquet_files = list((self.dataset_path).glob(LE_ROBOT_DATA_FILENAME))
-            le_statistics = calculate_dataset_statistics(parquet_files)
+            parquet_files_filtered = []
+            #  parquet_files[0].name = "episode_033675.parquet" is broken file
+            for pf in parquet_files:
+                if "episode_033675.parquet" in pf.name:
+                    continue
+                parquet_files_filtered.append(pf)
+            
+            le_statistics = calculate_dataset_statistics(parquet_files_filtered)
             with open(stats_path, "w") as f:
                 json.dump(le_statistics, f, indent=4)
         dataset_statistics = {}
@@ -376,15 +392,43 @@ class LeRobotSingleDataset(Dataset):
     def _get_trajectories(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
-        episode_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
-        with open(episode_path, "r") as f:
-            episode_metadata = [json.loads(line) for line in f]
-        trajectory_ids = []
-        trajectory_lengths = []
-        for episode in episode_metadata:
-            trajectory_ids.append(episode["episode_index"])
-            trajectory_lengths.append(episode["length"])
-        return np.array(trajectory_ids), np.array(trajectory_lengths)
+        # v2.0
+        if self._lerobot_version == "v2.0":
+            file_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
+            with open(file_path, "r") as f:
+                episode_metadata = [json.loads(line) for line in f]
+            trajectory_ids = []
+            trajectory_lengths = []
+            for episode in episode_metadata:
+                trajectory_ids.append(episode["episode_index"])
+                trajectory_lengths.append(episode["length"])
+            return np.array(trajectory_ids), np.array(trajectory_lengths)
+        # v3.0
+        elif self._lerobot_version == "v3.0":
+            file_paths = list((self.dataset_path).glob(LE_ROBOT3_EPISODE_FILENAME))
+            trajectory_ids = []
+            trajectory_lengths = []
+            # data_chunck_index = []
+            # data_file_index = []
+            # vido_from_index = []
+            self.trajectory_ids_to_metadata = {}
+            for file_path in file_paths:
+                episodes_data = pd.read_parquet(file_path)
+                for index, episode in episodes_data.iterrows():
+                    trajectory_ids.append(episode["episode_index"])
+                    trajectory_lengths.append(episode["length"])
+
+                    # TODO auto map key? just map to file_path and file_from_index
+                    episode_meta = {
+                        "data/chunk_index": episode["data/chunk_index"],
+                        "data/file_index": episode["data/file_index"],
+                        "data/file_from_index": index,
+                        "videos/observation.images.wrist/from_timestamp": episode["videos/observation.images.wrist/from_timestamp"],
+                    }
+                    self.trajectory_ids_to_metadata[trajectory_ids[-1]] = episode_meta
+
+            # 这里应该可以直接读取到 save index 信息
+            return np.array(trajectory_ids), np.array(trajectory_lengths)
 
     def _get_all_steps(self) -> list[tuple[int, int]]:
         """Get the trajectory IDs and base indices for all steps in the dataset.
@@ -396,11 +440,11 @@ class LeRobotSingleDataset(Dataset):
         config_key = self._get_steps_config_key()
         
         # Create a unique filename based on config_key
-        steps_filename = f"steps_{config_key}.pkl"
+        # steps_filename = f"steps_{config_key}.pkl"
         # @BUG
         # fast get static steps @fangjing --> don't use hash to dynamic sample
         steps_filename =  "steps_data_index.pkl"
-        steps_filename = "steps_332420bad1ab.pkl"
+
 
         steps_path = self.dataset_path / "meta" / steps_filename
         
@@ -410,14 +454,6 @@ class LeRobotSingleDataset(Dataset):
                 with open(steps_path, "rb") as f:
                     cached_data = pickle.load(f)
                 return cached_data["steps"]
-            else:
-                steps_filename = "steps_2d5a34b904d2.pkl"
-                steps_path = self.dataset_path / "meta" / steps_filename
-        
-                with open(steps_path, "rb") as f:
-                    cached_data = pickle.load(f)
-                return cached_data["steps"]
-
 
         except (FileNotFoundError, pickle.PickleError, KeyError) as e:
             print(f"Failed to load cached steps: {e}")
@@ -467,48 +503,39 @@ class LeRobotSingleDataset(Dataset):
         
         # Check if language modality is configured
         has_language_modality = 'language' in self.modality_keys and len(self.modality_keys['language']) > 0
-        
+        # TODO why trajectory_length here, why not use data length?
         for trajectory_id, trajectory_length in tqdm(zip(self.trajectory_ids, self.trajectory_lengths), total=len(self.trajectory_ids), desc="Getting All Step"):
-            data = self.get_trajectory_data(trajectory_id)
-            trajectory_skipped = False
+            try:
+                if self._lerobot_version == "v2.0":
+                    data = self.get_trajectory_data(trajectory_id)
+                elif self._lerobot_version == "v3.0":
+                    data = self.get_trajectory_data_lerobot_v3(trajectory_id)
+                
+                trajectory_skipped = False
             
-            # Check if trajectory has valid language instruction (if language modality is configured)
-            if has_language_modality:
-                self.curr_traj_data = data  # Set current trajectory data for get_language to work
-                try:
+                # Check if trajectory has valid language instruction (if language modality is configured)
+                if has_language_modality:
+                    self.curr_traj_data = data  # Set current trajectory data for get_language to work
+
                     language_instruction = self.get_language(trajectory_id, self.modality_keys['language'][0], 0)
                     if not language_instruction or language_instruction[0] == "":
                         print(f"Skipping trajectory {trajectory_id} due to empty language instruction")
                         skipped_trajectories += 1
                         trajectory_skipped = True
                         continue
-                except Exception as e:
-                    print(f"Skipping trajectory {trajectory_id} due to language retrieval error: {e}")
-                    skipped_trajectories += 1
-                    trajectory_skipped = True
-                    continue
-            
+
+            except Exception as e:
+                print(f"Skipping trajectory {trajectory_id} due to read error: {e}")
+                skipped_trajectories += 1
+                trajectory_skipped = True
+                continue
+        
             if not trajectory_skipped:
                 processed_trajectories += 1
-            
-            if self.delete_pause_frame:
-                # Get position and gripper fields based on available columns
-                delta_position_values, gripper_values = self._get_position_and_gripper_values(data)
-                previous_gripper = gripper_values[0]
-                for base_index in range(trajectory_length):
-                    if base_index >= len(delta_position_values) or base_index >= len(gripper_values):
-                        break
-                        
-                    # Check for translation change using the detected position fields
-                    has_translation_change = np.any(np.abs(delta_position_values[base_index]) > EPSILON)
-                    has_gripper_change = gripper_values[base_index] != (previous_gripper if base_index == 0 else gripper_values[base_index-1])
-                    
-                    if has_translation_change or has_gripper_change:
-                        all_steps.append((trajectory_id, base_index))
-            else:
-                for base_index in range(trajectory_length):
-                    all_steps.append((trajectory_id, base_index))
-                    
+        
+            for base_index in range(trajectory_length):
+                all_steps.append((trajectory_id, base_index))
+                
         # Print summary statistics
         print(f"Single-process summary: Processed {processed_trajectories} trajectories, skipped {skipped_trajectories} empty trajectories")
         print(f"Total steps: {len(all_steps)} from {len(self.trajectory_ids)} trajectories")
@@ -662,12 +689,20 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_tasks(self) -> pd.DataFrame:
         """Get the tasks for the dataset."""
-        tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
-        with open(tasks_path, "r") as f:
-            tasks = [json.loads(line) for line in f]
-        df = pd.DataFrame(tasks)
-        return df.set_index("task_index")
-
+        if self._lerobot_version == "v2.0":
+            tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
+            with open(tasks_path, "r") as f:
+                tasks = [json.loads(line) for line in f]
+            df = pd.DataFrame(tasks)
+            return df.set_index("task_index")
+        
+        elif self._lerobot_version == "v3.0":
+            tasks_path = self.dataset_path / LE_ROBOT3_TASKS_FILENAME
+            df = pd.read_parquet(tasks_path)
+            df = df.reset_index()  # 把索引变成一列，列名通常为 'index'
+            df = df.rename(columns={'index': 'task'})  # 把 'index' 列重命名为 'task'
+            df = df[['task_index', 'task']]  # 调整列顺序
+            return df
     def _check_integrity(self):
         """Use the config to check if the keys are valid and detect silent data corruption."""
         ERROR_MSG_HEADER = f"Error occurred in initializing dataset {self.dataset_name}:\n"
@@ -768,7 +803,7 @@ class LeRobotSingleDataset(Dataset):
             }
         """
         data = {}
-        # Get the data for all modalities
+        # Get the data for all modalities # just for action base data
         self.curr_traj_data = self.get_trajectory_data(trajectory_id)
         # TODO @JinhuiYE The logic below is poorly implemented. Data reading should be directly based on curr_traj_data.
         for modality in self.modality_keys:
@@ -779,15 +814,46 @@ class LeRobotSingleDataset(Dataset):
 
     def get_trajectory_data(self, trajectory_id: int) -> pd.DataFrame:
         """Get the data for a trajectory."""
+        if self._lerobot_version == "v2.0":
+        
+            if self.curr_traj_id == trajectory_id and self.curr_traj_data is not None:
+                return self.curr_traj_data
+            else:
+                chunk_index = self.get_episode_chunk(trajectory_id)
+                parquet_path = self.dataset_path / self.data_path_pattern.format(
+                    episode_chunk=chunk_index, episode_index=trajectory_id
+                )
+                assert parquet_path.exists(), f"Parquet file not found at {parquet_path}"
+                return pd.read_parquet(parquet_path)
+        elif self._lerobot_version == "v3.0":
+            return self.get_trajectory_data_lerobot_v3(trajectory_id)
+    
+    def get_trajectory_data_lerobot_v3(self, trajectory_id: int) -> pd.DataFrame:
+        """Get the data for a trajectory from lerobot v3."""
         if self.curr_traj_id == trajectory_id and self.curr_traj_data is not None:
             return self.curr_traj_data
-        else:
+        else: #TODO check detail later
             chunk_index = self.get_episode_chunk(trajectory_id)
+
+            file_index = self.get_episode_file_index(trajectory_id)
+            # file_from_index = self.get_episode_file_from_index(trajectory_id)
+            
+            
             parquet_path = self.dataset_path / self.data_path_pattern.format(
-                episode_chunk=chunk_index, episode_index=trajectory_id
+                chunk_index=chunk_index, file_index=file_index
             )
             assert parquet_path.exists(), f"Parquet file not found at {parquet_path}"
-            return pd.read_parquet(parquet_path)
+            file_data = pd.read_parquet(parquet_path)
+            
+            # filter by trajectory_id
+            episode_data = file_data.loc[file_data["episode_index"] == trajectory_id].copy()
+            
+            # fix timestamp from epis index to file index
+            from_timestamp = self.trajectory_ids_to_metadata[trajectory_id]["videos/observation.images.wrist/from_timestamp"]
+            episode_data["timestamp"] = episode_data["timestamp"] + from_timestamp  
+            
+            return episode_data
+
 
     def get_trajectory_index(self, trajectory_id: int) -> int:
         """Get the index of the trajectory in the dataset by the trajectory ID.
@@ -809,6 +875,16 @@ class LeRobotSingleDataset(Dataset):
     def get_episode_chunk(self, ep_index: int) -> int:
         """Get the chunk index for an episode index."""
         return ep_index // self.chunk_size
+    def get_episode_file_index(self, ep_index: int) -> int:
+        """Get the file index for an episode index."""
+        episode_meta = self.trajectory_ids_to_metadata[ep_index]
+        return episode_meta["data/file_index"]
+    
+    def get_episode_file_from_index(self, ep_index: int) -> int:
+        """Get the file from index for an episode index."""
+        episode_meta = self.trajectory_ids_to_metadata[ep_index]
+        return episode_meta["data/file_from_index"]
+
 
     def retrieve_data_and_pad(
         self,
@@ -862,9 +938,17 @@ class LeRobotSingleDataset(Dataset):
         original_key = self.lerobot_modality_meta.video[key].original_key
         if original_key is None:
             original_key = key
-        video_filename = self.video_path_pattern.format(
-            episode_chunk=chunk_index, episode_index=trajectory_id, video_key=original_key
-        )
+        if self._lerobot_version == "v2.0":
+            video_filename = self.video_path_pattern.format(
+                episode_chunk=chunk_index, episode_index=trajectory_id, video_key=original_key
+            )
+        elif self._lerobot_version == "v3.0":
+            episode_meta = self.trajectory_ids_to_metadata[trajectory_id]
+            video_filename = self.video_path_pattern.format(
+                video_key=original_key,
+                chunk_index=episode_meta["data/chunk_index"],
+                file_index=episode_meta["data/file_index"],
+            )
         return self.dataset_path / video_filename
 
     def get_video(
@@ -907,7 +991,7 @@ class LeRobotSingleDataset(Dataset):
         return get_frames_by_timestamps(
             video_path.as_posix(),
             video_timestamp,
-            video_backend=self.video_backend,
+            video_backend=self.video_backend, # TODO
             video_backend_kwargs=self.video_backend_kwargs,
         )
 
@@ -965,8 +1049,8 @@ class LeRobotSingleDataset(Dataset):
             array=data_array,
             step_indices=step_indices,
             max_length=max_length,
-            # padding_strategy="first_last" if state_or_action_cfg.absolute else "zero",
-            padding_strategy="zero",           # HACK for realdata
+            padding_strategy="first_last" if state_or_action_cfg.absolute else "zero",
+            # padding_strategy="zero",           # HACK for realdata
         )
 
     def get_language(
@@ -1011,8 +1095,11 @@ class LeRobotSingleDataset(Dataset):
         original_key = subkey_meta.original_key
         if original_key is None:
             original_key = key
-        for i in range(len(step_indices)):
-            task_indices.append(self.curr_traj_data[original_key][step_indices[i]].item())
+        for i in range(len(step_indices)): # 
+            # task_indices.append(self.curr_traj_data[original_key][step_indices[i]].item())
+            value = self.curr_traj_data[original_key].iloc[step_indices[i]] # TODO check v2.0 
+            task_indices.append(value if isinstance(value, (int, float)) else value.item())
+
         return self.tasks.loc[task_indices]["task"].tolist()
 
     def get_data_by_modality(
@@ -1043,7 +1130,7 @@ class LeRobotSingleDataset(Dataset):
         else:
             raise ValueError(f"Invalid modality: {modality}")
 
-    def save_dataset_statistics(self, save_path: Path | str, format: str = "json") -> None:
+    def _save_dataset_statistics_(self, save_path: Path | str, format: str = "json") -> None:
         """
         Save dataset statistics to specified path in the required format.
         Only includes statistics for keys that are actually used in the dataset.
@@ -1336,20 +1423,20 @@ def generate_action_mask_for_used_keys(action_modalities: dict, used_action_keys
 
 def get_used_modality_keys(modality_keys: dict) -> tuple[set, set]:
     """Extract used action and state keys from modality configuration."""
-    used_action_keys = set()
-    used_state_keys = set()
+    used_action_keys = []
+    used_state_keys = []
     
     # Extract action keys (remove "action." prefix)
     for action_key in modality_keys.get("action", []):
         if action_key.startswith("action."):
             clean_key = action_key.replace("action.", "")
-            used_action_keys.add(clean_key)
+            used_action_keys.append(clean_key)
     
     # Extract state keys (remove "state." prefix)  
     for state_key in modality_keys.get("state", []):
         if state_key.startswith("state."):
             clean_key = state_key.replace("state.", "")
-            used_state_keys.add(clean_key)
+            used_state_keys.append(clean_key)
     
     return used_action_keys, used_state_keys
 
@@ -1370,6 +1457,7 @@ class LeRobotMixtureDataset(Dataset):
         metadata_config: dict = {
             "percentile_mixing_method": "min_max",
         },
+        **kwargs,
     ):
         """
         Initialize the mixture dataset.
@@ -1551,19 +1639,20 @@ class LeRobotMixtureDataset(Dataset):
         for attempt in range(max_retries):
             try:
                 dataset, trajectory_name, step = self.sample_step(index)
-                data = dataset.transforms(dataset.get_step_data(trajectory_name, step))
+                data_raw = dataset.get_step_data(trajectory_name, step)
+                data = dataset.transforms(data_raw)
                 
                 # Process all video keys dynamically
                 images = []
                 for video_key in dataset.modality_keys["video"]:
-
-                    for image in data[video_key]:
-                        # image = data[video_key][0]
-                        # Apply image cropping if enabled and the video key is base_view
-                        # Note: crop_obs_camera functionality has been removed
-                        image = Image.fromarray(image).resize((224, 224))
-                        images.append(image)
+                    image = data[video_key][0]
                     
+                    # Apply image cropping if enabled and the video key is base_view
+                    # Note: crop_obs_camera functionality has been removed
+                    
+                    image = Image.fromarray(image).resize((224, 224)) #TODO check if this is ok
+                    images.append(image)
+                
                 # Get language and action data
                 language = data[dataset.modality_keys["language"][0]][0]
                 action = []
@@ -1588,8 +1677,6 @@ class LeRobotMixtureDataset(Dataset):
                     print(f"Retrying with new sample...")
                     # For retry, we can use a slightly different index to get a new sample
                     # This helps avoid getting stuck on the same problematic sample
-                    # index = (index + 1) % len(self)
-
                     index = random.randint(0, len(self) - 1)
                 else:
                     # All retries exhausted
@@ -1874,13 +1961,17 @@ class LeRobotMixtureDataset(Dataset):
         statistics_data = {}
         
         # Collect actually used keys from all datasets
-        all_used_action_keys = set()
-        all_used_state_keys = set()
+        all_used_action_keys = []
+        all_used_state_keys = []
         
         for dataset in self.datasets:
             used_action_keys, used_state_keys = get_used_modality_keys(dataset.modality_keys)
-            all_used_action_keys.update(used_action_keys)
-            all_used_state_keys.update(used_state_keys)
+            for used_action_key in used_action_keys:
+                if used_action_key not in all_used_action_keys:
+                    all_used_action_keys.append(used_action_key)
+            for used_state_key in used_state_keys:
+                if used_state_key not in all_used_state_keys:
+                    all_used_state_keys.append(used_state_key)
         
         # Organize statistics by tag
         for tag, merged_metadata in self.merged_metadata.items():
@@ -1890,16 +1981,13 @@ class LeRobotMixtureDataset(Dataset):
             if hasattr(merged_metadata.statistics, 'action') and merged_metadata.statistics.action:
                 action_stats = merged_metadata.statistics.action
                 
-                # Filter and reorder keys
+                # Filter and reorder keys - iterate in all_used_action_keys order
                 non_gripper_keys = []
                 gripper_keys = []
                 
-                for key in action_stats.keys():
-                    if key in all_used_action_keys:
-                        if "gripper" in key.lower():
-                            gripper_keys.append(key)
-                        else:
-                            non_gripper_keys.append(key)
+                for key in all_used_action_keys:
+                    if key in action_stats:
+                        non_gripper_keys.append(key)
                 
                 reordered_keys = non_gripper_keys + gripper_keys
                 
@@ -1921,16 +2009,13 @@ class LeRobotMixtureDataset(Dataset):
             if hasattr(merged_metadata.statistics, 'state') and merged_metadata.statistics.state:
                 state_stats = merged_metadata.statistics.state
                 
-                # Filter and reorder keys
+                # Filter and reorder keys - iterate in all_used_state_keys order
                 non_gripper_keys = []
                 gripper_keys = []
                 
-                for key in state_stats.keys():
-                    if key in all_used_state_keys:
-                        if "gripper" in key.lower():
-                            gripper_keys.append(key)
-                        else:
-                            non_gripper_keys.append(key)
+                for key in all_used_state_keys:
+                    if key in state_stats:
+                        non_gripper_keys.append(key)
                 
                 reordered_keys = non_gripper_keys + gripper_keys
                 
@@ -1959,6 +2044,7 @@ class LeRobotMixtureDataset(Dataset):
         print(f"Merged dataset statistics saved to: {save_path}")
         print(f"Used action keys (reordered): {list(all_used_action_keys)}")
         print(f"Used state keys (reordered): {list(all_used_state_keys)}")
+
 
     def _combine_modality_stats(self, modality_stats: dict) -> dict:
         """Backward compatibility wrapper."""
@@ -2070,6 +2156,5 @@ class LeRobotMixtureDataset(Dataset):
                 dataset.set_transforms_metadata(self.merged_metadata[dataset.tag])
         
         print(f"Applied cached statistics for {len(self.merged_metadata)} embodiment tags.")
-
 
 

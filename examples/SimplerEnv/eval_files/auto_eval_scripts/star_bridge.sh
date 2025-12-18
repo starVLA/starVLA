@@ -1,27 +1,30 @@
 #!/bin/bash
 
 echo `which python`
-# Define environment
-cd .
-export star_vla_python=~/miniconda3/envs/starvla/bin/python
-export sim_python=~/miniconda3/envs/dinoact/bin/python
-export SimplerEnv_PATH=~/Projects/SimplerEnv
+# Environment setup
+cd /mnt/petrelfs/yejinhui/Projects/starVLA
+export star_vla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
+export sim_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/dinoact/bin/python
+export SimplerEnv_PATH=/mnt/petrelfs/share/yejinhui/Projects/SimplerEnv
 export PYTHONPATH=$(pwd):${PYTHONPATH}
-base_port=10097
+base_port=6350 
+
+# export DEBUG=1
 
 
 MODEL_PATH=$1
+# MODEL_PATH=/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1120_bridge_rt_1_QwenDual_florence/checkpoints/steps_11000_pytorch_model.pt
 TSET_NUM=4 # repeat each task 4 times
 run_count=0
 
 if [ -z "$MODEL_PATH" ]; then
-  echo "❌ MODEL_PATH not provided as the first argument, using default value"
-  export MODEL_PATH="./StarVLA/Qwen-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt"
+  echo "❌ MODEL_PATH not provided as the first argument; using default"
+  export MODEL_PATH="/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1007_qwenLargefm/checkpoints/steps_20000_pytorch_model.pt"
 fi
 
 ckpt_path=${MODEL_PATH}
 
-# Define a function to start the service
+# Helper to launch policy servers
 policyserver_pids=()
 eval_pids=()
 
@@ -35,6 +38,18 @@ start_service() {
   local svc_log="${server_log_dir}/$(basename "${ckpt_path%.*}")_policy_server_${port}.log"
   mkdir -p "${server_log_dir}"
 
+  # Pre-check the port and free it if already occupied
+  if lsof -iTCP:"${port}" -sTCP:LISTEN -t >/dev/null ; then
+    echo "⚠️ Port ${port} is occupied; attempting to free it..."
+    lsof -iTCP:"${port}" -sTCP:LISTEN -t | xargs kill -9
+    sleep 2
+    if lsof -iTCP:"${port}" -sTCP:LISTEN -t >/dev/null ; then
+      echo "❌ Unable to free port ${port}; please investigate manually"
+      exit 1
+    else
+      echo "✅ Port ${port} successfully freed"
+    fi
+  fi
   echo "▶️ Starting service on GPU ${gpu_id}, port ${port}"
   CUDA_VISIBLE_DEVICES=${gpu_id} ${star_vla_python} deployment/model_server/server_policy.py \
     --ckpt_path ${ckpt_path} \
@@ -42,22 +57,22 @@ start_service() {
     --use_bf16 \
     > "${svc_log}" 2>&1 &
   
-  local pid=$!          # Capture the PID immediately
+  local pid=$!          # capture PID immediately
   policyserver_pids+=($pid)
   sleep 10
 }
 
-# Define a function to stop all services
+# Helper to stop every service
 stop_all_services() {
-  # Wait for all evaluation tasks to finish
+  # Wait for every evaluation job to complete
   if [ "${#eval_pids[@]}" -gt 0 ]; then
-    echo "⏳ Waiting for evaluation tasks to finish..."
+    echo "⏳ Waiting for evaluation jobs to finish..."
     for pid in "${eval_pids[@]}"; do
       if ps -p "$pid" > /dev/null 2>&1; then
         wait "$pid"
         status=$?
-        if [ $status -ne 0 ]; then
-            echo "Warning: evaluation task $pid exited abnormally (status: $status)"
+    if [ $status -ne 0 ]; then
+      echo "Warning: evaluation job $pid exited abnormally (status: $status)"
         fi
       fi
     done
@@ -71,7 +86,7 @@ stop_all_services() {
         kill "$pid" 2>/dev/null
         wait "$pid" 2>/dev/null
       else
-        echo "⚠️ Service process $pid no longer exists (may have exited early)"
+        echo "⚠️ Service process $pid no longer exists (might have exited early)"
       fi
     done
   fi
@@ -79,12 +94,12 @@ stop_all_services() {
   # Clear PID arrays
   eval_pids=()
   policyserver_pids=()
-  echo "✅ All services and tasks have stopped"
+  echo "✅ All services and tasks stopped"
 }
 
-# Get the CUDA_VISIBLE_DEVICES list
-IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # Convert the comma-separated GPU list into an array
-NUM_GPUS=${#CUDA_DEVICES[@]}  # Number of available GPUs
+# Retrieve CUDA_VISIBLE_DEVICES list on this host
+IFS=',' read -r -a CUDA_DEVICES <<< "$CUDA_VISIBLE_DEVICES"  # convert comma-separated GPU list to an array
+NUM_GPUS=${#CUDA_DEVICES[@]}  # count available GPUs
 
 
 
@@ -99,7 +114,7 @@ rgb_overlay_path=${SimplerEnv_PATH}/ManiSkill2_real2sim/data/real_inpainting/bri
 robot_init_x=0.147
 robot_init_y=0.028
 
-# Task list, each item is an env-name
+# Task list: each entry defines an env-name
 declare -a ENV_NAMES=(
   StackGreenCubeOnYellowCubeBakedTexInScene-v0
   PutCarrotOnPlateInScene-v0
@@ -121,12 +136,12 @@ for i in "${!ENV_NAMES[@]}"; do
 
     echo "▶️ Launching task [${env}] run#${run_idx} on GPU $gpu_id, log → ${task_log}"
     
-    # Start the service and record its PID
+    # Launch service and capture the process ID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
 
     
-    CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/start_simpler_env.py \
+    CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py \
       --port $port \
       --ckpt-path ${ckpt_path} \
       --robot ${robot} \
@@ -150,7 +165,7 @@ for i in "${!ENV_NAMES[@]}"; do
   done
 done
 
-# V2: PutEggplantInBasketScene-v0 also runs TSET_NUM times
+# V2 variant: run PutEggplantInBasketScene-v0 five times as well
 declare -a ENV_NAMES_V2=(
   PutEggplantInBasketScene-v0
 )
@@ -165,7 +180,7 @@ robot_init_y=0.06
 for i in "${!ENV_NAMES_V2[@]}"; do
   env="${ENV_NAMES_V2[i]}"
   for ((run_idx=1; run_idx<=TSET_NUM; run_idx++)); do
-    gpu_id=${CUDA_DEVICES[$(((run_count) % NUM_GPUS))]}  # Map to the GPU ID in CUDA_VISIBLE_DEVICES
+    gpu_id=${CUDA_DEVICES[$(((run_count) % NUM_GPUS))]}  # map to GPU ID in CUDA_VISIBLE_DEVICES
     ckpt_dir=$(dirname "${ckpt_path}")
     ckpt_base=$(basename "${ckpt_path}")
     ckpt_name="${ckpt_base%.*}"
@@ -175,13 +190,13 @@ for i in "${!ENV_NAMES_V2[@]}"; do
 
     echo "▶️ Launching V2 task [${env}] run#${run_idx} on GPU $gpu_id, log → ${task_log}"
 
-    # Start the service and record its PID
+  # Launch service and capture the process ID
     echo "server start run#${run_idx}"
     port=$((base_port + run_count))
     server_pid=$(start_service ${gpu_id} ${ckpt_path} ${port})
 
     echo "sim start run#${run_idx}"
-    ${sim_python} examples/SimplerEnv/start_simpler_env.py \
+    ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py \
       --ckpt-path ${ckpt_path} \
       --port $port \
       --robot ${robot} \
@@ -211,6 +226,6 @@ done
 
 stop_all_services
 wait
-echo "✅ All tests complete"
+echo "✅ All evaluations finished"
 
 

@@ -41,7 +41,7 @@ scores are averaged over 500 trials for each task suite (10 tasks × 50 episodes
 
 To set up the environment, please first follow the official [LIBERO repository](https://github.com/Lifelong-Robot-Learning/LIBERO) to install the base `LIBERO` environment.  
 
-⚠️ **Common issue:** LIBERO defaults to Python 3.8, but the syntax updates between 3.8 and 3.10 are substantial. We verified that using Python 3.10 avoids many issues. 
+⚠️ **Common issue:** LIBERO defaults to Python 3.8, but the syntax updates between 3.8 and 3.10 are substantial. **We verified that using Python 3.10 avoids many issues**. 
 
 
 Afterwards, inside the `LIBERO` environment, install the following dependencies:  
@@ -65,10 +65,10 @@ The evaluation should be run **from the repository root** using **two separate t
 In the first terminal, activate the `starVLA` conda environment and run:  
 
 ```bash
-bash examples/LIBERO/run_policy_server.sh
+bash examples/LIBERO/eval_files/run_policy_server.sh
 ```
 
-⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `examples/LIBERO/run_policy_server.sh`  
+⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `examples/LIBERO/eval_files/run_policy_server.sh`  
 
 
 ---
@@ -78,7 +78,7 @@ bash examples/LIBERO/run_policy_server.sh
 In the second terminal, activate the `LIBERO` conda environment and run:  
 
 ```bash
-bash examples/LIBERO/eval_libero.sh
+bash examples/LIBERO/eval_files/eval_libero.sh
 ```
 ⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `eval_libero.sh` to load action unnormalization stats. 
 
@@ -89,7 +89,7 @@ Also ensure the environment variables at the top of `eval_libero.sh` are correct
 
 # 🚀 LIBERO Training
 
-## 📦 Step0: Download the training dataset
+## 📦 Step 0: Download the training dataset
 Download the datasets to the playground/Datasets/LEROBOT_LIBERO_DATA directory:
 - [LIBERO-spatial](https://huggingface.co/datasets/IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot)
 - [LIBERO-object](https://huggingface.co/datasets/IPEC-COMMUNITY/libero_object_no_noops_1.0.0_lerobot)

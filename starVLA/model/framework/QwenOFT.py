@@ -32,7 +32,7 @@ from PIL import Image
 
 from starVLA.training.trainer_utils import initialize_overwatch
 from starVLA.model.tools import FRAMEWORK_REGISTRY
-
+from deployment.model_server.tools.image_tools import to_pil_preserve
 
 logger = initialize_overwatch(__name__)
 
@@ -154,8 +154,7 @@ class Qwenvl_OFT(baseframework):
     @torch.inference_mode()
     def predict_action(
         self,
-        batch_images: List[List[Image.Image]],  # Batch of PIL Image list as [view1, view2]
-        instructions: List[str],
+        examples: List[dict] = None,
         **kwargs: str,
     ) -> np.ndarray:
         """
@@ -166,18 +165,14 @@ class Qwenvl_OFT(baseframework):
           2. Encode with QwenVL (hidden states retained)
           6. Return normalized action trajectory
 
-        Args:
-            batch_images: List of samples; each sample is List[PIL.Image] (multi-view).
-            instructions: List[str] natural language task instructions.
-            cfg_scale: >1 enables classifier-free guidance (scales conditional vs unconditional).
-            use_ddim: Whether to use DDIM deterministic sampling.
-            num_ddim_steps: Number of DDIM steps if enabled.
-            **kwargs: Reserved.
-
         Returns:
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
+        
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        instructions = [example["lang"] for example in examples]  # [B, str]
+    
         train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
@@ -278,7 +273,7 @@ if __name__ == "__main__":
     cfg = OmegaConf.load(args.config_yaml)
     cfg.framework.action_model.action_hidden_dim = 2048
 
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct"
+    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
     
 
     # try get model
@@ -290,14 +285,14 @@ if __name__ == "__main__":
     # Create a sample
     sample = {
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
+        "image": [image], # two views
         "lang": "This is a fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
     sample2 = {
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
+        "image": [image], # two views
         "lang": "For testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
@@ -315,29 +310,29 @@ if __name__ == "__main__":
     print(f"Unnormalized Action: {normalized_actions}")
 
 
-    # # try forward model
-    # # can be fake sample， but here get from dataloader for simpler
-    # from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+    # try forward model
+    # can be fake sample， but here get from dataloader for simpler
+    from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
 
-    # vla_dataset_cfg = cfg.datasets.vla_data
-    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    vla_dataset_cfg = cfg.datasets.vla_data
+    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
 
-    # from torch.utils.data import DataLoader
+    from torch.utils.data import DataLoader
 
-    # train_dataloader = DataLoader(
-    #     dataset,
-    #     batch_size=2,
-    #     num_workers=1,  # For Debug
-    #     collate_fn=collate_fn,
-    # )
-    # # zhe
-    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
-    #     batch
-    #     break
+    train_dataloader = DataLoader(
+        dataset,
+        batch_size=2,
+        num_workers=1,  # For Debug
+        collate_fn=collate_fn,
+    )
+    # zhe
+    for batch in tqdm(train_dataloader, desc="Processing Batches"):
+        batch
+        break
 
-    # # try get model
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model = model.to(device)
-    # model(batch)
-    # pass
-    # action = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
+    # try get model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model(batch)
+    pass
+    action = model.predict_action(batch)

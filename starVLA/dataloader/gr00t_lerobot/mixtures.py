@@ -33,7 +33,6 @@ DATASET_NAMED_MIXTURES = {
     ],
     "libero_90": [
         ("libero_90_no_noops_lerobot", 1.0, "libero_franka"),
-        # ("libero_90_no_noops_lerobot", 1.0, "libero_ur5"),
     ],
 
     "bridge": [
@@ -59,6 +58,12 @@ DATASET_NAMED_MIXTURES = {
     "BEHAVIOR_challenge": [
         ("BEHAVIOR_challenge", 1.0, "R1Pro"),
     ],
+
+
+    "SO101_pick": [
+        ("pick_dataset_name", 1.0, "SO101"),
+    ],
+
 
 
 }

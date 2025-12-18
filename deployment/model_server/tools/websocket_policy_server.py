@@ -5,13 +5,13 @@
 import asyncio
 import logging
 import traceback
+import time
 
 import websockets.asyncio.server
 import websockets.frames
 
 # from openpi_client import base_policy as _base_policy
 from . import msgpack_numpy
-from . import image_tools
 
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
@@ -23,13 +23,17 @@ class WebsocketPolicyServer:
         self,
         policy,
         host: str = "0.0.0.0",
-        port: int = 8000,
+        port: int = 10093,
+        idle_timeout: int = -1,  # 新增参数，单位秒，-1表示永不关闭
         metadata: dict | None = None,
+        
     ) -> None:
         self._policy = policy  #
         self._host = host
         self._port = port
         self._metadata = metadata or {}
+        self._idle_timeout = idle_timeout
+        self._last_active = time.time()
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
     def serve_forever(self) -> None:
@@ -43,7 +47,20 @@ class WebsocketPolicyServer:
             compression=None,
             max_size=None,
         ) as server:
-            await server.serve_forever()
+            if self._idle_timeout > 0:
+                await self._idle_watchdog(server)
+            else:
+                await server.serve_forever()
+
+    async def _idle_watchdog(self, server):
+        """监控空闲时间，超时则关闭服务器"""
+        while True:
+            await asyncio.sleep(5)
+            if time.time() - self._last_active > self._idle_timeout:
+                logging.info(f"Idle timeout ({self._idle_timeout}s) reached, shutting down server.")
+                server.close()
+                await server.wait_closed()
+                break
 
     async def _handler(self, websocket: websockets.asyncio.server.ServerConnection):
         logging.info(f"Connection from {websocket.remote_address} opened")
@@ -54,6 +71,7 @@ class WebsocketPolicyServer:
         while True:
             try:
                 msg = msgpack_numpy.unpackb(await websocket.recv())
+                self._last_active = time.time()  # 每次收到消息刷新活跃时间
                 ret = self._route_message(msg)  # route message
                 await websocket.send(packer.pack(ret))
             except websockets.ConnectionClosed:
@@ -74,28 +92,20 @@ class WebsocketPolicyServer:
         - Supports messages of form:
             {"type": "ping|init|infer|reset", "request_id": "...", "payload": {...}}
           or a flat dict (will be treated as payload).
-        - Always returns a dict containing:
-            {
-              "status": "ok" | "error",
-              "ok": bool,
-              "type": <str>,
-              "request_id": <str>,
-              ... (data | error)
-            }
         - Does NOT raise inside this function: all exceptions are caught and encoded in response.
         """
         req_id = msg.get("request_id", "default")
         mtype = msg.get("type", "infer")          # default = infer
-        payload = msg.get("payload", msg)         # when no explicit payload, treat top-level as payload
+        msg       # when no explicit payload, treat top-level as payload
 
         # ping
         if mtype == "ping":
             return {"status": "ok", "ok": True, "type": "ping", "request_id": req_id}
 
-        # infer
-        elif mtype == "infer":
+        # infer --> framework.predict_action
+        elif mtype == "infer" or mtype == "predict_action":
             # Basic payload sanity
-            if not isinstance(payload, dict):
+            if not isinstance(msg, dict):
                 return {
                     "status": "error",
                     "ok": False,
@@ -104,8 +114,8 @@ class WebsocketPolicyServer:
                     "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))}
                 }
             try:
-                payload["batch_images"] = image_tools.to_pil_preserve(payload["batch_images"])
-                ouput_dict = self._policy.predict_action(**payload)
+
+                ouput_dict = self._policy.predict_action(**msg)
             except Exception as e:
                 logging.exception("Policy inference error (request_id=%s)", req_id)
                 logging.exception(e)

@@ -26,7 +26,7 @@ VIDEO_TOKEN_INDEX = 151656
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_VIDEO_TOKEN = "<video>"
 
-_ACTION_TOKEN_MIN = 151665 # how can we know this range? --> we has other way for this, but is slower see qwenhelix branch
+_ACTION_TOKEN_MIN = 151665 # how can we know this range?
 _ACTION_TOKEN_MAX = 153712 # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
 
 
@@ -89,7 +89,6 @@ class _QWen_VL_Interface(nn.Module):
             model_id,
             attn_implementation="flash_attention_2",
             torch_dtype="auto",
-            device_map="cuda",
         )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.padding_side = "left"
@@ -97,6 +96,9 @@ class _QWen_VL_Interface(nn.Module):
         self.model = model
         self.processor = processor
         self.config = config
+
+        self._ACTION_TOKEN_MIN = _ACTION_TOKEN_MIN
+        self._ACTION_TOKEN_MAX = _ACTION_TOKEN_MAX
 
     def forward(
         self,
@@ -265,7 +267,7 @@ class _QWen_VL_Interface(nn.Module):
         batch_input = self.processor(text=texts, images=image_inputs, videos=video_inputs, padding=True, return_tensors="pt")
 
 
-        # if solutions, mask out the solution tokens in labels
+        # if solutions, mask out the non solution tokens in labels --> @JinhuiYE can we mask out system prompt?
         if solutions is not None:
             action_token_min = _ACTION_TOKEN_MIN # how can we know this range? --> we has other way for this, but is slower see qwenhelix branch
             action_token_max = _ACTION_TOKEN_MAX # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md

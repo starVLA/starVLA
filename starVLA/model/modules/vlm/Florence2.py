@@ -91,7 +91,7 @@ class _Florence_Interface(nn.Module):
     def forward_vlm(
         self,
         input_ids: torch.LongTensor,        # [B, L]
-        pixel_values: torch.FloatTensor,    # [B, C, H, W] --》 [B, H, W]
+        pixel_values: torch.FloatTensor,    # [B, C, H, W] --> [B, H, W]
         **kwargs
     ):
         """
@@ -101,20 +101,28 @@ class _Florence_Interface(nn.Module):
         Returns:
           enc_out.hidden_states: [B, T_enc, D]
         """
-        B = pixel_values.shape[0] # [B, C, H, W]           
+        # get image features
+           
+        param_dtype = next(self.model.parameters()).dtype
+        pixel_values = pixel_values.to(self.model.device, dtype=param_dtype)
         valid_feats = self.model._encode_image(pixel_values)      # [B, N, D]
-        N, D = valid_feats.shape[1:]
-
-        image_features = valid_feats.new_zeros((B, N, D))
-        image_features = image_features.view(B, N, D)        # [B, N, D]
-
+        B_multiview, N, D = valid_feats.shape
+        # get text embeddings
         inputs_embeds = self.model.get_input_embeddings()(input_ids)  # [B, L, D]
 
+        # # olny support single image from florence, your can modify here for multi-image support by merge each image features
+        # like pixel_values: B*N_view, C, H, W --> B*N_view, N_token, D -> B, N_view*N_token, D -> image_features
+        B, L, _ = inputs_embeds.shape
+        image_features = valid_feats.view(B, -1, D)  # [B, N_view*N, D]
+
+        # merge image features and text embeddings
         merged_embeds, attention_mask = self.model._merge_input_ids_with_image_features(
             image_features,  # first view: [B, N, D]
             inputs_embeds,         # [B, L, D]
         )
-
+        
+        # TODO should return text index and image index for later index masking
+        
         enc_out = self.model.language_model.model.encoder(
             attention_mask=attention_mask,
             inputs_embeds=merged_embeds,
@@ -130,18 +138,20 @@ class _Florence_Interface(nn.Module):
         """
 
         # Create messages: one message per sample
-        messages = []
         assert len(images) == len(instructions), "Images and instructions must have the same length"
         assert len(images[0]) == 1, "Florence2 only support batch size 1 for now"
-        images = [image[0] for image in  images]
-        
+        # # # olny support single image from florence, your can modify here for multi-image support by merge each image features
+        flatten_batch_images = []
+        for exameple_images in images:
+            flatten_batch_images.extend(exameple_images)
+        # images = [image[0] for image in  images]
         task_prompt = "Locate the objects with category name in the image." #"Locate the objects with category name in the image."
         for index in range(len(instructions)):
             instruction = instructions[index]
             instructions[index] = task_prompt + " " + instruction
         
-        # 只能是一个视角的
-        inputs = self.processor(text=instructions, images=images, return_tensors="pt")
+        # olny support single image for a text input from florence, your can modify here for multi-image support by merge each image features
+        inputs = self.processor(text=instructions, images=flatten_batch_images, return_tensors="pt", padding=True, truncation=True,)
         inputs["labels"] = inputs["input_ids"].clone()
 
         return inputs.to(self.model.device)
@@ -163,44 +173,31 @@ if __name__ == "__main__":
     debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
-    model_id = "microsoft/Florence-2-large"
+    # model_id = "microsoft/Florence-2-large"
+    model_id = "playground/Pretrained_models/Florence-2-large"
     cfg.framework.qwenvl.base_vlm = model_id
     qwen_vl = _Florence_Interface(cfg)
+    qwen_vl.model.eval()
 
     import requests
 
     import torch
     from PIL import Image
-    from transformers import AutoProcessor, AutoModelForCausalLM 
-
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch_dtype, trust_remote_code=True, attn_implementation="eager").to(device)
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
 
     prompt = "<OD>"
 
     url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
     image = Image.open(requests.get(url, stream=True).raw)
-
-    inputs = processor(text=[prompt, prompt], images=[image, image], return_tensors="pt").to(device, torch_dtype)
-
-
-    inputs["labels"] = inputs["input_ids"].clone()
-    
-    # bug is here
-    # generated_ids = model.generate(
-    #     input_ids=inputs["input_ids"],
-    #     pixel_values=inputs["pixel_values"],
-    #     max_new_tokens=4096,
-    #     num_beams=3,
-    #     do_sample=False
-    # )
-    # generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-
-    # parsed_answer = processor.post_process_generation(generated_text, task="<OD>", image_size=(image.width, image.height))
-
-    # print(parsed_answer)
+    inputs = qwen_vl.build_qwenvl_inputs(images=[[image]], instructions=[prompt])
+    with torch.no_grad():
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            outputs = qwen_vl.forward_vlm(
+                input_ids=inputs["input_ids"],
+                pixel_values=inputs["pixel_values"],
+        )
+    print(f"forward_vlm last_hidden_state shape: {outputs.last_hidden_state.shape}")
+    print(f"forward_vlm hidden_states length: {len(outputs.hidden_states)}")
 

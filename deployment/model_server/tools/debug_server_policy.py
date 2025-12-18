@@ -17,10 +17,8 @@ Notes:
 
 import argparse
 import logging
-from typing import Dict, Optional, Tuple
 import numpy as np
 
-from typing_extensions import override
 
 from tools.websocket_policy_client import WebsocketClientPolicy
 

@@ -51,7 +51,7 @@ class CategorySpecificMLP(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim=1024, output_dim=2048):
         super().__init__()
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, output_dim)
@@ -61,7 +61,7 @@ class MLP(nn.Module):
 
 
 class ActionEncoder(nn.Module):
-    def __init__(self, action_dim, hidden_size):
+    def __init__(self, action_dim, hidden_size=1024):
         super().__init__()
         self.hidden_size = hidden_size
         self.action_dim = action_dim
@@ -106,7 +106,7 @@ class ActionEncoder(nn.Module):
 
 
 class MultiEmbodimentActionEncoder(nn.Module):
-    def __init__(self, action_dim, hidden_size, num_embodiments):
+    def __init__(self, action_dim, hidden_size=1024, num_embodiments=8):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_embodiments = num_embodiments
@@ -209,52 +209,57 @@ class FlowmatchingActionHeadConfig(PretrainedConfig):
 
 
 
+DiTConfig = {"num_layers": 36, "input_embedding_dim": 2048, "attention_head_dim": 64, "num_attention_heads": 32} # default for qwen2.5-vl
+
 
 class LayerwiseFlowmatchingActionHead(nn.Module):
     def __init__(
         self,
-        full_config,
+        global_config,
         **kwargs,
     ):
         super().__init__()
-        config = full_config.framework.action_model
-        self.hidden_size = config.hidden_size
+        action_config = global_config.framework.action_model
+        diffusion_model_cfg = action_config.diffusion_model_cfg
 
-        action_model_cfg = full_config.framework.action_model.DiTConfig
-        self.input_embedding_dim = action_model_cfg["input_embedding_dim"]
-
-        diffusion_model_cfg = config.diffusion_model_cfg
-        diffusion_model_cfg = {**action_model_cfg, **diffusion_model_cfg}
+        # 更新 DiTConfig 到 diffusion_model_cfg
+        DiTConfig["num_layers"] = global_config.framework.qwenvl.num_vl_layers
+        DiTConfig["input_embedding_dim"] = global_config.framework.qwenvl.vl_hidden_dim
+        DiTConfig["num_attention_heads"] = DiTConfig["input_embedding_dim"] // DiTConfig["attention_head_dim"]
+        diffusion_model_cfg.update(DiTConfig)
+        # diffusion_model_cfg["interleave_self_attention"] = False
+        diffusion_model_cfg.cross_attention_dim = DiTConfig["input_embedding_dim"] # should match vl embedding dim, but for some case we might want to change it for cross + self attention
+        self.input_embedding_dim = global_config.framework.qwenvl.vl_hidden_dim
         self.model = DiT(**diffusion_model_cfg) # TODO better way is copy LLM from VLM
-        self.action_dim = config.action_dim
-        self.action_horizon = config.future_action_window_size + 1
-        self.num_inference_timesteps = config.num_inference_timesteps
+        self.dit_out_hidden_size = self.input_embedding_dim
+        self.action_dim = action_config.action_dim
+        self.action_horizon = action_config.future_action_window_size + 1
+        self.num_inference_timesteps = action_config.num_inference_timesteps
 
         self.state_encoder = MLP(
-            input_dim=config.state_dim,
-            hidden_dim=self.hidden_size,
+            input_dim=action_config.state_dim,
             output_dim=self.input_embedding_dim,
-        ) if config.state_dim else None
+        ) if action_config.state_dim else None
 
         self.action_encoder = ActionEncoder(
-            action_dim=config.action_dim,
+            action_dim=action_config.action_dim,
             hidden_size=self.input_embedding_dim,
         )
         self.action_decoder = MLP(
-            input_dim=self.hidden_size,
-            hidden_dim=self.hidden_size,
+            input_dim=self.input_embedding_dim,
+            hidden_dim=1024,
             output_dim=self.action_dim,
         )
-        self.future_tokens = nn.Embedding(config.num_target_vision_tokens, self.input_embedding_dim)
+        self.future_tokens = nn.Embedding(action_config.num_target_vision_tokens, self.input_embedding_dim)
         nn.init.normal_(self.future_tokens.weight, mean=0.0, std=0.02)
 
-        if config.add_pos_embed:
-            self.position_embedding = nn.Embedding(config.max_seq_len, self.input_embedding_dim)
+        if action_config.add_pos_embed:
+            self.position_embedding = nn.Embedding(action_config.max_seq_len, self.input_embedding_dim)
             nn.init.normal_(self.position_embedding.weight, mean=0.0, std=0.02)
 
-        self.beta_dist = Beta(config.noise_beta_alpha, config.noise_beta_beta)
-        self.num_timestep_buckets = config.num_timestep_buckets
-        self.config = config
+        self.beta_dist = Beta(action_config.noise_beta_alpha, action_config.noise_beta_beta)
+        self.num_timestep_buckets = action_config.num_timestep_buckets
+        self.config = action_config
 
     def sample_time(self, batch_size, device, dtype):
         sample = self.beta_dist.sample([batch_size]).to(device, dtype=dtype)
@@ -309,15 +314,8 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
                 encoder_hidden_states=vl_embs_list[layer_idx],  # Use layer-specific vl_embs
                 temb=temb,
             )
-
-            # hidden_states = block(
-            #         hidden_states,
-            #         attention_mask=None,
-            #         encoder_hidden_states=encoder_hidden_states,
-            #         encoder_attention_mask=None,
-            #         temb=temb,
-            #     )
-
+        
+        # TODO miss self att and _process_output, but work well
         pred = self.action_decoder(model_output)
         pred_actions = pred[:, -actions.shape[1] :]
 
@@ -376,7 +374,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
                     encoder_hidden_states=vl_embs_list[layer_idx],
                     temb=temb,
                 )
-
+            # TODO miss self att and _process_output 
             pred = self.action_decoder(model_output)
             pred_velocity = pred[:, -self.action_horizon :]
 
@@ -405,7 +403,7 @@ def get_action_model(config=None):
         FlowmatchingActionHead: Initialized FlowMatchingActionHead.
     """
     return LayerwiseFlowmatchingActionHead(
-        full_config=config
+        global_config=config
     )
 
 

@@ -30,7 +30,7 @@ from qwen_vl_utils import process_vision_info
 
 from starVLA.training.trainer_utils import initialize_overwatch
 from starVLA.model.tools import FRAMEWORK_REGISTRY
-
+from deployment.model_server.tools.image_tools import to_pil_preserve
 
 logger = initialize_overwatch(__name__)
 
@@ -40,7 +40,7 @@ IGNORE_INDEX = -100
 from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.modules.action_model.fast_ActionHeader import get_action_model
-from starVLA.training.trainer_utils.trainer_tools import resize_images
+
 
 @FRAMEWORK_REGISTRY.register("QwenFast")
 class Qwenvl_Fast(baseframework):
@@ -112,8 +112,10 @@ class Qwenvl_Fast(baseframework):
         actions = [example["action"] for example in examples]  # label [B, len, 7]
         
         # step 0: map_raw_action_to_vlm_action
-        vlm_action_tokens = self.action_model.encoder_action2vlmtoken(actions)  # List[str]
+        batch_fast_tokens = self.action_model.encoder_action2fastoken(actions)  # List[str]
 
+        # batch_fast_tokens = [self.fast_tokenizer(raw_action)[0] for raw_action in raw_actions]
+        vlm_action_tokens = [self.map_fast_token_to_vlm_action(fast_tokens) for fast_tokens in batch_fast_tokens]
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions, solutions=vlm_action_tokens)
@@ -135,33 +137,29 @@ class Qwenvl_Fast(baseframework):
     @torch.inference_mode()
     def predict_action(
         self,
-        batch_images: List[List[Image.Image]],  # Batch of PIL Image list as [view1, view2]
-        instructions: List[str],
+        examples: List[dict] = None,
         **kwargs: str,
     ) -> np.ndarray:
         """
         Inference: single forward pass to obtain future actions (no diffusion sampling).
-
+        # can be batch forward
         Steps:
           1. Resize images to training resolution (if specified)
           2. Encode with QwenVL (hidden states retained)
           6. Return normalized action trajectory
 
-        Args:
-            batch_images: List of samples; each sample is List[PIL.Image] (multi-view).
-            instructions: List[str] natural language task instructions.
-            cfg_scale: >1 enables classifier-free guidance (scales conditional vs unconditional).
-            use_ddim: Whether to use DDIM deterministic sampling.
-            num_ddim_steps: Number of DDIM steps if enabled.
-            **kwargs: Reserved.
-
         Returns:
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
-        if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+        if type(examples) is not list:
+            examples = [examples]
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        instructions = [example["lang"] for example in examples]  # [B, str]
+    
+        # train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        # if train_obs_image_size:
+        #     batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         instructions = [instruction for instruction in instructions]
 
 
@@ -171,7 +169,7 @@ class Qwenvl_Fast(baseframework):
         with torch.autocast("cuda", dtype=torch.bfloat16):
             generated_ids = self.qwen_vl_interface.model.generate(
                 **qwen_inputs,
-                max_length=4096,
+                max_length=2048,
             )
         # --- Extract and decoder vlm_action to continue actions ---
         # --- extrace token (index based on VLM) ---
@@ -193,8 +191,8 @@ class Qwenvl_Fast(baseframework):
         Rule: keep all tokens falling within [_ACTION_TOKEN_MIN, _ACTION_TOKEN_MAX] in order of appearance.
         You may change it to "take only the first occurrence followed by continuous segment" as needed.
         """
-        act_min = self.action_model._ACTION_TOKEN_MIN
-        act_max = self.action_model._ACTION_TOKEN_MAX
+        act_min = self.qwen_vl_interface._ACTION_TOKEN_MIN
+        act_max = self.qwen_vl_interface._ACTION_TOKEN_MAX
         mask = (generated_ids >= act_min) & (generated_ids <= act_max)  # [B, L]
         results = []
         for b in range(generated_ids.size(0)):
@@ -212,7 +210,7 @@ class Qwenvl_Fast(baseframework):
         Decode the offset VLM action token list back to fast tokenizer semantics.
         fast_tokenizer.decode expects the original fast token id sequence (without offset).
         """
-        act_min = self.action_model._ACTION_TOKEN_MIN
+        act_min = self.qwen_vl_interface._ACTION_TOKEN_MIN
         batch_fast_token_ids = []
         for seq in batch_vlm_tokens:
             if not seq:
@@ -224,6 +222,11 @@ class Qwenvl_Fast(baseframework):
         
         return batch_fast_token_ids
 
+    def map_fast_token_to_vlm_action(self, tokens) -> str:
+        """Maps fast action tokens to the VLM action format.
+        Action token 0 is mapped to the string <robot_action_0>  ... and so on 
+        """
+        return ''.join([f"<robot_action_{token}>" for token in tokens]) # you should add <robot_action_{token}> to VLM as special tokens, 
 
 
 if __name__ == "__main__":
@@ -237,11 +240,10 @@ if __name__ == "__main__":
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Rank 0 waiting for debugger attach on port 10092...")
     debugpy.wait_for_client()
-
+    args.config_yaml = "/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/0_bar/1025_libero4in1_qwenfast/config.yaml"
     cfg = OmegaConf.load(args.config_yaml)
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action"
+    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action"
 
-    cfg.framework.action_model.action_hidden_dim 
     # try get model
     model = Qwenvl_Fast(cfg)
     print(model)
@@ -271,7 +273,7 @@ if __name__ == "__main__":
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action. for new model, it didn't learn to predict action token, so you would meet empty action
-    predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
+    predict_output = model.predict_action([sample])
     normalized_actions = predict_output['normalized_actions']
     print(f"Unnormalized Action: {normalized_actions}")
 
@@ -280,25 +282,26 @@ if __name__ == "__main__":
 
     # # test with dataloader
     # # can be fake sample， but here get from dataloader for simpler
-    # from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+    from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
 
-    # vla_dataset_cfg = cfg.datasets.vla_data
-    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    vla_dataset_cfg = cfg.datasets.vla_data
+    vla_dataset_cfg.video_backend = "torchvision_av"
+    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
 
-    # from torch.utils.data import DataLoader
+    from torch.utils.data import DataLoader
 
-    # train_dataloader = DataLoader(
-    #     dataset,
-    #     batch_size=2,
-    #     num_workers=1,  # For Debug
-    #     collate_fn=collate_fn,
-    # )
-    # # zhe
-    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
-    #     batch
-    #     break
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model = model.to(device)
-    # model(batch)
-    # pass
-    # action = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
+    train_dataloader = DataLoader(
+        dataset,
+        batch_size=2,
+        num_workers=1,  # For Debug
+        collate_fn=collate_fn,
+    )
+    
+    for batch in tqdm(train_dataloader, desc="Processing Batches"):
+        batch
+        break
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model(batch)
+    pass
+    action = model.predict_action(batch[0])

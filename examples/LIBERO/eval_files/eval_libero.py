@@ -16,7 +16,7 @@ import tyro
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-from examples.LIBERO.model2libero_interface import M1Inference
+from examples.LIBERO.eval_files.model2libero_interface import ModelClient
 
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
@@ -84,7 +84,7 @@ def eval_libero(args: Args) -> None:
     else:
         raise ValueError(f"Unknown task suite: {args.task_suite_name}")
 
-    model = M1Inference(
+    client_model = ModelClient(
         policy_ckpt_path=args.pretrained_path, # to get unnormalization stats
         host=args.host,
         port=args.port,
@@ -110,7 +110,7 @@ def eval_libero(args: Args) -> None:
             logging.info(f"\nTask: {task_description}")
 
             # Reset environment
-            model.reset(task_description=task_description)  # Reset the client connection
+            client_model.reset(task_description=task_description)  # Reset the client connection
             env.reset()
 
             # Set initial states
@@ -163,17 +163,16 @@ def eval_libero(args: Args) -> None:
                     "instruction": [str(task_description)],
                 }
 
-                # align key with model API
-                obs_input = {
-                    "images": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
-                    "task_description": observation["instruction"][0],  
-                    "step": step,
+                # align key with model API --> 这里给了两个图像 --> check training
+                example_dict = {
+                    "image": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
+                    "lang": observation["instruction"][0],
                 }
 
                 
                 start_time = time.time()
                 
-                response = model.step(**obs_input) 
+                response = client_model.step(example=example_dict, step=step) 
                 
                 end_time = time.time()
                 # print(f"time: {end_time - start_time}")

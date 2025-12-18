@@ -10,19 +10,19 @@ export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 
 ###########################################################################################
 # === Please modify the following paths according to your environment ===
-Framework_name=QwenGR00T
+Framework_name=QwenPI
 freeze_module_list=''
-base_vlm=Qwen/Qwen2.5-VL-3B-Instruct
+base_vlm=playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
 config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
 oxe_data_root=playground/Datasets/OXE_LEROBOT
 data_mix=bridge_rt_1
 run_root_dir=./results/Checkpoints
-run_id=1025_bridge_rt_1_qwengroot
+run_id=debug_${data_mix}_qwen3_PI
 # === End of environment variable configuration ===
 ###########################################################################################
 
 
-# export WANDB_MODE=disabled
+export WANDB_MODE=disabled
 
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
@@ -45,7 +45,6 @@ accelerate launch \
   --trainer.save_interval 10000 \
   --trainer.logging_frequency 100 \
   --trainer.eval_interval 1000 \
-  --trainer.learning_rate.base 4e-5 \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
   --wandb_project starVLA \
@@ -53,3 +52,21 @@ accelerate launch \
   # --is_debug True
 
 
+
+##### Multi-Server Multi-GPU training script #####
+  # accelerate launch \
+  #   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
+  #   --main_process_ip $MASTER_ADDR \
+  #   --main_process_port $MASTER_PORT \
+  #   --machine_rank $SLURM_PROCID \
+  #   --num_machines $SLURM_NNODES \
+  #   --num_processes=${TOTAL_GPUS} \
+  #   starVLA/training/train_starvla.py \
+  #   --config_yaml ${config_yaml} \
+  #   --framework.name ${Framework_name} \
+  #   --framework.qwenvl.base_vlm ${base_vlm} \
+  #   --run_root_dir ${run_root_dir} \
+  #   --run_id ${run_id} \
+  #   --wandb_project your_project \
+  #   --wandb_entity your_name
+##### Multi-Server Multi-GPU training script #####

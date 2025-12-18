@@ -7,15 +7,16 @@ import numpy as np
 
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 
-from examples.SimplerEnv.adaptive_ensemble import AdaptiveEnsembler
+from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from typing import Dict
 import numpy as np
 from pathlib import Path
+from PIL import Image
 
 from starVLA.model.tools import read_mode_config
 
 
-class M1Inference:
+class ModelClient:
     def __init__(
         self,
         policy_ckpt_path,
@@ -81,8 +82,7 @@ class M1Inference:
 
     def step(
         self, 
-        images, 
-        task_description: Optional[str] = None,
+        example: dict,
         step: int = 0,
         **kwargs
     ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
@@ -93,31 +93,32 @@ class M1Inference:
         :return: (raw action, processed action)
         """
 
-        if task_description is not None:
+        task_description = example.get("lang", None) 
+        images = example["image"]  # list of images for history
+
+        if example is not None:
             if task_description != self.task_description:
                 self.reset(task_description)
-
-        # image: Image.Image = Image.fromarray(image)
-
+                
         images = [self._resize_image(image) for image in images]
+        example["image"] = images
         vla_input = {
-            "batch_images": [images],
-            "instructions": [self.task_description],
-            "unnorm_key": self.unnorm_key,
+            "examples": [example],
             "do_sample": False,
             "use_ddim": self.use_ddim,
             "num_ddim_steps": self.num_ddim_steps,
         }
-
-
-
         
+
         action_chunk_size = self.action_chunk_size
         if step % action_chunk_size == 0:
-            response = self.client.infer(vla_input)
-            # unnormalize the action
-            # import ipdb; ipdb.set_trace()
-            normalized_actions = response["data"]["normalized_actions"] # B, chunk, D        
+            response = self.client.predict_action(vla_input)
+            try:
+                normalized_actions = response["data"]["normalized_actions"] # B, chunk, D        
+            except KeyError:
+                print(f"Response data: {response}")
+                raise KeyError(f"Key 'normalized_actions' not found in response data: {response['data'].keys()}")
+            
             normalized_actions = normalized_actions[0]    
             self.raw_actions = self.unnormalize_actions(normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats)
         
@@ -153,7 +154,7 @@ class M1Inference:
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)  # read config and norm_stats
 
-        unnorm_key = M1Inference._check_unnorm_key(norm_stats, unnorm_key)
+        unnorm_key = ModelClient._check_unnorm_key(norm_stats, unnorm_key)
         return norm_stats[unnorm_key]["action"]
 
     @staticmethod
