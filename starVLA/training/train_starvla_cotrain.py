@@ -39,6 +39,7 @@ from starVLA.training.trainer_utils.trainer_tools import normalize_dotlist_args
 from starVLA.model.framework import build_framework
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils
 from starVLA.training.trainer_utils.trainer_tools import build_param_lr_groups
+from starVLA.training.trainer_utils.config_tracker import wrap_config, AccessTrackedConfig
 
 deepspeed_plugin = DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
@@ -67,11 +68,11 @@ def setup_directories(cfg) -> Path:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(output_dir / "checkpoints", exist_ok=True)
 
-        # save config
-        OmegaConf.save(cfg, output_dir / "config.yaml")
-        with open(output_dir / "config.yaml", "r") as f_yaml, open(output_dir / "config.json", "w") as f_json:
-            yaml_cfg = yaml.safe_load(f_yaml)
-            json.dump(yaml_cfg, f_json, indent=2)
+        # # save config
+        # OmegaConf.save(cfg, output_dir / "config.yaml")
+        # with open(output_dir / "config.yaml", "r") as f_yaml, open(output_dir / "config.json", "w") as f_json:
+        #     yaml_cfg = yaml.safe_load(f_yaml)
+        #     json.dump(yaml_cfg, f_json, indent=2)
 
     return output_dir
 
@@ -219,6 +220,21 @@ class VLAMTrainer(TrainerUtils):
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
             self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
+
+            # ✅ Save accessed configuration only
+            if isinstance(self.config, AccessTrackedConfig):
+                logger.info("📊 Saving accessed configuration...")
+                output_dir = Path(self.config.output_dir)
+                self.config.save_accessed_config(
+                    output_dir / "config.json", 
+                    use_original_values=False 
+                )
+                self.config.save_accessed_config(
+                    output_dir / "config.yaml", 
+                    use_original_values=False 
+                )
+                logger.info("✅ Configuration files saved")
+
         self.accelerator.wait_for_everyone()
 
     def _log_metrics(self, metrics):
@@ -422,6 +438,20 @@ class VLAMTrainer(TrainerUtils):
             torch.save(state_dict, os.path.join(final_checkpoint, "pytorch_model.pt"))
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
+            # ✅ Save accessed configuration only
+            if isinstance(self.config, AccessTrackedConfig):
+                logger.info("📊 Saving accessed configuration...")
+                output_dir = Path(self.config.output_dir)
+                self.config.save_accessed_config(
+                    output_dir / "config.json", 
+                    use_original_values=False 
+                )
+                self.config.save_accessed_config(
+                    output_dir / "config.yaml", 
+                    use_original_values=False 
+                )
+                logger.info("✅ Configuration files saved")
+
         # close W&B
         if self.accelerator.is_main_process:
             wandb.finish()
@@ -431,6 +461,10 @@ class VLAMTrainer(TrainerUtils):
 
 def main(cfg) -> None:
     logger.info("VLA Training :: Warming Up")
+
+    #  Wrap config to enable access tracking
+    cfg = wrap_config(cfg)
+    logger.info("✅ Configuration wrapped for access tracking")
 
     # create output directory and save config
     output_dir = setup_directories(cfg=cfg)

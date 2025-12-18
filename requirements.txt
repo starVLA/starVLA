@@ -29,3 +29,4 @@ rich
 diffusers
 timm
 tyro
+websockets
