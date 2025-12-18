@@ -443,9 +443,8 @@ class LeRobotSingleDataset(Dataset):
         # steps_filename = f"steps_{config_key}.pkl"
         # @BUG
         # fast get static steps @fangjing --> don't use hash to dynamic sample
+        # 
         steps_filename =  "steps_data_index.pkl"
-
-
         steps_path = self.dataset_path / "meta" / steps_filename
         
         # Try to load cached steps first
@@ -454,7 +453,6 @@ class LeRobotSingleDataset(Dataset):
                 with open(steps_path, "rb") as f:
                     cached_data = pickle.load(f)
                 return cached_data["steps"]
-
         except (FileNotFoundError, pickle.PickleError, KeyError) as e:
             print(f"Failed to load cached steps: {e}")
             print("Computing steps from scratch...")

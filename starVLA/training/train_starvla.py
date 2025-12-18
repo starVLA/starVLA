@@ -233,15 +233,14 @@ class VLATrainer(TrainerUtils):
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
             self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
-        
             # ✅ Save accessed configuration only
             if isinstance(self.config, AccessTrackedConfig):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
-                self.config.save_accessed_config(
-                    output_dir / "config.json", 
-                    use_original_values=False 
-                )
+                # self.config.save_accessed_config(
+                #     output_dir / "config.json", 
+                #     use_original_values=False
+                # )
                 self.config.save_accessed_config(
                     output_dir / "config.yaml", 
                     use_original_values=False 
@@ -422,19 +421,6 @@ class VLATrainer(TrainerUtils):
             torch.save(state_dict, os.path.join(final_checkpoint, "pytorch_model.pt"))
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
-            # ✅ Save accessed configuration only
-            if isinstance(self.config, AccessTrackedConfig):
-                logger.info("📊 Saving accessed configuration...")
-                output_dir = Path(self.config.output_dir)
-                self.config.save_accessed_config(
-                    output_dir / "config.json", 
-                    use_original_values=False 
-                )
-                self.config.save_accessed_config(
-                    output_dir / "config.yaml", 
-                    use_original_values=False 
-                )
-                logger.info("✅ Configuration files saved")
 
         # close W&B
         if self.accelerator.is_main_process:

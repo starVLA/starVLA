@@ -675,6 +675,163 @@ class SO101Config:
 
         return ComposedModalityTransform(transforms=transforms)
 
+
+
+class ArxX5DataConfig:
+    video_keys = [
+        "video.cam_high",
+        "video.cam_left_wrist",
+        "video.cam_right_wrist",
+    ]
+    state_keys = [
+        "state.left_joints",
+        "state.right_joints",
+        "state.left_gripper",
+        "state.right_gripper",
+    ]
+    action_keys = [
+        "action.left_joints",
+        "action.right_joints",
+        "action.left_gripper",
+        "action.right_gripper",
+    ]
+
+    language_keys = ["annotation.human.action.task_description"]
+    observation_indices = [0]
+    action_indices = list(range(16))
+
+    def modality_config(self):
+        video_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.video_keys,
+        )
+        state_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.state_keys,
+        )
+        action_modality = ModalityConfig(
+            delta_indices=self.action_indices,
+            modality_keys=self.action_keys,
+        )
+        language_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.language_keys,
+        )
+        modality_configs = {
+            "video": video_modality,
+            "state": state_modality,
+            "action": action_modality,
+            "language": language_modality,
+        }
+        return modality_configs
+
+    def transform(self):
+        transforms = [
+            # state transforms
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={
+                    "state.left_joints": "min_max",
+                    "state.right_joints": "min_max",
+                    "state.left_gripper": "binary",
+                    "state.right_gripper": "binary",
+                },
+            ),
+            # action transforms
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={
+                    "action.left_joints": "min_max",
+                    "action.right_joints": "min_max",
+                    "action.left_gripper": "binary",
+                    "action.right_gripper": "binary",
+                },
+            ),
+        ]
+
+        return ComposedModalityTransform(transforms=transforms)
+
+###########################################################################################
+
+
+class AgilexDataConfig:
+    video_keys = [
+        "video.cam_high",
+        "video.cam_left_wrist",
+        "video.cam_right_wrist",
+    ]
+    state_keys = [
+        "state.left_joints",
+        "state.right_joints",
+        "state.left_gripper",
+        "state.right_gripper",
+    ]
+    action_keys = [
+        "action.left_joints",
+        "action.right_joints",#@JinhuiYE this order is different from Dataset
+        "action.left_gripper",
+        "action.right_gripper",
+    ]
+
+    language_keys = ["annotation.human.action.task_description"]
+    observation_indices = [0]
+    action_indices = list(range(16))
+
+    def modality_config(self):
+        video_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.video_keys,
+        )
+        state_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.state_keys,
+        )
+        action_modality = ModalityConfig(
+            delta_indices=self.action_indices,
+            modality_keys=self.action_keys,
+        )
+        language_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.language_keys,
+        )
+        modality_configs = {
+            "video": video_modality,
+            "state": state_modality,
+            "action": action_modality,
+            "language": language_modality,
+        }
+        return modality_configs
+
+    def transform(self):
+        transforms = [
+            # state transforms
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={
+                    "state.left_joints": "min_max",
+                    "state.right_joints": "min_max",
+                    "state.left_gripper": "binary",
+                    "state.right_gripper": "binary",
+                },
+            ),
+            # action transforms
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={
+                    "action.left_joints": "min_max",
+                    "action.right_joints": "min_max",
+                    "action.left_gripper": "binary",
+                    "action.right_gripper": "binary",
+                },
+            ),
+        ]
+
+        return ComposedModalityTransform(transforms=transforms)
+
 ###########################################################################################
 
 
@@ -685,5 +842,10 @@ ROBOT_TYPE_CONFIG_MAP = {
     "oxe_rt1": OxeRT1DataConfig(),
     "SO101": SO101Config(),
     "demo_sim_franka_delta_joints": SingleFrankaRobotiqDeltaJointsDataConfig(),
+    "arx_x5": ArxX5DataConfig(),
+    "robotwin": AgilexDataConfig(),
+
+
     "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
 }
+
