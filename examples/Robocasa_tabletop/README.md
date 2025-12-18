@@ -63,7 +63,7 @@ bash scripts/run_scripts/Robocasa/run_lerobot_datasets_qwenGR00T.sh
 # Evaluation
 ## ⬇️ 0. Download Checkpoints
 First, download the checkpoints from 
-- [Qwen3VL-GR00T]()
+- [Qwen3VL-GR00T](https://huggingface.co/StarVLA/Qwen3-VL-GR00T-Robocasa-gr1)
 
 
 ## 📦 1. Environment Setup
