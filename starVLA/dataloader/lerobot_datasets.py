@@ -107,7 +107,7 @@ if __name__ == "__main__":
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Rank 0 waiting for debugger attach on port 10092...")
     debugpy.wait_for_client()
-    args.config_yaml = "examples/LIBERO/train_files/starvla_cotrain_libero.yaml"
+    args.config_yaml = "examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml"
     cfg = OmegaConf.load(args.config_yaml)
 
     vla_dataset_cfg = cfg.datasets.vla_data
@@ -116,10 +116,6 @@ if __name__ == "__main__":
     # vla_dataset_cfg.data_mix = "BEHAVIOR_dual_base_depth"
     vla_dataset_cfg.task_id = 1
     for task_id in ["all"]:
-        # 11,26,36,37
-        # 5,11,13,26,36,27,43,44,45,46
-        # 2,3,5,11,13,25,26,27,
-        # 3,5,11,13, / 14,15,16,17, / 19,20,23,25, / 26,27,30,34, / 36,37,38,39, 41,42,43,44,45,46,47,49
         vla_dataset_cfg.task_id = task_id
         print(f"Testing Task ID: {task_id}")
         dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
@@ -133,7 +129,7 @@ if __name__ == "__main__":
     )
 
     from tqdm import tqdm
-    count = 1
+    count = 10
     for batch in tqdm(train_dataloader, desc="Processing Batches"):
         # print(batch)
         # print(1)

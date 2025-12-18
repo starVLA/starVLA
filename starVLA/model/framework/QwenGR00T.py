@@ -188,7 +188,7 @@ if __name__ == "__main__":
     import debugpy
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml", help="Path to YAML config")
+    parser.add_argument("--config_yaml", type=str, default="./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -211,7 +211,7 @@ if __name__ == "__main__":
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(8, 7)).astype(np.float16), # action_chunk, action_dim
+        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
         "image": [image], # three views
         "lang": "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room.",
         # "state" : np.random.uniform(-1, 1, size=(1, 44)).astype(np.float16), # chunk, state_dim
@@ -232,11 +232,11 @@ if __name__ == "__main__":
     # # Advance: try forward model with dataloader
     # # can be fake sample， but here get from dataloader for simpler
     vla_dataset_cfg = cfg.datasets.vla_data
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
     from torch.utils.data import DataLoader
     from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
     
+    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+
     train_dataloader = DataLoader(
         dataset,
         batch_size=2,
