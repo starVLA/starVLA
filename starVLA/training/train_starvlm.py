@@ -160,6 +160,21 @@ class VLAMTrainer(TrainerUtils):
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
             self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
+        
+            # ✅ Save accessed configuration only
+            if isinstance(self.config, AccessTrackedConfig):
+                logger.info("📊 Saving accessed configuration...")
+                output_dir = Path(self.config.output_dir)
+                self.config.save_accessed_config(
+                    output_dir / "config.json", 
+                    use_original_values=False 
+                )
+                self.config.save_accessed_config(
+                    output_dir / "config.yaml", 
+                    use_original_values=False 
+                )
+                logger.info("✅ Configuration files saved")
+        
         self.accelerator.wait_for_everyone()
 
     def eval_action_model(self, step_metrics=None):
