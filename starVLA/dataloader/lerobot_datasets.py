@@ -61,7 +61,6 @@ def get_vla_dataset(
     balance_dataset_weights: bool = False,
     balance_trajectory_weights: bool = False,
     seed: int = 42,
-    delete_pause_frame: bool = True,
     **kwargs: dict,
 ) -> LeRobotMixtureDataset:
     """
@@ -69,6 +68,7 @@ def get_vla_dataset(
     """
     data_root_dir = data_cfg.data_root_dir
     data_mix = data_cfg.data_mix
+    delete_pause_frame = data_cfg.delete_pause_frame
     mixture_spec = DATASET_NAMED_MIXTURES[data_mix]
     included_datasets, filtered_mixture_spec = set(), []
     for d_name, d_weight, robot_type in mixture_spec:  
@@ -109,7 +109,8 @@ if __name__ == "__main__":
     debugpy.wait_for_client()
     args.config_yaml = "examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml"
     cfg = OmegaConf.load(args.config_yaml)
-
+    cfg.datasets.vla_data.data_root_dir = "/mnt/petrelfs/wangfangjing/code/starVLA/playground/Datasets/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim-All"
+    cfg.datasets.vla_data.data_mix = "fourier_gr1_10K_pretrain"
     vla_dataset_cfg = cfg.datasets.vla_data
     cfg.datasets.vla_data.include_state = True
     vla_dataset_cfg.task_id = 1
@@ -125,6 +126,10 @@ if __name__ == "__main__":
         num_workers=1, # For Debug
         collate_fn=collate_fn,
     )
+
+    cfg.output_dir = "./results/debug"
+    output_dir = Path(cfg.output_dir)
+    dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
 
     from tqdm import tqdm
     count = 10

@@ -1677,6 +1677,11 @@ class LeRobotMixtureDataset(Dataset):
                 for action_key in dataset.modality_keys["action"]:
                     action.append(data[action_key])
                 action = np.concatenate(action, axis=1).astype(np.float16)
+
+                state = []
+                for state_key in dataset.modality_keys["state"]:
+                    state.append(data[state_key])
+                state = np.concatenate(state, axis=1).astype(np.float16)
                 
                 state = None
                 
@@ -2033,6 +2038,7 @@ class LeRobotMixtureDataset(Dataset):
             if hasattr(merged_metadata.statistics, 'state') and merged_metadata.statistics.state:
                 state_stats = merged_metadata.statistics.state
                 
+                # Filter and reorder keys - iterate in all_used_state_keys order
                 # Filter and reorder keys - iterate in all_used_state_keys order
                 non_gripper_keys = []
                 gripper_keys = []
