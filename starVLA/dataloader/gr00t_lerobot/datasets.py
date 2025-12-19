@@ -85,13 +85,20 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
     all_low_dim_data = pd.concat(all_low_dim_data_list, axis=0)
     # Compute dataset statistics
     dataset_statistics = {}
-    for le_modality in all_low_dim_data.columns:
-        if le_modality.startswith("annotation."):
+    for le_modality in tqdm(all_low_dim_data.columns, desc="Processing modalities"):
+        print(le_modality)
+        if "task_info" in le_modality:
             continue
         print(f"Computing statistics for {le_modality}...")
-        np_data = np.vstack(
-            [np.asarray(x, dtype=np.float32) for x in all_low_dim_data[le_modality]]
-        )
+        # 检查数据是否为空或无效
+        try:
+            np_data = np.vstack(
+                [np.asarray(x, dtype=np.float32) for x in all_low_dim_data[le_modality]]
+            )
+        except Exception as e:
+            print(f"Warning: Failed to process modality {le_modality} due to error: {e}")
+            continue  
+
         dataset_statistics[le_modality] = {
             "mean": np.mean(np_data, axis=0).tolist(),
             "std": np.std(np_data, axis=0).tolist(),
@@ -125,6 +132,7 @@ class LeRobotSingleDataset(Dataset):
         video_backend_kwargs: dict | None = None,
         transforms: ComposedModalityTransform | None = None,
         delete_pause_frame: bool = False,
+        data_cfg = None,
         **kwargs,
     ):
         """
@@ -140,10 +148,11 @@ class LeRobotSingleDataset(Dataset):
             embodiment_tag (EmbodimentTag): Overload the embodiment tag for the dataset. e.g. define it as "new_embodiment"
         """
         # first check if the path directory exists
+        self.data_cfg = data_cfg
         if not Path(dataset_path).exists():
             raise FileNotFoundError(f"Dataset path {dataset_path} does not exist")
         # indict letobot version
-        self._lerobot_version =  kwargs["data_cfg"].get("lerobot_version", "v2.0") #self._indict_lerobot_version(**kwargs)
+        self._lerobot_version =  self.data_cfg.get("lerobot_version", "v2.0") #self._indict_lerobot_version(**kwargs)
 
         self.delete_pause_frame = delete_pause_frame
 
@@ -170,6 +179,7 @@ class LeRobotSingleDataset(Dataset):
         self._video_path_pattern = self._get_video_path_pattern()
         self._chunk_size = self._get_chunk_size()
         self._tasks = self._get_tasks()
+        # self._episodes = self._get_episode_info() # TODO why we need this func
         self.curr_traj_data = None
         self.curr_traj_id = None
 
@@ -1419,7 +1429,7 @@ def generate_action_mask_for_used_keys(action_modalities: dict, used_action_keys
     
     return mask
 
-def get_used_modality_keys(modality_keys: dict) -> tuple[set, set]:
+def get_used_modality_keys(modality_keys: dict) -> tuple[list, list]:
     """Extract used action and state keys from modality configuration."""
     used_action_keys = []
     used_state_keys = []
@@ -1484,6 +1494,7 @@ class LeRobotMixtureDataset(Dataset):
         self.balance_trajectory_weights = balance_trajectory_weights
         self.seed = seed
         self.mode = mode
+        self.data_cfg = kwargs["data_cfg"] if "data_cfg" in kwargs else None
 
         # Set properties for sampling
 
@@ -1634,20 +1645,31 @@ class LeRobotMixtureDataset(Dataset):
         
         for attempt in range(max_retries):
             try:
-                dataset, trajectory_name, step = self.sample_step(index)
-                data_raw = dataset.get_step_data(trajectory_name, step)
-                data = dataset.transforms(data_raw)
+                while True: # @DUG
+                    dataset, trajectory_name, step = self.sample_step(index)
+                    key = dataset.modality_keys["video"][0].replace("video.", "")
+                    video_path = dataset.get_video_path(trajectory_name, key)
+                    if os.path.exists(video_path):
+                        break
+                    index = random.randint(0, len(self) - 1)
+                    
+                    
+                data = dataset.transforms(dataset.get_step_data(trajectory_name, step))
                 
                 # Process all video keys dynamically
-                images = []
+                prim_images = []
+                wrist_views = []
                 for video_key in dataset.modality_keys["video"]:
                     image = data[video_key][0]
                     
                     # Apply image cropping if enabled and the video key is base_view
                     # Note: crop_obs_camera functionality has been removed
-                    
-                    image = Image.fromarray(image).resize((224, 224)) #TODO check if this is ok
-                    images.append(image)
+                    image = Image.fromarray(image).resize((224, 224))
+                    if "wrist" not in video_key:
+                        prim_images.append(image)
+                    else:
+                        wrist_views.append(image)
+                all_images = prim_images + wrist_views
                 
                 # Get language and action data
                 language = data[dataset.modality_keys["language"][0]][0]
@@ -1656,7 +1678,20 @@ class LeRobotMixtureDataset(Dataset):
                     action.append(data[action_key])
                 action = np.concatenate(action, axis=1).astype(np.float16)
                 
-                return dict(action=action, image=images, lang=language)
+                state = None
+                
+                if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
+                    print ("Including state in the output sample: Jinhui")
+                    # @BUG
+                    # exit(404)
+                    state = []
+                    for state_key in dataset.modality_keys["state"]:
+                        state.append(data[state_key])
+                    state = np.concatenate(state, axis=1).astype(np.float16)
+                    # prim_images
+                    return dict(action=action, image=all_images, lang=language, state=state)
+
+                return dict(action=action, image=all_images, lang=language)
                 
             except Exception as e:
                 last_exception = e

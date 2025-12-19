@@ -111,9 +111,7 @@ if __name__ == "__main__":
     cfg = OmegaConf.load(args.config_yaml)
 
     vla_dataset_cfg = cfg.datasets.vla_data
-    # vla_dataset_cfg.data_root_dir = "./playground/Datasets/behavior-1k"
-    # vla_dataset_cfg.include_state = True
-    # vla_dataset_cfg.data_mix = "BEHAVIOR_dual_base_depth"
+    cfg.datasets.vla_data.include_state = True
     vla_dataset_cfg.task_id = 1
     for task_id in ["all"]:
         vla_dataset_cfg.task_id = task_id

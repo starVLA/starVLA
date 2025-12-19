@@ -214,7 +214,7 @@ if __name__ == "__main__":
         "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
         "image": [image], # three views
         "lang": "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room.",
-        # "state" : np.random.uniform(-1, 1, size=(1, 44)).astype(np.float16), # chunk, state_dim
+        "state" : np.random.uniform(-1, 1, size=(1, 14)).astype(np.float16), # chunk, state_dim
     }
 
     batch  = [sample, sample]  # batch size 2
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     vla_dataset_cfg = cfg.datasets.vla_data
     from torch.utils.data import DataLoader
     from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
-    
+    cfg.datasets.vla_data.include_state = "False"
     dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
 
     train_dataloader = DataLoader(

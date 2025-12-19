@@ -105,6 +105,14 @@ DATASET_NAMED_MIXTURES = {
         ("turn_switch", 1.0, "robotwin"),
     ],
 
+    "robotwin_task1": [
+        ("adjust_bottle", 1.0, "robotwin"),
+    ],
+    "robotwin_task2": [
+        ("place_a2b_left", 1.0, "robotwin"),
+        ("place_a2b_right", 1.0, "robotwin"),
+    ]
+
 
 
 }
