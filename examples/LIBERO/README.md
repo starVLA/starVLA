@@ -84,6 +84,10 @@ bash examples/LIBERO/eval_files/eval_libero.sh
 
 Also ensure the environment variables at the top of `eval_libero.sh` are correctly set.
 
+Finally, each result will also save a video for visualization, as shown below:
+
+![Example](example.gif)
+
 ---
 
 
@@ -96,32 +100,24 @@ Download the datasets to the playground/Datasets/LEROBOT_LIBERO_DATA directory:
 - [LIBERO-goal](https://huggingface.co/datasets/IPEC-COMMUNITY/libero_goal_no_noops_1.0.0_lerobot)
 - [LIBERO-10](https://huggingface.co/datasets/IPEC-COMMUNITY/libero_10_no_noops_1.0.0_lerobot)
 
+And move `modality.json` to each `$LEROBOT_LIBERO_DATA/subset/meta/modality.json`.
+
+You could quickly prepare these by running:
+```bash
+# Set DEST to the directory where you want to store the data
+export DEST=/path/to/your/data/directory
+bash examples/LIBERO/data_preparation.sh
+```
+
+
 ## 🚀 Step1: Start Training
 
-Most of the required training files have been organized in [train_files](examples/LIBERO/train_files).  
-The first step is to move `modality.json` to each `$LEROBOT_LIBERO_DATA/meta/modality.json`.
+Most of the required training files have been organized in [train_files](train_files).  
 
-
-Then run the following command to start training:
+Please run the following command to start training:
 
 ```bash
 bash examples/LIBERO/train_files/run_libero_train.sh
 ```
 ⚠️ **Note:** Please ensure that you specify the correct path in `examples/LIBERO/train_files/run_libero_train.sh`
 
-```bash
-
-###########################################################################################
-# === Please modify the following paths according to your environment ===
-Framework_name=QwenGR00T
-base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct
-freeze_module_list=''
-config_yaml=./starVLA/config/training/starvla_cotrain_libero.yaml
-libero_data_root=playground/Datasets/LEROBOT_LIBERO_DATA
-data_mix=libero_all
-run_root_dir=./playground/Checkpoints
-run_id=1025_libero4in1_qwengroot
-# === End of environment variable configuration ===
-###########################################################################################
-
-```

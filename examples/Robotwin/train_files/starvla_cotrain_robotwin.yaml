@@ -1,0 +1,109 @@
+run_id: qwenact
+run_root_dir: results/Checkpoints
+seed: 42
+trackers: [jsonl, wandb]
+wandb_entity: your_wandb_entity
+wandb_project: llavavla
+is_debug: false
+
+framework:
+  name: QwenOFT
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
+    attn_implementation: flash_attention_2
+    vl_hidden_dim: 2048
+  dino:
+    dino_backbone: dinov2_vits14
+
+  action_model:
+    action_model_type: DiT-B
+    hidden_size: 1024     # 和 DiT 最后的 projection 对应，用于 ActionDecoder
+    add_pos_embed: True
+    max_seq_len: 1024
+    action_dim: 14
+    state_dim: 14
+    future_action_window_size: 15
+    action_horizon: 16
+    past_action_window_size: 0
+    repeated_diffusion_steps: 8
+    noise_beta_alpha: 1.5
+    noise_beta_beta: 1.0
+    noise_s: 0.999
+    num_timestep_buckets: 1000
+    num_inference_timesteps: 4
+    num_target_vision_tokens: 32
+    diffusion_model_cfg:    # DiT Transformers 的参数
+      cross_attention_dim: 2048 # VLM 的 dim
+      dropout: 0.2
+      final_dropout: true
+      interleave_self_attention: true
+      norm_type: "ada_norm"
+      num_layers: 16
+      output_dim: 1024
+      positional_embeddings: null
+
+datasets:
+  vlm_data:
+    dataset_py: vlm_datasets
+    dataformat: llava_json
+    dataset_use: asv2_conversation_en,asv2_detailed_description_en,asv2_region_captioning_en,coco_internvl_longcap_en,coco_karpathy_train_567_en,coco_negative_gpt4o_en,coco_poetry_zh,coco_rem_en_zh,cocorem_exist_yorn_en,cocotextv2_en,cocotextv2_gpt4o_en,okvqa_en,refcoco_grounding_aug_en,refcoco_grounding_en,tallyqa_coco_en,toloka_grounding_aug_en,vqav2_en,vsr_en
+    eval_dataset: aokvqa_cauldron_llava_format
+    data_flatten: false
+    base_interval: 2
+    max_pixels: 50176
+    min_pixels: 784
+    model_max_length: 2048
+    model_type: qwen2.5vl
+    per_device_batch_size: 4
+
+  vla_data:
+    dataset_py: lerobot_datasets
+    data_root_dir: playground/Datasets/RoboTwin
+    data_mix: robotwin # bridge_rt_1
+    action_type: abs_qpos
+    default_image_resolution: [3, 224, 224]
+    per_device_batch_size: 16
+    load_all_data_for_training: true
+    obs: ["image_0"]
+    image_size: [224,224]
+    video_backend: torchvision_av
+
+trainer:
+  epochs: 100
+  max_train_steps: 1000000
+  num_warmup_steps: 5000
+  save_interval: 5000
+  eval_interval: 100
+  learning_rate:
+    base: 1e-05
+    qwen_vl_interface: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 5.0e-07
+  freeze_modules: ''
+  loss_scale:
+    vla: 1.0
+    vlm: 0.1
+  # pretrained_checkpoint: ./results/Checkpoints/1_need/0601_qwenact_fixqwen_32gpus_lr_1e-3_qformer_36_37/steps_100000/pytorch_model.pt
+  # reload_modules: 'action_model,layer_qformer' # warning: this may cause model to not converge
+  repeated_diffusion_steps: 4
+  max_grad_norm: 1.0
+  warmup_ratio: 0.1
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
+
+  # parameters to be determined
+  is_resume: false
+  resume_epoch: null
+  resume_step: null
+  enable_gradient_checkpointing: true
+  enable_mixed_precision_training: true
