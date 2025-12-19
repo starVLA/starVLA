@@ -1686,9 +1686,7 @@ class LeRobotMixtureDataset(Dataset):
                 state = None
                 
                 if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
-                    print ("Including state in the output sample: Jinhui")
-                    # @BUG
-                    # exit(404)
+                    
                     state = []
                     for state_key in dataset.modality_keys["state"]:
                         state.append(data[state_key])

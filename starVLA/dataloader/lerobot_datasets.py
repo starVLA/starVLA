@@ -68,7 +68,7 @@ def get_vla_dataset(
     """
     data_root_dir = data_cfg.data_root_dir
     data_mix = data_cfg.data_mix
-    delete_pause_frame = data_cfg.delete_pause_frame
+    delete_pause_frame = data_cfg.get("delete_pause_frame", False)
     mixture_spec = DATASET_NAMED_MIXTURES[data_mix]
     included_datasets, filtered_mixture_spec = set(), []
     for d_name, d_weight, robot_type in mixture_spec:  
@@ -109,8 +109,7 @@ if __name__ == "__main__":
     debugpy.wait_for_client()
     args.config_yaml = "examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml"
     cfg = OmegaConf.load(args.config_yaml)
-    cfg.datasets.vla_data.data_root_dir = "/mnt/petrelfs/wangfangjing/code/starVLA/playground/Datasets/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim-All"
-    cfg.datasets.vla_data.data_mix = "fourier_gr1_10K_pretrain"
+    cfg.datasets.vla_data.data_mix = "robotwin"
     vla_dataset_cfg = cfg.datasets.vla_data
     cfg.datasets.vla_data.include_state = True
     vla_dataset_cfg.task_id = 1

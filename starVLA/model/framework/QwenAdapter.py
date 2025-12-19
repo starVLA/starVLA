@@ -60,7 +60,7 @@ class ProprioProjector(nn.Module):
         projected_features = self.fc2(projected_features)
         return projected_features
 
-
+# Only support for Qwen2.5 now @ PR 60
 @FRAMEWORK_REGISTRY.register("QwenAdapter")
 class Qwen_Adapter(baseframework):
     """
@@ -93,8 +93,9 @@ class Qwen_Adapter(baseframework):
         ) if self.use_proprio else None
         self.phase = self.config.framework.action_model.get("phase", "Training")
         self.qwen_vl_interface = get_vlm_model(config=self.config)
+        self.config.framework.qwenvl.vl_hidden_dim = self.qwen_vl_interface.model.config.hidden_size
         self.action_query_num = self.config.framework.action_model.get("action_query_num", 64)
-        self.action_model: L1RegressionActionHead = get_action_model(config=self.config)  # 修复后续引用
+        self.action_model: L1RegressionActionHead = get_action_model(config=self.config)
         self.action_query = nn.Parameter(torch.randn(self.action_query_num, self.qwen_vl_interface.model.config.hidden_size))
         nn.init.normal_(self.action_query, mean=0.0, std=0.02)
 
@@ -352,14 +353,14 @@ if __name__ == "__main__":
     parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_train_adapter.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
-    # debugpy.listen(("0.0.0.0", 10092))
-    # print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    # debugpy.wait_for_client()
+    debugpy.listen(("0.0.0.0", 10092))
+    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
+    debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/hub/models--Qwen--Qwen3-VL-4B-Instruct/snapshots/ebb281ec70b05090aa6165b016eac8ec08e71b17/"
-     
+    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct"
+    
     model: Qwen_Adapter = Qwen_Adapter(cfg)
     print(model)
 
@@ -369,10 +370,10 @@ if __name__ == "__main__":
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
+        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
         "image": [image, image], # two views
         "lang": "This is a fake for testing.",
-        "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
+        # "state" : np.random.uniform(-1, 1, size=(1, 14)).astype(np.float16), # chunk, state_dim
     }
 
     batch  = [sample, sample]  # batch size 2
