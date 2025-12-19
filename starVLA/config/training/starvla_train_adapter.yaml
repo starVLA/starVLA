@@ -1,0 +1,73 @@
+run_id: starvla
+run_root_dir: path/to/result
+seed: 42
+trackers: [jsonl, wandb]
+wandb_entity: your-wandb-entity
+wandb_project: your-wandb-project
+is_debug: false
+
+framework:
+  name: QwenAdapter
+  qwenvl:
+    base_vlm: /path/to/your/qwen_vl_base_checkpoint
+    attn_implementation: flash_attention_2
+    vl_hidden_dim: 2048
+  action_model:
+    action_model_type: VLA-Adapter
+    hidden_dim: 2048
+    action_dim: 14
+    state_dim: 14
+    action_query_num: 64
+    use_pro_version: true  # use the pro version of MLPResNet
+    use_proprio: false
+    phase: Training
+    num_actions_chunk: 16
+
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    data_root_dir: path/to/train_data
+    data_mix: train_data
+    per_device_batch_size: 16
+    num_workers: 16
+    action_type: delta_qpos
+
+
+trainer:
+  epochs: 100
+  max_train_steps: 100000
+  num_warmup_steps: 5000
+  save_interval: 5000
+  # save_interval: 5
+  eval_interval: 100
+  learning_rate:
+    base: 2.5e-05
+    qwen_vl_interface: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06
+  freeze_modules: ''
+  loss_scale:
+    vla: 1.0
+    vlm: 0.1
+  max_grad_norm: 1.0
+  warmup_ratio: 0.1
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  pretrained_checkpoint: "your pretrained checkpoint path"
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
+
+  # parameters to be determined
+  is_resume: false
+  resume_epoch: null
+  resume_step: null
+  enable_gradient_checkpointing: true
+  enable_mixed_precision_training: true
