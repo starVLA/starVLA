@@ -76,7 +76,7 @@ class Qwenvl_Fast(baseframework):
         self.future_action_window_size = config.framework.action_model.future_action_window_size
         self.past_action_window_size = config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
-        self.hidden_dim = config.framework.action_model.action_hidden_dim
+        # self.hidden_dim = config.framework.action_model.action_hidden_dim
         
         self.action_model.fast_tokenizer.time_horizon = self.future_action_window_size + 1
         self.action_model.fast_tokenizer.action_dim = self.config.framework.action_model.action_dim

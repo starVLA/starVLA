@@ -10,24 +10,25 @@ export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 
 ###########################################################################################
 # === Please modify the following paths according to your environment ===
-Framework_name=QwenPI
+Framework_name=QwenFast
 freeze_module_list=''
-base_vlm=playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
+base_vlm=playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
 config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
 oxe_data_root=playground/Datasets/OXE_LEROBOT
 data_mix=bridge_rt_1
 run_root_dir=./results/Checkpoints
-run_id=debug_${data_mix}_qwen3_PI
+run_id=1221_${data_mix}_qwen3Fast
 # === End of environment variable configuration ===
 ###########################################################################################
 
 
-export WANDB_MODE=disabled
+# export WANDB_MODE=disabled
 
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
 # mv this script to the output dir
 cp $0 ${output_dir}/
+
 
 
 accelerate launch \
@@ -47,7 +48,7 @@ accelerate launch \
   --trainer.eval_interval 1000 \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
-  --wandb_project starVLA \
+  --wandb_project starVLA_simplerEnv \
   --wandb_entity jinhuiye \
   # --is_debug True
 

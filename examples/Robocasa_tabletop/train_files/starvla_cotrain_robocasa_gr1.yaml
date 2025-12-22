@@ -60,7 +60,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
-    data_root_dir: playground/Datasets/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim-hf
+    data_root_dir: playground/Datasets/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
     data_mix: fourier_gr1_unified_1000 # bridge_rt_1
     action_type: delta_ee
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."

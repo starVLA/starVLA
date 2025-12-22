@@ -925,7 +925,6 @@ ROBOT_TYPE_CONFIG_MAP = {
     "arx_x5": ArxX5DataConfig(),
     "robotwin": AgilexDataConfig(),
 
-
     "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
     "fourier_gr1_arms_waist": FourierGr1ArmsWaistDataConfig(),
 }
