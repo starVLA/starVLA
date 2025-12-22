@@ -212,14 +212,18 @@ class Qwen_Adapter(baseframework):
     @torch.inference_mode()
     def predict_action(
         self,
-        batch_images: List[List[Image.Image]], 
-        instructions: List[str],
-        state: Optional[np.ndarray] = None,
+        examples: List[dict] = None,
         **kwargs: str,
     ) -> np.ndarray:
         """
         Inference: Predict future continuous actions aligned with the Forward logic (Hook + Multi-layer states).
         """
+        from deployment.model_server.tools.image_tools import to_pil_preserve
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        instructions = [example["lang"] for example in examples]  # [B, str]
+    
+        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+
         # Step 0: Preprocessing (Resize)
         train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         if train_obs_image_size:
@@ -384,7 +388,7 @@ if __name__ == "__main__":
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
-    predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]], state=[batch[0]["state"]])
+    predict_output = model.predict_action(examples=[batch[0]])
     normalized_actions = predict_output['normalized_actions']
     print(f"Unnormalized Action: {normalized_actions}")
 
