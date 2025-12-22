@@ -123,19 +123,25 @@ class M1Inference:
 
         images = [[self._resize_image(img) for img in sample] for sample in images] # (B, N_view, H, W, 3)
         input_state = [input_s for input_s in input_state]
+
+        # prepare vla input
+        examples = []
+        batch_size = len(images)
+        instructions = [self.task_description] if isinstance(self.task_description, str) else self.task_description
+        for b in range(batch_size):
+            example = {
+                "image": images[b],  # A list of multi-view images for a single sample
+                "lang": instructions[b] if isinstance(instructions, list) else instructions,
+            }
+            examples.append(example)
         vla_input = {
-            "batch_images": images,
-            "instructions": [self.task_description] if isinstance(self.task_description, str) else self.task_description, # (B, )
-            "state": input_state,
-            "unnorm_key": self.unnorm_key,
+            "examples": examples,
             "do_sample": False,
             "use_ddim": self.use_ddim,
             "num_ddim_steps": self.num_ddim_steps,
         }
         
-        
-
-        response = self.client.infer(vla_input)
+        response = self.client.predict_action(vla_input)
         
         
         # unnormalize the action
