@@ -7,7 +7,7 @@ import numpy as np
 
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 
-from examples.Robocasa_tabletop.batch_adaptive_ensemble import AdaptiveEnsembler
+from examples.Robocasa_tabletop.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from typing import Dict
 import numpy as np
 from pathlib import Path
@@ -18,7 +18,7 @@ from starVLA.model.framework.share_tools import read_mode_config
 
 
 
-class M1Inference:
+class PolicyWarper:
     def __init__(
         self,
         policy_ckpt_path,
@@ -71,11 +71,8 @@ class M1Inference:
         self.num_image_history = min(self.num_image_history + 1, self.horizon)
 
     def reset(self, task_description: str or tuple) -> None:
-        if isinstance(task_description, str):
-            self.task_description = task_description
-        else:
-            self.task_description = [str(t) for t in task_description]
-            print(f"*** task_description: {self.task_description} ***")
+       
+        self.task_description = task_description
         self.image_history.clear()
         if self.action_ensemble:
             self.action_ensembler.reset()
@@ -87,7 +84,7 @@ class M1Inference:
         self.previous_gripper_action = None
 
 
-    def step( # 这个写给不够好
+    def step(
         self, 
         observations,
         **kwargs
@@ -99,8 +96,9 @@ class M1Inference:
         :return: (原始动作, 处理后的动作)
         """
 
-        task_description = observations['annotation.human.coarse_action'] # tuple       
-        images = observations['video.ego_view']                           # (N, 1, H, W, 3)
+        task_description = observations['annotation.human.coarse_action'][0] # tuple       
+        ego_view = observations['video.ego_view']  # (N, 1, H, W, 3)
+        images = ego_view
         state = {}
         state['left_arm'] = observations['state.left_arm']     
         state['right_arm'] = observations['state.right_arm']             # (N, 1, 7)
@@ -122,7 +120,7 @@ class M1Inference:
         # image: Image.Image = Image.fromarray(image)
 
         images = [[self._resize_image(img) for img in sample] for sample in images] # (B, N_view, H, W, 3)
-        input_state = [input_s for input_s in input_state]
+        input_state = [input_s for input_s in input_state] # B, state_dim*(sin, cos)
 
         # prepare vla input
         examples = []
@@ -132,8 +130,10 @@ class M1Inference:
             example = {
                 "image": images[b],  # A list of multi-view images for a single sample
                 "lang": instructions[b] if isinstance(instructions, list) else instructions,
+                "state": input_state[b],  # N_history, 58
             }
             examples.append(example)
+        
         vla_input = {
             "examples": examples,
             "do_sample": False,
@@ -200,7 +200,7 @@ class M1Inference:
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)  # read config and norm_stats
 
-        unnorm_key = M1Inference._check_unnorm_key(norm_stats, unnorm_key)
+        unnorm_key = PolicyWarper._check_unnorm_key(norm_stats, unnorm_key)
         return norm_stats[unnorm_key]["action"]
 
 

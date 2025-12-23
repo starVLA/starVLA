@@ -4,7 +4,14 @@
 # Argument Parsing
 # ============================================================
 
-CKPT_DEFAULT="/mnt/petrelfs/wangfangjing/code/starVLA/results/Checkpoints/1120_qwenGR00T_fourier_gr1_10K_gpus_wState_pretrain_freezeQwen/checkpoints/steps_300000_pytorch_model.pt"
+# Paths to Python executables in conda environments
+cd /mnt/petrelfs/yejinhui/Projects/starVLA
+
+starVLA_PYTHON=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
+ROBOCASA_PYTHON=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/robocasa/bin/python
+export PYTHONPATH=$(pwd):${PYTHONPATH}
+
+CKPT_DEFAULT="/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1221_fourier_gr1_unified_1000_QwenOFT_state_qwen3/checkpoints/steps_90000_pytorch_model.pt"
 N_ENVS_DEFAULT=1
 MAX_EPISODE_STEPS_DEFAULT=720
 N_ACTION_STEPS_DEFAULT=12
@@ -14,6 +21,7 @@ CKPT_PATH=${1:-$CKPT_DEFAULT}
 N_ENVS=${2:-$N_ENVS_DEFAULT}
 MAX_EPISODE_STEPS=${3:-$MAX_EPISODE_STEPS_DEFAULT}
 N_ACTION_STEPS=${4:-$N_ACTION_STEPS_DEFAULT}
+
 
 echo "=== Evaluation Configuration ==="
 echo "Checkpoint Path      : ${CKPT_PATH}"
@@ -36,17 +44,19 @@ EvalEnv() {
     local N_ENVS=$7
     local MAX_EPISODE_STEPS=$8
     local N_ACTION_STEPS=$9
-
-    local VIDEO_OUT_PATH="${CKPT_PATH}.log/n_action_steps_${N_ACTION_STEPS}_max_episode_steps_${MAX_EPISODE_STEPS}_n_envs_${N_ENVS}_${ENV_NAME}"
+    # save root CKPT_PATH 的 parent 文件夹
+    local SAVE_ROOT=$(dirname "$(dirname "$CKPT_PATH")")
+    local ckpt_name=$(basename "$CKPT_PATH" .pt)
+    local VIDEO_OUT_PATH="${SAVE_ROOT}/videos/${ckpt_name}/n_action_steps_${N_ACTION_STEPS}_max_episode_steps_${MAX_EPISODE_STEPS}_n_envs_${N_ENVS}_${ENV_NAME}"
     mkdir -p "${VIDEO_OUT_PATH}"
 
     echo "Launching evaluation | GPU ${GPU_ID} | Port ${PORT} | Env ${ENV_NAME}"
 
     CUDA_VISIBLE_DEVICES=${GPU_ID} \
-    ${ROBOCASA_PYTHON} examples/Robocasa_tabletop/simulation_env.py \
+    ${ROBOCASA_PYTHON} examples/Robocasa_tabletop/eval_files/simulation_env.py \
         --args.env_name "${ENV_NAME}" \
         --args.port "${PORT}" \
-        --args.n_episodes 50 \
+        --args.n_episodes 200 \
         --args.n_envs "${N_ENVS}" \
         --args.max_episode_steps "${MAX_EPISODE_STEPS}" \
         --args.n_action_steps "${N_ACTION_STEPS}" \
@@ -90,10 +100,7 @@ ENV_NAMES=(
 # Runtime Configuration
 # ============================================================
 
-SIM_PYTHON=~/miniconda3/envs/starVLA/bin/python
-ROBOCASA_PYTHON=~/miniconda3/envs/robocasa/bin/python
-
-BASE_PORT=5678
+BASE_PORT=5478
 NUM_GPUS=8
 
 LOG_DIR="${CKPT_PATH}.log/eval_$(date +%Y%m%d_%H%M%S)"
@@ -115,13 +122,15 @@ for GPU_ID in $(seq 0 $((NUM_GPUS - 1))); do
     echo "Starting policy server | GPU ${GPU_ID} | Port ${PORT}"
 
     CUDA_VISIBLE_DEVICES=${GPU_ID} \
-    ${SIM_PYTHON} deployment/model_server/server_policy.py \
+    ${starVLA_PYTHON} deployment/model_server/server_policy.py \
         --ckpt_path "${CKPT_PATH}" \
         --port "${PORT}" \
         --use_bf16 \
         > "${LOG_DIR}/server_gpu${GPU_ID}_port${PORT}.log" 2>&1 &
 
     SERVER_PIDS[$GPU_ID]=$!
+
+    sleep 10
 done
 
 sleep 30
@@ -144,11 +153,19 @@ for ENV_NAME in "${ENV_NAMES[@]}"; do
     fi
 
     COUNT=$((COUNT + 1))
+
+    sleep 2
 done
 
 # ============================================================
 # Step 3: Cleanup
 # ============================================================
+
+# 判断是否还有 examples/Robocasa_tabletop/eval_files/simulation_env.py
+while pgrep -f "examples/Robocasa_tabletop/eval_files/simulation_env.py" > /dev/null; do
+    echo "Waiting for all evaluation environments to finish..."
+    sleep 30
+done
 
 echo ""
 echo "Shutting down policy servers..."

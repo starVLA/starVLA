@@ -39,6 +39,7 @@ framework:
       interleave_self_attention: true
       norm_type: "ada_norm"
       num_layers: 16
+      output_dim: 2560
       positional_embeddings: null
 
 

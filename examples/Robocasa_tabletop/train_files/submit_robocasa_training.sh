@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=Qwen3OFT         # name
+#SBATCH --job-name=Qwen3PI         # name
 #SBATCH -p si
 #SBATCH -N 8                         # nodes
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
@@ -45,9 +45,9 @@ proxy_on
 # === Please modify the following paths according to your environment ===
 ###########################################################################################
 
-export Framework_name=QwenOFT
+export Framework_name=QwenPI_v2
 export base_vlm=./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct # must be a local path, due to simpler will run in other where
-export base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct
+export base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
 export freeze_module_list=""
 export action_input_dim=2560
 export DIT_TYPE="DiT-B"
@@ -55,7 +55,7 @@ export config_yaml=./examples/Robocasa_tabletop/train_files/starvla_cotrain_robo
 export data_mix=fourier_gr1_unified_1000
 export include_state=True
 export run_root_dir=./results/Checkpoints
-export run_id=1221_${data_mix}_${Framework_name}_state_qwen3
+export run_id=1224_${data_mix}_${Framework_name}_state_qwen3
 # === End of environment variable configuration ===
 ###########################################################################################
 

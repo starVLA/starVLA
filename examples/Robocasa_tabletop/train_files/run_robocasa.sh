@@ -6,8 +6,7 @@ export NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
 
-
-Framework_name=QwenOFT
+Framework_name=QwenPI_v2
 base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct
 freeze_module_list='' # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
 DIT_TYPE="DiT-B"
@@ -16,7 +15,7 @@ data_mix=fourier_gr1_unified_1000
 
 
 run_root_dir=./playground/Checkpoints
-run_id=starvla_qwen3oft_fourier_gr1_unified_1000_withState
+run_id=debug_starvla_qwen3fast_fourier_gr1_unified_1000
 
 export WANDB_MODE=disabled
 
@@ -35,7 +34,7 @@ accelerate launch \
   --framework.action_model.action_model_type ${DIT_TYPE} \
   --datasets.vla_data.data_root_dir ${data_root_dir} \
   --datasets.vla_data.data_mix ${data_mix} \
-  --datasets.vla_data.per_device_batch_size 16 \
+  --datasets.vla_data.per_device_batch_size 8 \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 100000 \
   --trainer.save_interval 10000 \

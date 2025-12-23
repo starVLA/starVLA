@@ -306,21 +306,30 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         # Encode timesteps
         temb = self.model.timestep_encoder(t_discretized)
 
-        # Layerwise cross-attention with vl_embs
+        # Layerwise cross-attention with vl_embs_list
         model_output = sa_embs
         for layer_idx, layer in enumerate(self.model.transformer_blocks):
-            model_output = layer(
-                hidden_states=model_output,
-                encoder_hidden_states=vl_embs_list[layer_idx],  # Use layer-specific vl_embs
-                temb=temb,
-            )
-        
+            if layer_idx % 2 == 1:
+                model_output = layer(
+                    hidden_states=model_output,
+                    encoder_hidden_states=vl_embs_list[layer_idx],
+                    temb=temb,
+                )
+            else:
+                model_output = layer(
+                    hidden_states=model_output,
+                    attention_mask=None,
+                    encoder_hidden_states=None,
+                    encoder_attention_mask=None,
+                    temb=temb,
+                )   
+
+        # Output processing
         # TODO miss self att and _process_output, but work well
-        pred = self.action_decoder(model_output)
-        pred_actions = pred[:, -actions.shape[1] :]
+        pred_velocity = self._process_output(model_output, temb, actions.shape[1])
 
         # Slice out only the action portion of pred and target.
-        loss = ((pred_actions - velocity) ** 2).mean()
+        loss = ((pred_velocity - velocity) ** 2).mean()
         return loss
 
     @torch.no_grad()
@@ -369,15 +378,23 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             # Layerwise cross-attention with vl_embs_list
             model_output = sa_embs
             for layer_idx, layer in enumerate(self.model.transformer_blocks):
-                model_output = layer(
-                    hidden_states=model_output,
-                    encoder_hidden_states=vl_embs_list[layer_idx],
-                    temb=temb,
-                )
-            # TODO miss self att and _process_output 
-            pred = self.action_decoder(model_output)
-            pred_velocity = pred[:, -self.action_horizon :]
+                if layer_idx % 2 == 1:
+                    model_output = layer(
+                        hidden_states=model_output,
+                        encoder_hidden_states=vl_embs_list[layer_idx],
+                        temb=temb,
+                    )
+                else:
+                    model_output = layer(
+                        hidden_states=model_output,
+                        attention_mask=None,
+                        encoder_hidden_states=None,
+                        encoder_attention_mask=None,
+                        temb=temb,
+                    )   
 
+            # TODO miss self att and _process_output 
+            pred_velocity = self._process_output(model_output, temb, actions.shape[1])
             # Euler integration
             actions = actions + dt * pred_velocity
         return actions
@@ -391,7 +408,28 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         return next(iter(self.parameters())).dtype
 
 
+    def _process_output(self, hidden_states, temb, actions_length):
+        """
+        Process the output of the transformer blocks.
 
+        Args:
+            hidden_states: Tensor of shape (B, seq_length, embedding_dim)
+            temb: Tensor of shape (B, embedding_dim)
+            actions_length: Length of the actions sequence (T)
+
+        Returns:
+            pred_velocity: Tensor of shape (B, T, action_dim)
+        """
+        conditioning = temb
+        shift, scale = self.model.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
+        hidden_states = self.model.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
+
+        action_features = self.model.proj_out_2(hidden_states)
+
+        pred = self.action_decoder(action_features)
+        pred_velocity = pred[:, -actions_length:]
+        return pred_velocity
+    
 def get_action_model(config=None):
     """
     Factory: build FlowmatchingActionHead from global framework config.

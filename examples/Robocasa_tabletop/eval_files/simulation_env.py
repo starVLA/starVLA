@@ -20,29 +20,25 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
-
+import tyro
+import dataclasses
+import json
+import logging
+import os
 
 # Required for robocasa environments
 import robocasa  # noqa: F401
 import robosuite  # noqa: F401
 from robocasa.utils.gym_utils import GrootRoboCasaEnv  # noqa: F401
-
-# from starVLA.dataloader.gr00t_lerobot.datasets import ModalityConfig
-from base_config import ModalityConfig
-from service import BaseInferenceClient
-from wrappers.multistep_wrapper import MultiStepWrapper
-from wrappers.video_recording_wrapper import (
+from examples.Robocasa_tabletop.eval_files.base_config import ModalityConfig
+from examples.Robocasa_tabletop.eval_files.base_config import BasePolicy
+from examples.Robocasa_tabletop.eval_files.wrappers.multistep_wrapper import MultiStepWrapper
+from examples.Robocasa_tabletop.eval_files.wrappers.video_recording_wrapper import (
     VideoRecorder,
     VideoRecordingWrapper,
 )
-# from gr00t.model.policy import BasePolicy
-from base_config import BasePolicy
 
-# from gymnasium.envs.registration import registry
-
-# print("Available environments:")
-# for env_spec in registry.values():
-#     print(env_spec.id)
+from examples.Robocasa_tabletop.eval_files.model2robocasa_interface import PolicyWarper
 
 
 @dataclass
@@ -50,8 +46,8 @@ class VideoConfig:
     """Configuration for video recording settings."""
 
     video_dir: Optional[str] = None
-    steps_per_render: int = 2
-    fps: int = 10
+    steps_per_render: int = 2 # 和10 是什么关系
+    fps: int = 10 # BUG 数据集中应该是 20？
     codec: str = "h264"
     input_pix_fmt: str = "rgb24"
     crf: int = 22
@@ -80,27 +76,27 @@ class SimulationConfig:
     multistep: MultiStepConfig = field(default_factory=MultiStepConfig)
 
 
-class SimulationInferenceClient(BaseInferenceClient, BasePolicy):
-    """Client for running simulations and communicating with the inference server."""
+class SimulationInferenceEnv:
+    """Client for running simulations with a model."""
 
-    def __init__(self, host: str = "localhost", port: int = 5555):
-        """Initialize the simulation client with server connection details."""
-        super().__init__(host=host, port=port)
+    def __init__(self, model: Optional[BasePolicy] = None):
+        """Initialize the simulation client with a model."""
+        self.model = model
         self.env = None
 
     def get_action(self, observations: Dict[str, Any]) -> Dict[str, Any]:
-        """Get action from the inference server based on observations."""
+        """Get action from the model based on observations."""
         # NOTE(YL)!
         # hot fix to change the video.ego_view_bg_crop_pad_res256_freq20 to video.ego_view
-        if "video.ego_view_bg_crop_pad_res256_freq20" in observations:
+        if "video.ego_view_bg_crop_pad_res256_freq20" in observations: # BUG @JinhuiYE here only one viwes
             observations["video.ego_view"] = observations.pop(
                 "video.ego_view_bg_crop_pad_res256_freq20"
             )
-        return self.call_endpoint("get_action", observations)
+        return self.model.step(observations)
 
     def get_modality_config(self) -> Dict[str, ModalityConfig]:
-        """Get modality configuration from the inference server."""
-        return self.call_endpoint("get_modality_config", requires_input=False)
+        """Get modality configuration from the model."""
+        return self.model.get_modality_config()
 
     def setup_environment(self, config: SimulationConfig) -> gym.vector.VectorEnv:
         """Set up the simulation environment based on the provided configuration."""
@@ -116,8 +112,20 @@ class SimulationInferenceClient(BaseInferenceClient, BasePolicy):
                 context="spawn",
             )
 
-    def run_simulation(self, config: SimulationConfig) -> Tuple[str, List[bool]]:
-        """Run the simulation for the specified number of episodes."""
+    def run_simulation(self, config: SimulationConfig, model: Optional[BasePolicy] = None) -> Tuple[str, List[bool]]:
+        """Run the simulation for the specified number of episodes.
+        
+        Args:
+            config: Configuration for the simulation
+            model: The model to use for inference. If None, uses the model from __init__
+        """
+        # Use the provided model or fall back to the instance model
+        if model is not None:
+            self.model = model
+        
+        if self.model is None:
+            raise ValueError("No model provided. Please provide a model either in __init__ or run_simulation")
+        
         start_time = time.time()
         print(
             f"Running {config.n_episodes} episodes for {config.env_name} with {config.n_envs} environments"
@@ -135,8 +143,8 @@ class SimulationInferenceClient(BaseInferenceClient, BasePolicy):
         obs, _ = self.env.reset()
         # Main simulation loop
         while completed_episodes < config.n_episodes:
-            # Process observations and get actions from the server
-            actions = self._get_actions_from_server(obs)
+            # Process observations and get actions from the model
+            actions = self._get_actions_from_model(obs)
             # Step the environment
             next_obs, rewards, terminations, truncations, env_infos = self.env.step(actions)
             # Update episode tracking
@@ -166,9 +174,9 @@ class SimulationInferenceClient(BaseInferenceClient, BasePolicy):
         ), f"Expected at least {config.n_episodes} episodes, got {len(episode_successes)}"
         return config.env_name, episode_successes
 
-    def _get_actions_from_server(self, observations: Dict[str, Any]) -> Dict[str, Any]:
-        """Process observations and get actions from the inference server."""
-        # Get actions from the server
+    def _get_actions_from_model(self, observations: Dict[str, Any]) -> Dict[str, Any]:
+        """Process observations and get actions from the model."""
+        # Get actions from the model
         action_dict = self.get_action(observations)
         # Extract actions from the response
         if "actions" in action_dict:
@@ -212,8 +220,7 @@ def _create_single_env(config: SimulationConfig, idx: int) -> gym.Env:
 
 def run_evaluation(
     env_name: str,
-    host: str = "localhost",
-    port: int = 5555,
+    model: BasePolicy,
     video_dir: Optional[str] = None,
     n_episodes: int = 2,
     n_envs: int = 1,
@@ -224,8 +231,7 @@ def run_evaluation(
     Simple entry point to run a simulation evaluation.
     Args:
         env_name: Name of the environment to run
-        host: Hostname of the inference server
-        port: Port of the inference server
+        model: The model to use for inference
         video_dir: Directory to save videos (None for no videos)
         n_episodes: Number of episodes to run
         n_envs: Number of parallel environments
@@ -245,7 +251,7 @@ def run_evaluation(
         ),
     )
     # Create client and run simulation
-    client = SimulationInferenceClient(host=host, port=port)
+    client = SimulationInferenceEnv(model=model)
     results = client.run_simulation(config)
     # Print results
     print(f"Results for {env_name}:")
@@ -253,18 +259,62 @@ def run_evaluation(
     return results
 
 
-if __name__ == "__main__":
-    # Example usage
-    import debugpy
-    debugpy.listen(("0.0.0.0", 10092))
-    print("Waiting for client to attach...")
-    debugpy.wait_for_client()
-    print("Client attached")
+@dataclasses.dataclass
+class Args:
+    host: str = "127.0.0.1"
+    port: int = 5678
+    resize_size = [224,224]
+
+    #################################################################################################################
+    # LIBERO environment-specific parameters
+    #################################################################################################################
+    env_name: str = "gr1_unified/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    n_episodes: int = 50  # Number of steps to wait for objects to stabilize i n sim
+    n_envs: int = 1  # Number of rollouts per task
+    max_episode_steps: int = 360 # 
+    n_action_steps: int = 3
+
+    #################################################################################################################
+    # Utils
+    #################################################################################################################
+    video_out_path: str = "experiments/1029_qwenGR00T_fourier_gr1_unified_1000_PnPMilkToMicrowaveClose_gpus_woPretrain_wState/checkpoints/steps_20000_pytorch_model.pt.log/gr1_unified/logs/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env"  # Path to save videos
+
+    seed: int = 7  # Random Seed (for reproducibility)
+
+    pretrained_path: str = "results/Checkpoints/1029_qwenGR00T_fourier_gr1_unified_1000_PnPMilkToMicrowaveClose_gpus_woPretrain_wState/checkpoints/steps_20000_pytorch_model.pt"
 
 
-    run_evaluation(
-        env_name="gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env",
-        host="localhost",
-        port=5678,
-        video_dir="./videos",
+
+def eval_gr1_unified(args: Args) -> None:
+    logging.info(f"Arguments: {json.dumps(dataclasses.asdict(args), indent=4)}")
+    if os.getenv("DEBUG", False):
+        start_debugpy_once()
+
+    model = PolicyWarper(
+        policy_ckpt_path=args.pretrained_path, # to get unnormalization stats
+        host=args.host,
+        port=args.port,
+        image_size=args.resize_size,
+        n_action_steps=args.n_action_steps,
     )
+    run_evaluation(
+        env_name=args.env_name,
+        model=model,
+        video_dir=args.video_out_path,
+        n_episodes=args.n_episodes,
+        n_envs=args.n_envs,
+        n_action_steps=args.n_action_steps,
+        max_episode_steps=args.max_episode_steps,
+    )
+
+def start_debugpy_once():
+    import debugpy
+    if getattr(start_debugpy_once, "_started", False):
+        return
+    debugpy.listen(("0.0.0.0", 10092))
+    print("🔍 Waiting for VSCode attach on 0.0.0.0:10092 ...")
+    debugpy.wait_for_client()
+    start_debugpy_once._started = True
+
+if __name__ == "__main__":
+    tyro.cli(eval_gr1_unified)
