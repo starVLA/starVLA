@@ -3,9 +3,16 @@
 <!-- [![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)](https://github.com/starVLA/starVLA) -->
 [![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](assets/starVLA_wechat.jpg)
 
+**[205/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchs with the community!
+
+**[205/12/25]**  We've released RoboCasa evaluation support, which trained **without pretraining and reach SOTA performance**. Check out more details in [examples/Robocasa_tabletop](examples/Robocasa_tabletop).
+
 **[2025/12/15]** Completed a release regression check to ensure the public code runs smoothly. Routine updates—including recent support for the LeRobot dataset v3.0 and DeepSpeed ZeRO-3—will continue to appear in the [🚧 Daily Development Log](https://github.com/starVLA/starVLA/issues/64#issue-3727060165).
 
 **[2025/12/09]** Be the first open-source repository that can train with [train your vlm](starVLA/training/train_starvlm.py), [train your vla](starVLA/training/train_starvla.py), and [train your vla with vlm](starVLA/training/train_starvla_cotrain.py). Check out how to co-train your VLA with multimodal data in [examples/CoTrainVLM](examples/CoTrainVLM/README.md).
+
+<details close>
+<summary><b> Historical Milestones </b></summary>
 
 **[2025/11/12]** We now support [Florence-2](https://github.com/anyantudre/Florence-2-Vision-Language-Model) as a smaller VLM for resource-constrained development. StarVLA can now run on a single A100 GPU. See the [🚀Train with a smaller VLM](#train-smaller-vlm) section for more details. 
 
@@ -14,6 +21,7 @@
 
 **[2025/10/25]:** We fixed several script links and so everything is smoother now. Thanks to the community for the feedback.
 
+</details>
 
 ---
 
@@ -50,7 +58,8 @@ In StarVLA (also a pun on “start VLA” ),  each functional component (model, 
 </p>
 
 
-For dynamic updates, see our [🍀 Overleaf](https://www.overleaf.com/read/qqtwrnprctkf#d5bdce), which continuously presents our real-time experimental results.
+We have more results for RoboCasa, RoboTwin 2.0, Behavior-1k, Calvin. See our [🍀 Overleaf](https://www.overleaf.com/read/qqtwrnprctkf#d5bdce), which continuously presents our real-time experimental results.
+
 
 
 
@@ -79,16 +88,18 @@ We release a series of modified models and finetuning checkpoints to facilitate 
 ---
 </details>
 
-<details close>
+<details open>
 <summary><b>Various Simulation Benchmarks </b></summary>
 
 
 - [x] **SimplerEnV**
 - [x] **LIBERO**
-- [ ] **Robocasa**
+- [x] **Robocasa**
+- [x] **RoboTwin**
+- [x] **BEHAVIOR**
+- [ ] **SO101**
+- [ ] **Calvin**
 - [ ] **RLBench**
-- [ ] **RoboTwin**
-- [ ] **BEHAVIOR**
 
 </details>
 
@@ -101,55 +112,6 @@ We release a series of modified models and finetuning checkpoints to facilitate 
 * [ ] Reinforcement Learning Adaption
 
 </details>
-
----
-
-## 🌟 How does starVLA make model development Lego-like again?
-👇 StarVLA achieves “Lego-like” development via the following designs:
-<a id="model"></a>
-<details close>
-<summary><b>1. Smoke test any submodule </b></summary>
-
-StarVLA emphasizes a modular model design. Each major framework file can be run standalone for rapid debugging and smoke test your code. For example:
-
-```bash
-# model
-python starVLA/model/framework/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
-# dataloader
-python starVLA/dataloader/lerobot_datasets.py --config_yaml starvla_cotrain_oxe.yaml
-
-```
-Note: `starVLA/model/framework/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
-</details>
-<a id="data"></a>
-<details close>
-<summary><b>2. Explicit model boundaries</b></summary>
-
-StarVLA follows top‑down decomposition and the principle of high cohesion & low coupling.
-
-For example:
-- Dataloader
-  - Returns a raw, model‑agnostic dict only; no model‑specific preprocessing (e.g., tokenizer, image encoding).
-  - A single sample should include (add/remove as needed):
-    - image: list[PIL.Image] | np.ndarray
-    - lang: str
-    - action: np.ndarray[T, action_dim]
-    - state: Optional[np.ndarray[..., state_dim]]
-
-Both `framework.forward()` and `framework.predict_action()` operate directly on raw inputs, keeping train/test boundaries explicit and easy to hack.
-</details>
-<a id="config"></a>
-<details close>
-<summary><b>3. Flexible configuration system</b></summary>
-
-StarVLA uses a single global configuration object
-Parameters are passed primarily via extensible dicts, allowing overrides and controlled redundancy.
-
-</details>
-
-
-🧪 *To self‑test and iterate on StarVLA’s usability, we re‑implemented several representative VLA frameworks. Our have done a beta test: an internal developer can stand up a new VLA framework in under half a day (leat then 3 hours), and an new user can build their first custom VLA framework within a single day. More design insights for each item can be found in [assets/intro_v1.md](assets/intro_v1.md).*
-
 
 ---
 
@@ -247,6 +209,57 @@ bash examples/LIBERO/train_files/run_libero_train.sh
 ⚠️ **Note:** Ensure all absolute paths inside `run_libero_train.sh` match your local environment before launching.
 
 </details>
+
+
+
+## 🌟 How does starVLA make model development Lego-like again?
+👇 StarVLA achieves “Lego-like” development via the following designs:
+<a id="model"></a>
+<details close>
+<summary><b>1. Smoke test any submodule </b></summary>
+
+StarVLA emphasizes a modular model design. Each major framework file can be run standalone for rapid debugging and smoke test your code. For example:
+
+```bash
+# model
+python starVLA/model/framework/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
+# dataloader
+python starVLA/dataloader/lerobot_datasets.py --config_yaml starvla_cotrain_oxe.yaml
+
+```
+Note: `starVLA/model/framework/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
+</details>
+<a id="data"></a>
+<details close>
+<summary><b>2. Explicit model boundaries</b></summary>
+
+StarVLA follows top‑down decomposition and the principle of high cohesion & low coupling.
+
+For example:
+- Dataloader
+  - Returns a raw, model‑agnostic dict only; no model‑specific preprocessing (e.g., tokenizer, image encoding).
+  - A single sample should include (add/remove as needed):
+    - image: list[PIL.Image] | np.ndarray
+    - lang: str
+    - action: np.ndarray[T, action_dim]
+    - state: Optional[np.ndarray[..., state_dim]]
+
+Both `framework.forward()` and `framework.predict_action()` operate directly on raw inputs, keeping train/test boundaries explicit and easy to hack.
+</details>
+<a id="config"></a>
+<details close>
+<summary><b>3. Flexible configuration system</b></summary>
+
+StarVLA uses a single global configuration object
+Parameters are passed primarily via extensible dicts, allowing overrides and controlled redundancy.
+
+</details>
+
+
+🧪 *To self‑test and iterate on StarVLA’s usability, we re‑implemented several representative VLA frameworks. Our have done a beta test: an internal developer can stand up a new VLA framework in under half a day (leat then 3 hours), and an new user can build their first custom VLA framework within a single day. More design insights for each item can be found in [assets/intro_v1.md](assets/intro_v1.md).*
+
+
+---
 
 
 ## 📖 FAQ
@@ -397,3 +410,12 @@ This project draws inspiration and references from several notable open-source i
 
 The codebase was originally forked from [InternVLA-M1](https://github.com/InternRobotics/InternVLA-M1).
 
+
+
+# Star History
+Here's how our community has grown over time:
+
+[![Star History Chart](https://api.star-history.com/svg?repos=starVLA/starVLA&type=date&legend=bottom-right)](https://www.star-history.com/#starVLA/starVLA&type=date&legend=bottom-right)
+
+
+<!-- *Chart updates automatically. Click to interact with the full timeline.* -->

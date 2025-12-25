@@ -3,15 +3,20 @@
 # ============================================================
 # Argument Parsing
 # ============================================================
+###########################################################################################
+# === Please modify the paths to Python executables in conda environments ===
 
-# Paths to Python executables in conda environments
-cd /mnt/petrelfs/yejinhui/Projects/starVLA
-
-starVLA_PYTHON=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
-ROBOCASA_PYTHON=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/robocasa/bin/python
+cd ./starVLA
+starVLA_PYTHON=~/miniconda3/envs/starVLA/bin/python
+ROBOCASA_PYTHON=~/miniconda3/envs/robocasa/bin/python
 export PYTHONPATH=$(pwd):${PYTHONPATH}
+CKPT_DEFAULT="StarVLA/Qwen3-VL-OFT-Robocasa/checkpoints/steps_90000_pytorch_model.pt"
 
-CKPT_DEFAULT="/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1221_fourier_gr1_unified_1000_QwenOFT_state_qwen3/checkpoints/steps_90000_pytorch_model.pt"
+
+# === End of environment variable configuration ===
+###########################################################################################
+
+
 N_ENVS_DEFAULT=1
 MAX_EPISODE_STEPS_DEFAULT=720
 N_ACTION_STEPS_DEFAULT=12

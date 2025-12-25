@@ -9,11 +9,15 @@ The evaluation process consists of two main parts:
 We have verified that this workflow runs successfully on **NVIDIA A100** GPUs.  
 
 
-
 # Evaluation
+
+![Eval Videos](https://github.com/user-attachments/assets/a5ff9bdd-b47d-4eb0-95ac-c09556fb4b48)
+
+
 ## ⬇️ 0. Download Checkpoints
 First, download the checkpoints from 
 - [Qwen3VL-GR00T](https://huggingface.co/StarVLA/Qwen3-VL-GR00T-Robocasa-gr1)
+- [Qwen3VL-OFT](https://huggingface.co/StarVLA/Qwen3-VL-OFT-Robocasa)
 
 ## 📦 1. Environment Setup
 
@@ -34,7 +38,6 @@ pip install tyro
 In the first terminal, activate the `starVLA` conda environment and run:  
 
 ```bash
-export DEBUG=true
 python deployment/model_server/server_policy.py \
         --ckpt_path ${your_ckpt} \
         --port 5678 \
@@ -49,11 +52,7 @@ In the second terminal, activate the `robocasa` conda environment and run:
 
 ```bash
 export PYTHONPATH=$(pwd):${PYTHONPATH}
-your_ckpt=results/Checkpoints/1221_fourier_gr1_unified_1000_QwenOFT_state_qwen3/checkpoints/steps_80000_pytorch_model.pt
-env_name=gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env
-video_out_path=results/Checkpoints/1221_fourier_gr1_unified_1000_QwenOFT_state_qwen3/video/steps_80000_pytorch_model.pt
-mkdir -p ${video_out_path}
-export DEBUG=true
+your_ckpt=StarVLA/Qwen3-VL-OFT-Robocasa/checkpoints/steps_90000_pytorch_model.pt
 
 python examples/Robocasa_tabletop/eval_files/simulation_env.py\
    --args.env_name ${env_name} \
@@ -67,48 +66,50 @@ python examples/Robocasa_tabletop/eval_files/simulation_env.py\
 ```
 
 
-### Advance: Batch Evaluation
+### Optional: Batch Evaluation
 
 If you have more GPU, you can use the batch evaluation script:
 ```bash
 bash examples/Robocasa_tabletop/batch_eval_args.sh
 ```
-
-
+⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `batch_eval_args.sh`  
 
 ---
 ## 📊 Experimental Results
-| Environment | GR00T-N1.5 | Qwen3VL-GR00T | Qwen3VL-Pi | Qwen3VL-oft | Qwen3VL-FAST |
-|------------|------------|---------------|------------|-------------|--------------|
-| gr1_unified/PnPBottleToCabinetClose_GR1ArmsAndWaistFourierHands_Env | 0.54 | 0.46 | | **0.52** | |
-| gr1_unified/PnPCanToDrawerClose_GR1ArmsAndWaistFourierHands_Env | 0.50 | 0.16 | | **0.72** | |
-| gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env | 0.38 | 0.18 | | **0.46** | |
-| gr1_unified/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env | 0.60 | 0.52 | | **0.62** | |
-| gr1_unified/PnPPotatoToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env | 0.32 | 0.24 | | **0.30** | |
-| gr1_unified/PnPWineToCabinetClose_GR1ArmsAndWaistFourierHands_Env | 0.38 | 0.22 | | **0.26** | |
-| gr1_unified/PosttrainPnPNovelFromCuttingboardToBasketSplitA_GR1ArmsAndWaistFourierHands_Env | 0.38 | 0.06 | | **0.50** | |
-| gr1_unified/PosttrainPnPNovelFromCuttingboardToCardboardboxSplitA_GR1ArmsAndWaistFourierHands_Env | 0.46 | 0.24 | | **0.48** | |
-| gr1_unified/PosttrainPnPNovelFromCuttingboardToPanSplitA_GR1ArmsAndWaistFourierHands_Env | 0.58 | 0.42 | | **0.62** | |
-| gr1_unified/PosttrainPnPNovelFromCuttingboardToPotSplitA_GR1ArmsAndWaistFourierHands_Env | 0.62 | 0.22 | | **0.52** | |
-| gr1_unified/PosttrainPnPNovelFromCuttingboardToTieredbasketSplitA_GR1ArmsAndWaistFourierHands_Env | 0.28 | 0.38 | | **0.32** | |
-| gr1_unified/PosttrainPnPNovelFromPlacematToBasketSplitA_GR1ArmsAndWaistFourierHands_Env | 0.30 | 0.18 | | **0.38** | |
-| gr1_unified/PosttrainPnPNovelFromPlacematToBowlSplitA_GR1ArmsAndWaistFourierHands_Env | 0.60 | 0.34 | | **0.64** | |
-| gr1_unified/PosttrainPnPNovelFromPlacematToPlateSplitA_GR1ArmsAndWaistFourierHands_Env | 0.56 | 0.26 | | **0.56** | |
-| gr1_unified/PosttrainPnPNovelFromPlacematToTieredshelfSplitA_GR1ArmsAndWaistFourierHands_Env | 0.36 | 0.12 | | **0.22** | |
-| gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env | 0.58 | 0.44 | | **0.44** | |
-| gr1_unified/PosttrainPnPNovelFromPlateToCardboardboxSplitA_GR1ArmsAndWaistFourierHands_Env | 0.44 | 0.10 | | **0.44** | |
-| gr1_unified/PosttrainPnPNovelFromPlateToPanSplitA_GR1ArmsAndWaistFourierHands_Env | 0.60 | 0.34 | | **0.56** | |
-| gr1_unified/PosttrainPnPNovelFromPlateToPlateSplitA_GR1ArmsAndWaistFourierHands_Env | 0.64 | 0.22 | | **0.62** | |
-| gr1_unified/PosttrainPnPNovelFromTrayToCardboardboxSplitA_GR1ArmsAndWaistFourierHands_Env | 0.52 | 0.26 | | **0.50** | |
-| gr1_unified/PosttrainPnPNovelFromTrayToPlateSplitA_GR1ArmsAndWaistFourierHands_Env | 0.48 | 0.12 | | **0.52** | |
-| gr1_unified/PosttrainPnPNovelFromTrayToPotSplitA_GR1ArmsAndWaistFourierHands_Env | 0.60 | 0.16 | | **0.38** | |
-| gr1_unified/PosttrainPnPNovelFromTrayToTieredbasketSplitA_GR1ArmsAndWaistFourierHands_Env | 0.52 | 0.30 | | **0.38** | |
-| gr1_unified/PosttrainPnPNovelFromTrayToTieredshelfSplitA_GR1ArmsAndWaistFourierHands_Env | 0.32 | 0.06 | | **0.18** | |
-| **Average** | **0.48** | **0.25** | | **0.47** | |
 
-All the above tasks are evaluated at 50 rollouts each. 
+
+| Task | GR00T-N1.6 | Qwen3GR00T | Qwen3PI | Qwen3OFT | Qwen3FAST |
+|------|------------|------------|---------|----------|-----------|
+| **PnPBottleToCabinetClose** | 51.5 | | | **30.0** | |
+| **PnPCanToDrawerClose** | 13.0 | | | **76.0** | |
+| **PnPCupToDrawerClose** | 8.5 | | | **44.0** | |
+| **PnPMilkToMicrowaveClose** | 14.0 | | | **44.0** | |
+| **PnPPotatoToMicrowaveClose** | 41.5 | | | **32.0** | |
+| **PnPWineToCabinetClose** | 16.5 | | | **36.0** | |
+| **PnPNovelFromCuttingboardToBasket** | 58.0 | | | **50.0** | |
+| **PnPNovelFromCuttingboardToCardboardbox** | 46.5 | | | **40.0** | |
+| **PnPNovelFromCuttingboardToPan** | 68.5 | | | **70.0** | |
+| **PnPNovelFromCuttingboardToPot** | 65.0 | | | **54.0** | |
+| **PnPNovelFromCuttingboardToTieredbasket** | 46.5 | | | **38.0** | |
+| **PnPNovelFromPlacematToBasket** | 58.5 | | | **32.0** | |
+| **PnPNovelFromPlacematToBowl** | 57.5 | | | **58.0** | |
+| **PnPNovelFromPlacematToPlate** | 63.0 | | | **52.0** | |
+| **PnPNovelFromPlacematToTieredshelf** | 28.5 | | | **24.0** | |
+| **PnPNovelFromPlateToBowl** | 57.0 | | | **60.0** | |
+| **PnPNovelFromPlateToCardboardbox** | 43.5 | | | **50.0** | |
+| **PnPNovelFromPlateToPan** | 51.0 | | | **66.0** | |
+| **PnPNovelFromPlateToPlate** | 78.7 | | | **68.0** | |
+| **PnPNovelFromTrayToCardboardbox** | 51.5 | | | **44.0** | |
+| **PnPNovelFromTrayToPlate** | 71.0 | | | **56.0** | |
+| **PnPNovelFromTrayToPot** | 64.5 | | | **62.0** | |
+| **PnPNovelFromTrayToTieredbasket** | 57.0 | | | **54.0** | |
+| **PnPNovelFromTrayToTieredshelf** | 31.5 | | | **30.0** | |
+| **Average** | **47.6** | | | **48.8** | |
+
+**Note:** A single model was trained for all 24 tasks. Results are reported over 50 rollouts per task (average success rate with 250 rollouts: 48.97%).
 
 ---
+
 
 # 🚀 Reproduce Training Results
 ## 📦 Step0: Download the training dataset
@@ -124,6 +125,6 @@ python examples/Robocasa_tabletop/download_gr00t_ft_data.py
 ## 🚀 Step1: Start Training
 Different datasets can be selected by modifying the parameter `data_mix`, and the following script can be used to fine-tune the `*_1000` datasets:
 ```bash
-bash scripts/run_scripts/Robocasa/run_lerobot_datasets_qwenGR00T.sh
+bash examples/Robocasa_tabletop/train_files/run_robocasa.sh
 ```
 
