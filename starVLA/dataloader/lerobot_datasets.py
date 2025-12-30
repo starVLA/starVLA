@@ -107,11 +107,11 @@ if __name__ == "__main__":
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Rank 0 waiting for debugger attach on port 10092...")
     debugpy.wait_for_client()
-    args.config_yaml = "./examples/Robocasa_tabletop/train_files/starvla_cotrain_robocasa_gr1.yaml"
+    args.config_yaml = "./examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # cfg.datasets.vla_data.data_mix = "robotwin"
     vla_dataset_cfg = cfg.datasets.vla_data
-    cfg.datasets.vla_data.include_state = True
+    # cfg.datasets.vla_data.include_state = True
     vla_dataset_cfg.task_id = 1
     for task_id in ["all"]:
         vla_dataset_cfg.task_id = task_id
@@ -131,11 +131,11 @@ if __name__ == "__main__":
     dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
 
     from tqdm import tqdm
-    count = 10
+    count = 0
     for batch in tqdm(train_dataloader, desc="Processing Batches"):
         # print(batch)
         # print(1)
-        if count > 1:
+        if count > 100:
             break
         count += 1
         pass

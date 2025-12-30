@@ -220,3 +220,4 @@ examples/SimplerEnv/eval_files/eval_scripts
 examples/Robotwin/train_files/submit_robotwin_training.sh
 starVLA/dataloader/gr00t_lerobot/datasets_temp.py
 MUJOCO_LOG.TXT
+examples/MultiRobot/*

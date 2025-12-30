@@ -77,36 +77,42 @@ bash examples/Robocasa_tabletop/batch_eval_args.sh
 ---
 ## 📊 Experimental Results
 
+# RoboCasa GR1 Tabletop Tasks Evaluation Results
 
 | Task | GR00T-N1.6 | Qwen3GR00T | Qwen3PI | Qwen3OFT | Qwen3FAST |
 |------|------------|------------|---------|----------|-----------|
-| **PnPBottleToCabinetClose** | 51.5 | | | **30.0** | |
-| **PnPCanToDrawerClose** | 13.0 | | | **76.0** | |
-| **PnPCupToDrawerClose** | 8.5 | | | **44.0** | |
-| **PnPMilkToMicrowaveClose** | 14.0 | | | **44.0** | |
-| **PnPPotatoToMicrowaveClose** | 41.5 | | | **32.0** | |
-| **PnPWineToCabinetClose** | 16.5 | | | **36.0** | |
-| **PnPNovelFromCuttingboardToBasket** | 58.0 | | | **50.0** | |
-| **PnPNovelFromCuttingboardToCardboardbox** | 46.5 | | | **40.0** | |
-| **PnPNovelFromCuttingboardToPan** | 68.5 | | | **70.0** | |
-| **PnPNovelFromCuttingboardToPot** | 65.0 | | | **54.0** | |
-| **PnPNovelFromCuttingboardToTieredbasket** | 46.5 | | | **38.0** | |
-| **PnPNovelFromPlacematToBasket** | 58.5 | | | **32.0** | |
-| **PnPNovelFromPlacematToBowl** | 57.5 | | | **58.0** | |
-| **PnPNovelFromPlacematToPlate** | 63.0 | | | **52.0** | |
-| **PnPNovelFromPlacematToTieredshelf** | 28.5 | | | **24.0** | |
-| **PnPNovelFromPlateToBowl** | 57.0 | | | **60.0** | |
-| **PnPNovelFromPlateToCardboardbox** | 43.5 | | | **50.0** | |
-| **PnPNovelFromPlateToPan** | 51.0 | | | **66.0** | |
-| **PnPNovelFromPlateToPlate** | 78.7 | | | **68.0** | |
-| **PnPNovelFromTrayToCardboardbox** | 51.5 | | | **44.0** | |
-| **PnPNovelFromTrayToPlate** | 71.0 | | | **56.0** | |
-| **PnPNovelFromTrayToPot** | 64.5 | | | **62.0** | |
-| **PnPNovelFromTrayToTieredbasket** | 57.0 | | | **54.0** | |
-| **PnPNovelFromTrayToTieredshelf** | 31.5 | | | **30.0** | |
-| **Average** | **47.6** | | | **48.8** | |
+| **PnP Bottle To Cabinet Close** | 51.5 | 46.0 | 26.0 | **30.0** | 38.0 |
+| **PnP Can To Drawer Close** | 13.0 | 80.0 | 62.0 | **76.0** | 44.0 |
+| **PnP Cup To Drawer Close** | 8.5 | 54.0 | 42.0 | **44.0** | 56.0 |
+| **PnP Milk To Microwave Close** | 14.0 | 48.0 | 50.0 | **44.0** | 44.0 |
+| **PnP Potato To Microwave Close** | 41.5 | 28.0 | 42.0 | **32.0** | 14.0 |
+| **PnP Wine To Cabinet Close** | 16.5 | 46.0 | 32.0 | **36.0** | 14.0 |
+| | | | | | |
+| **PnP Novel From Cuttingboard To Basket** | 58.0 | 48.0 | 40.0 | **50.0** | 54.0 |
+| **PnP Novel From Cuttingboard To Cardboardbox** | 46.5 | 40.0 | 46.0 | **40.0** | 42.0 |
+| **PnP Novel From Cuttingboard To Pan** | 68.5 | 68.0 | 60.0 | **70.0** | 58.0 |
+| **PnP Novel From Cuttingboard To Pot** | 65.0 | 52.0 | 40.0 | **54.0** | 58.0 |
+| **PnP Novel From Cuttingboard To Tieredbasket** | 46.5 | 56.0 | 44.0 | **38.0** | 40.0 |
+| | | | | | |
+| **PnP Novel From Placemat To Basket** | 58.5 | 42.0 | 44.0 | **32.0** | 36.0 |
+| **PnP Novel From Placemat To Bowl** | 57.5 | 44.0 | 52.0 | **58.0** | 38.0 |
+| **PnP Novel From Placemat To Plate** | 63.0 | 48.0 | 50.0 | **52.0** | 42.0 |
+| **PnP Novel From Placemat To Tieredshelf** | 28.5 | 18.0 | 28.0 | **24.0** | 18.0 |
+| | | | | | |
+| **PnP Novel From Plate To Bowl** | 57.0 | 60.0 | 52.0 | **60.0** | 52.0 |
+| **PnP Novel From Plate To Cardboardbox** | 43.5 | 50.0 | 40.0 | **50.0** | 30.0 |
+| **PnP Novel From Plate To Pan** | 51.0 | 54.0 | 36.0 | **66.0** | 48.0 |
+| **PnP Novel From Plate To Plate** | 78.7 | 70.0 | 48.0 | **68.0** | 50.0 |
+| | | | | | |
+| **PnP Novel From Tray To Cardboardbox** | 51.5 | 38.0 | 34.0 | **44.0** | 28.0 |
+| **PnP Novel From Tray To Plate** | 71.0 | 56.0 | 64.0 | **56.0** | 34.0 |
+| **PnP Novel From Tray To Pot** | 64.5 | 50.0 | 44.0 | **62.0** | 46.0 |
+| **PnP Novel From Tray To Tieredbasket** | 57.0 | 36.0 | 50.0 | **54.0** | 36.0 |
+| **PnP Novel From Tray To Tieredshelf** | 31.5 | 16.0 | 28.0 | **30.0** | 16.0 |
+| | | | | | |
+| **Average** | **47.6** | **47.8** | **43.9** | **48.8** | **39.0** |
 
-**Note:** A single model was trained for all 24 tasks. Results are reported over 50 rollouts per task (average success rate with 250 rollouts: 48.97%).
+*Note: All values are success rates in percentage (%). A single model was trained for all 24 tasks. Results are reported over 50 rollouts per task.*
 
 ---
 

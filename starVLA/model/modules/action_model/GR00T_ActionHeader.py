@@ -322,7 +322,7 @@ class FlowmatchingActionHead(nn.Module):
         # Set initial actions as the sampled noise.
         batch_size = vl_embs.shape[0]
         device = vl_embs.device
-        actions = torch.randn(
+        actions = torch.randn( # yes, here make sure action_horizon align with data loader? or share from clinet?
             size=(batch_size, self.config.action_horizon, self.config.action_dim),
             dtype=vl_embs.dtype,
             device=device,

@@ -20,6 +20,7 @@ from typing import Tuple
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import time
+import re
 
 # Third-Party Libraries
 import torch
@@ -143,19 +144,17 @@ class VLATrainer(TrainerUtils):
         # training status tracking
         self.completed_steps = 0
         self.total_batch_size = self._calculate_total_batch_size()
-
+    
     def prepare_training(self):
         rank = dist.get_rank() if dist.is_initialized() else 0
         seed = self.config.seed + rank if hasattr(self.config, "seed") else rank + 3047
         set_seed(seed)
 
         # load pretrained weights
-        if hasattr(self.config.trainer, "pretrained_checkpoint") and self.config.trainer.pretrained_checkpoint:
-            pretrained_checkpoint = self.config.trainer.pretrained_checkpoint
-            reload_modules = (
-                self.config.trainer.reload_modules if hasattr(self.config.trainer, "reload_modules") else None
-            )
-            self.model = self.load_pretrained_backbones(self.model, pretrained_checkpoint, reload_modules=reload_modules)
+        self._init_checkpointing() # TODO merge with load pretrained weights
+
+        # 根据  resume 调整 lr_scheduler
+        self._adjust_lr_scheduler_for_resume()
 
         # freeze parameters
         freeze_modules = (
@@ -174,11 +173,25 @@ class VLATrainer(TrainerUtils):
             self.model,
             self.optimizer,
             self.vla_train_dataloader,
-            # self.vlm_train_dataloader
         )
 
         self._init_wandb()
-        self._init_checkpointing()
+
+
+    def _adjust_lr_scheduler_for_resume(self):
+        """根据已完成的步数调整学习率调度器状态"""
+        if self.completed_steps > 0:
+            logger.info(f"Adjusting LR scheduler for resume from step {self.completed_steps}")
+            
+            # 方法1: 直接模拟已完成的步数（适用于大多数调度器）
+            for _ in range(self.completed_steps):
+                self.lr_scheduler.step()
+            
+            # 或者方法2: 对于某些调度器，可以直接设置最后步数
+            # if hasattr(self.lr_scheduler, '_step_count'):
+            #     self.lr_scheduler._step_count = self.completed_steps
+            
+            logger.info(f"LR scheduler adjusted to step {self.completed_steps}, current LR: {self.lr_scheduler.get_last_lr()}")
 
     def _calculate_total_batch_size(self):
         """calculate global batch size"""
@@ -200,16 +213,43 @@ class VLATrainer(TrainerUtils):
             )
 
     def _init_checkpointing(self):
-        """initialize checkpoint directory"""
+        """Initialize checkpoint directory and handle checkpoint loading."""
         self.checkpoint_dir = os.path.join(self.config.output_dir, "checkpoints")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
+        # 获取预训练检查点和是否恢复训练的标志
         pretrained_checkpoint = getattr(self.config.trainer, "pretrained_checkpoint", None)
         is_resume = getattr(self.config.trainer, "is_resume", False)
+        self.resume_from_checkpoint = pretrained_checkpoint
+        # TODO retinking resume and load from pretrained_checkpoint
+        if is_resume:
+            # 恢复训练状态
+            resume_from_checkpoint, self.completed_steps = self._get_latest_checkpoint(self.checkpoint_dir)
+            
+            if resume_from_checkpoint:
+                self.resume_from_checkpoint = resume_from_checkpoint
+                self.model = self.load_pretrained_backbones(self.model, self.resume_from_checkpoint, reload_modules=None)
+                logger.info(f"Resuming training from checkpoint: {self.resume_from_checkpoint}, steps: {self.completed_steps}")
+                return None
+            else:
+                logger.warning(f"No valid checkpoint found in {self.checkpoint_dir}. Starting training from scratch.")
+                self.completed_steps = 0
 
-        # resume train ckpt
-        if pretrained_checkpoint and is_resume:
-            self._load_checkpoint(self.config.resume_from_checkpoint)
+        # 加载预训练权重
+        if pretrained_checkpoint:
+            reload_modules = getattr(self.config.trainer, "reload_modules", None)
+            self.model = self.load_pretrained_backbones(self.model, pretrained_checkpoint, reload_modules=reload_modules)
+            try:
+                self.completed_steps = int(re.search(r"steps_(\d+)_pytorch_model\.pt", pretrained_checkpoint).group(1))
+            except AttributeError:
+                logger.warning(f"Could not parse steps from pretrained checkpoint: {pretrained_checkpoint}")
+                self.completed_steps = 0
+            self.resume_from_checkpoint = pretrained_checkpoint
+            logger.info(f"Loaded pretrained checkpoint: {pretrained_checkpoint}, steps: {self.completed_steps}")
+        else:
+            logger.info("No pretrained checkpoint provided. Starting training from scratch.")
+            self.completed_steps = 0
+    
 
     def _load_checkpoint(self, checkpoint_path):
         """load checkpoint"""

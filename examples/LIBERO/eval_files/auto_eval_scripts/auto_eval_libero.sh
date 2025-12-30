@@ -2,8 +2,8 @@
 
 cd /mnt/petrelfs/yejinhui/Projects/starVLA
 SCRIPT_PATH="./examples/LIBERO/eval_files/auto_eval_scripts/eval_libero_parall.sh"
-your_ckpt=./results/Checkpoints/1208_libero_all_QwenPI_qwen2/checkpoints/steps_60000_pytorch_model.pt
-run_index_base=292
+your_ckpt=/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1226_libero4in1_qwen3oft/checkpoints/steps_50000_pytorch_model.pt
+run_index_base=346
 
 #####################################################
 task_suite_name=libero_10 # align with your model

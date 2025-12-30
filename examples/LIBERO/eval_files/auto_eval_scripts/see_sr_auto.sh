@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 指定日志文件的根目录
-log_dir="results/Checkpoints/1025_libero4in1_qwenfast"
+log_dir="results/Checkpoints/1226_libero4in1_qwen3oft"
 
 # 遍历指定目录下的所有日志文件
 last_Folder=""

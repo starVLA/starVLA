@@ -914,8 +914,8 @@ ROBOT_TYPE_CONFIG_MAP = {
     "demo_sim_franka_delta_joints": SingleFrankaRobotiqDeltaJointsDataConfig(),
     "arx_x5": ArxX5DataConfig(),
     "robotwin": AgilexDataConfig(),
-
-    "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
     "fourier_gr1_arms_waist": FourierGr1ArmsWaistDataConfig(),
+    
+    "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
 }
 

@@ -1646,15 +1646,15 @@ class LeRobotMixtureDataset(Dataset):
         for attempt in range(max_retries):
             try:
                 while True: # @DUG
-                    dataset, trajectory_name, step = self.sample_step(index)
+                    dataset, trajectory_id, step = self.sample_step(index)
                     key = dataset.modality_keys["video"][0].replace("video.", "")
-                    video_path = dataset.get_video_path(trajectory_name, key)
+                    video_path = dataset.get_video_path(trajectory_id, key)
                     if os.path.exists(video_path):
                         break
                     index = random.randint(0, len(self) - 1)
                     
-                    
-                data = dataset.transforms(dataset.get_step_data(trajectory_name, step))
+                raw_data = dataset.get_step_data(trajectory_id, step)    
+                data = dataset.transforms(raw_data)
                 
                 # Process all video keys dynamically
                 prim_images = []

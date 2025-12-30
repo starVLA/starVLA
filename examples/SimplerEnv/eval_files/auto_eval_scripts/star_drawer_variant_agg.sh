@@ -221,7 +221,15 @@ for ckpt_path in "${ckpt_paths[@]}"; do
 done
 
 
-stop_all_services
+# stop_all_services
 # wait
-echo "✅ All evaluations completed"
+# echo "✅ All evaluations completed"
+
+
+# 判断是否还有 评测的sim 在跑
+while pgrep -f "examples/SimplerEnv/eval_files/start_simpler_env.py" > /dev/null; do
+    echo "Waiting for all evaluation environments to finish..."
+    sleep 300
+done
+
 

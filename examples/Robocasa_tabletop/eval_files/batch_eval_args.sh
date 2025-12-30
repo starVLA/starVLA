@@ -17,9 +17,16 @@ CKPT_DEFAULT="StarVLA/Qwen3-VL-OFT-Robocasa/checkpoints/steps_90000_pytorch_mode
 ###########################################################################################
 
 
+<<<<<<< HEAD
+=======
+CKPT_DEFAULT="results/Checkpoints/1224_fourier_gr1_unified_1000_QwenPI_v2_state_qwen3/checkpoints/steps_180000_pytorch_model.pt"
+>>>>>>> [feat] fastnresume training | more results on robocasa
 N_ENVS_DEFAULT=1
 MAX_EPISODE_STEPS_DEFAULT=720
 N_ACTION_STEPS_DEFAULT=12
+
+BASE_PORT=6398
+NUM_GPUS=8
 
 # Parse command-line arguments
 CKPT_PATH=${1:-$CKPT_DEFAULT}
@@ -61,7 +68,7 @@ EvalEnv() {
     ${ROBOCASA_PYTHON} examples/Robocasa_tabletop/eval_files/simulation_env.py \
         --args.env_name "${ENV_NAME}" \
         --args.port "${PORT}" \
-        --args.n_episodes 200 \
+        --args.n_episodes 50 \
         --args.n_envs "${N_ENVS}" \
         --args.max_episode_steps "${MAX_EPISODE_STEPS}" \
         --args.n_action_steps "${N_ACTION_STEPS}" \
@@ -105,8 +112,7 @@ ENV_NAMES=(
 # Runtime Configuration
 # ============================================================
 
-BASE_PORT=5478
-NUM_GPUS=8
+
 
 LOG_DIR="${CKPT_PATH}.log/eval_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "${LOG_DIR}"

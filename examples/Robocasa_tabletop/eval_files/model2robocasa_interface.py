@@ -130,7 +130,7 @@ class PolicyWarper:
             example = {
                 "image": images[b],  # A list of multi-view images for a single sample
                 "lang": instructions[b] if isinstance(instructions, list) else instructions,
-                "state": input_state[b],  # N_history, 58
+                "state": input_state[b],  # N_history, 58 #Hack BUG
             }
             examples.append(example)
         
