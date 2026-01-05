@@ -1,0 +1,12 @@
+policy_name: starVLA
+task_name: null
+task_config: null
+ckpt_setting: null
+seed: null
+instruction_type: unseen
+
+# StarVLA Client Parameters
+host: "127.0.0.1"
+port: 5694
+policy_ckpt_path: "/mnt/data/gaoning/code_repos/starVLA/results/Checkpoints/robotwin2/QwenPI-noState/checkpoints/steps_60000_pytorch_model.pt"
+unnorm_key: "robotwin"
