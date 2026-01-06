@@ -18,7 +18,7 @@ def get_args():
         default="rt1",
         help="Policy model type; e.g., 'rt1', 'octo-base', 'octo-small'",
     )
-    parser.add_argument("--policy-setup", type=str, default="franka", help="Policy setup")
+    parser.add_argument("--policy-setup", type=str, default="R1Pro", help="Policy setup")
     parser.add_argument("--ckpt-path", type=str, default=None)
 
     parser.add_argument("--eval-on-train-instances", type=lambda x: x.lower() == "true",default=True)
@@ -31,7 +31,8 @@ def get_args():
     parser.add_argument("--write-video", type=bool, default=True, help="Whether to save videos of the evaluation")
     parser.add_argument("--task-name", type=str, required=True, help="Task name")
     parser.add_argument("--eval-instance-ids", type=str, default=None, help="Instance ids to evaluate on, if None, evaluate on all instances")
-    parser.add_argument("--behaviro-data-path", type=str, required=True, help="2025-challenge-task-instances data path")
+    parser.add_argument("--behavior-tasks-jsonl-path", type=str, required=True, help="behavior tasks jsonl path")
+    parser.add_argument("--behavior-asset-path", type=str, required=True, help="parent path of 2025-challenge-task-instances data path (default to be BEHAVIOR-1k/datasets)")
     parser.add_argument("--partial-scene-load", type=bool, default=False, help="Whether to only load task-relevant rooms for a specific task")
     parser.add_argument("--wrappers", type=str, default="RGBLowResWrapper",choices=["RGBLowResWrapper", "DefaultWrapper", "RichObservationWrapper"], help="List of wrappers to apply to the environment")
     parser.add_argument("--max-steps", type=int, default=None, help="Max steps per rollout episode, setting to null will use the default value (2 x average human demo completion steps)")

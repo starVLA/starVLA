@@ -1,10 +1,7 @@
 import os
 
-# from IPython import embed; embed()
 from examples.Behavior.custom_argparse import get_args
-# from examples.Behavior.model2behavior_interface_depth import M1Inference
-# from examples.Behavior.model2behavior_interface import M1Inference
-from examples.Behavior.model2behavior_interface_hack import M1Inference
+from examples.Behavior.model2behavior_interface import M1Inference
 
 from omnigibson.learning.eval import Evaluator
 from omnigibson.macros import gm
@@ -61,7 +58,7 @@ if __name__ == "__main__":
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
     # Load task description from tasks.jsonl using task_name
-    task_description = load_task_description(args.task_name,tasks_jsonl_path=os.path.join(args.behaviro_data_path, "meta", "tasks.jsonl"))
+    task_description = load_task_description(args.task_name,tasks_jsonl_path=args.behavior_tasks_jsonl_path)
     logger.info(f"Loaded task description for '{args.task_name}': {task_description}")
 
     model = M1Inference(
@@ -76,8 +73,8 @@ if __name__ == "__main__":
     # set headless mode
     gm.HEADLESS = args.headless
 
-    # Set behavior data path, should be set to the path to the 2025-challenge-task-instances folder
-    gm.DATA_PATH = args.behaviro_data_path
+    # Set behavior data path, should be set to the path to the datasets folder under BEHAVIOR-1k
+    gm.DATA_PATH = args.behavior_asset_path
     # set video path
     if args.write_video:
         video_path = Path(args.logging_dir).expanduser() / "videos"
@@ -130,9 +127,7 @@ if __name__ == "__main__":
         "max_steps": args.max_steps,
         "write_video": args.write_video,
         "model": {
-            # "_target_": "examples.Behavior.model2behavior_interface_depth.M1Inference", 
-            # "_target_": "examples.Behavior.model2behavior_interface.M1Inference", 
-            "_target_": "examples.Behavior.model2behavior_interface_hack.M1Inference", 
+            "_target_": "examples.Behavior.model2behavior_interface.M1Inference", 
             "policy_ckpt_path": args.ckpt_path,
             "policy_setup": args.policy_setup,
             "port": args.port,
@@ -166,6 +161,7 @@ if __name__ == "__main__":
                     metric.start_callback(evaluator.env)
                 while not done:
                     terminated, truncated = evaluator.step()
+                    
                     if terminated or truncated:
                         done = True
                     if config.write_video:
