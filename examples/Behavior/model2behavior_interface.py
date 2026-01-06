@@ -10,11 +10,10 @@ from datetime import datetime
 from transforms3d.euler import euler2axangle
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 
-from examples.SimplerEnv.adaptive_ensemble import AdaptiveEnsembler
+from examples.Behavior.adaptive_ensemble import AdaptiveEnsembler, ChunkedAdaptiveEnsembler
 from pathlib import Path
 
 from starVLA.model.tools import read_mode_config 
-# from starVLA.model.framework.base_framework import baseframework
 
 # Import BEHAVIOR-specific utilities
 from omnigibson.learning.utils.eval_utils import ROBOT_CAMERA_NAMES, PROPRIOCEPTION_INDICES
@@ -33,7 +32,7 @@ class M1Inference:
     def __init__(
         self,
         policy_ckpt_path,
-        policy_setup: str = "franka",
+        policy_setup: str = "R1Pro",
         horizon: int = 0,
         action_ensemble_horizon: Optional[int] = None,
         image_size: list[int] = [224, 224],
@@ -52,10 +51,12 @@ class M1Inference:
         # build client to connect server policy
         self.client = WebsocketClientPolicy(host, port)
 
+        action_ensemble = True
+
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         
-        # Set up policy configuration based on setup type
-        if policy_setup == "franka":
+        # Robot type for BEHAVIOR
+        if policy_setup == "R1Pro":
             unnorm_key = "R1Pro" 
             if action_ensemble_horizon is None:
                 action_ensemble_horizon = 5  
@@ -86,11 +87,18 @@ class M1Inference:
         self.sticky_gripper_action = 0.0
         self.previous_gripper_action = None
 
+        # initial
+        self.action_chunk_size = 2
+        self.current_step = 0
+
         # Task and image history
         self.task_description = task_description
         self.image_history = deque(maxlen=self.horizon)
         if self.action_ensemble:
-            self.action_ensembler = AdaptiveEnsembler(self.action_ensemble_horizon, self.adaptive_ensemble_alpha)
+            if self.action_chunk_size > 1:
+                self.action_ensembler = ChunkedAdaptiveEnsembler(self.action_ensemble_horizon, self.action_chunk_size, self.adaptive_ensemble_alpha)
+            else:
+                self.action_ensembler = AdaptiveEnsembler(self.action_ensemble_horizon, self.adaptive_ensemble_alpha)
         else:
             self.action_ensembler = None
         self.num_image_history = 0
@@ -98,94 +106,27 @@ class M1Inference:
         # Load action normalization stats
         self.action_norm_stats = self.get_action_stats(self.unnorm_key, policy_ckpt_path=policy_ckpt_path)
         
-        # Robot type for BEHAVIOR
-        self.robot_type = "R1Pro"
-        
-        # TODO:DEBUG: Image saving configuration
-        self.images_saved = False
-        self.image_save_dir = Path("/cpfs/user/wangfangjing/repos/starVLA/results/Images")
-        self.image_save_dir.mkdir(parents=True, exist_ok=True)
-
         self.use_state = use_state
 
-        if os.getenv("DEBUG", False):
-            start_debugpy_once()
-
-        self.action_chunk_size = 20
-        self.current_step = 0
-
-    def _add_image_to_history(self, image: np.ndarray) -> None:
-        self.image_history.append(image)
-        self.num_image_history = min(self.num_image_history + 1, self.horizon)
-
-    def _save_images_once(self, full_image, left_wrist_image, right_wrist_image) -> None:
-        """Save the three camera images once during execution."""
-        if not self.images_saved:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            # Convert images to numpy arrays if they aren't already
-            if not isinstance(full_image, np.ndarray):
-                full_image = np.array(full_image)
-            if not isinstance(left_wrist_image, np.ndarray):
-                left_wrist_image = np.array(left_wrist_image)
-            if not isinstance(right_wrist_image, np.ndarray):
-                right_wrist_image = np.array(right_wrist_image)
-            
-            # Ensure images are in the correct format (uint8, 0-255 range)
-            if full_image.dtype != np.uint8:
-                if full_image.max() <= 1.0:
-                    full_image = (full_image * 255).astype(np.uint8)
-                else:
-                    full_image = full_image.astype(np.uint8)
-            
-            if left_wrist_image.dtype != np.uint8:
-                if left_wrist_image.max() <= 1.0:
-                    left_wrist_image = (left_wrist_image * 255).astype(np.uint8)
-                else:
-                    left_wrist_image = left_wrist_image.astype(np.uint8)
-                    
-            if right_wrist_image.dtype != np.uint8:
-                if right_wrist_image.max() <= 1.0:
-                    right_wrist_image = (right_wrist_image * 255).astype(np.uint8)
-                else:
-                    right_wrist_image = right_wrist_image.astype(np.uint8)
-            
-            # Save full image (head camera)
-            full_image_path = self.image_save_dir / f"full_image_{timestamp}.png"
-            cv.imwrite(str(full_image_path), cv.cvtColor(full_image, cv.COLOR_RGB2BGR))
-            print(f"Saved full image to: {full_image_path}")
-            
-            # Save left wrist image
-            left_wrist_path = self.image_save_dir / f"left_wrist_image_{timestamp}.png"
-            cv.imwrite(str(left_wrist_path), cv.cvtColor(left_wrist_image, cv.COLOR_RGB2BGR))
-            print(f"Saved left wrist image to: {left_wrist_path}")
-            
-            # Save right wrist image
-            right_wrist_path = self.image_save_dir / f"right_wrist_image_{timestamp}.png"
-            cv.imwrite(str(right_wrist_path), cv.cvtColor(right_wrist_image, cv.COLOR_RGB2BGR))
-            print(f"Saved right wrist image to: {right_wrist_path}")
-            
-            self.images_saved = True
+        # If want to debug, uncomment the following line
+        # if os.getenv("DEBUG", False):
+        #     start_debugpy_once()
 
     def reset(self, task_description: Optional[str] = None) -> None:
         if task_description is not None:
             self.task_description = task_description
-        self.image_history.clear()
         if self.action_ensemble:
             self.action_ensembler.reset()
-        self.num_image_history = 0
 
         self.sticky_action_is_on = False
         self.gripper_action_repeat = 0
         self.sticky_gripper_action = 0.0
         self.previous_gripper_action = None
-        
-        # Reset image saving flag for new episode
-        self.images_saved = False
+        self.current_step = 0
 
     def _generate_prop_state(self, proprio: np.ndarray) -> np.ndarray:
         """Generate proprioceptive state for R1Pro robot.""" 
-        idx = PROPRIOCEPTION_INDICES[self.robot_type]
+        idx = PROPRIOCEPTION_INDICES[self.policy_setup]
         qpos_list = [
             proprio[idx["joint_qpos_sin"]][6:],  # First 6 are base joints, which is NOT allowed in standard track
             proprio[idx["joint_qpos_cos"]][6:],  # First 6 are base joints, which is NOT allowed in standard track
@@ -198,32 +139,20 @@ class M1Inference:
         """Process BEHAVIOR observations to extract images and proprioception."""
         # Extract images from different camera views
         try:
-            head_camera_key = ROBOT_CAMERA_NAMES[self.robot_type]["head"] + "::rgb"
-            left_wrist_camera_key = ROBOT_CAMERA_NAMES[self.robot_type]["left_wrist"] + "::rgb"
-            right_wrist_camera_key = ROBOT_CAMERA_NAMES[self.robot_type]["right_wrist"] + "::rgb"
-            
-            # print(f"Available observation keys: {list(obs.keys())}")
-            # print(f"Looking for head camera: {head_camera_key}")
-            # print(f"Looking for left wrist camera: {left_wrist_camera_key}")
-            # print(f"Looking for right wrist camera: {right_wrist_camera_key}")
+            head_camera_key = ROBOT_CAMERA_NAMES[self.policy_setup]["head"] + "::rgb"
+            left_wrist_camera_key = ROBOT_CAMERA_NAMES[self.policy_setup]["left_wrist"] + "::rgb"
+            right_wrist_camera_key = ROBOT_CAMERA_NAMES[self.policy_setup]["right_wrist"] + "::rgb"
             
             full_image = obs[head_camera_key][:, :, :3]  # [224, 224, 3]
             left_wrist_image = obs[left_wrist_camera_key][:, :, :3]  # [224, 224, 3]
             right_wrist_image = obs[right_wrist_camera_key][:, :, :3]  # [224, 224, 3]
             prop_state = self._generate_prop_state(obs["robot_r1::proprio"])  
-            
-            # print(f"Extracted full_image shape: {full_image.shape}, dtype: {full_image.dtype}")
-            # print(f"Extracted left_wrist_image shape: {left_wrist_image.shape}, dtype: {left_wrist_image.dtype}")
-            # print(f"Extracted right_wrist_image shape: {right_wrist_image.shape}, dtype: {right_wrist_image.dtype}")
-            
+                        
         except KeyError as e:
             print(f"Error extracting observations: {e}")
             print(f"Available keys in obs: {list(obs.keys())}")
             raise
         
-        # Save images once during execution
-        self._save_images_once(full_image, left_wrist_image, right_wrist_image)
-
         # Resize images to policy input size
         full_image = self._resize_image(full_image)
         left_wrist_image = self._resize_image(left_wrist_image)
@@ -260,8 +189,6 @@ class M1Inference:
         else:
             image_input = [primary_image, left_wrist_image, right_wrist_image]
             wrist_image_input = None
-        # Add to image history
-        self._add_image_to_history(primary_image)
         
         # Get task description from environment if not already set
         if self.task_description is None:
@@ -299,14 +226,9 @@ class M1Inference:
         # Get action from websocket server
         action_chunk_size = self.action_chunk_size
         if self.current_step % action_chunk_size == 0:
+            if self.current_step % 100 == 0:
+                print('Step:', self.current_step)
             response = self.client.infer(vla_input)
-            
-            # # Debug the response structure
-            # print(f"Websocket response type: {type(response)}")
-            # print(f"Websocket response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}")
-            # if isinstance(response, dict):
-            #     for key, value in response.items():
-            #         print(f"Response[{key}]: {type(value)} - {value if not isinstance(value, (dict, list)) else 'complex object'}")
             
             # Check if the response indicates an error
             if response.get("ok", True) == False or response.get("status") == "error":
@@ -332,15 +254,18 @@ class M1Inference:
                 normalized_actions=normalized_actions, 
                 action_norm_stats=self.action_norm_stats
             )
-            # print(f"raw_actions shape before ensemble: {raw_actions.shape}") #(16, 23), 16 is action chunking
 
             # Apply action ensembling if enabled
-            # if self.action_ensemble:
-            #     raw_actions = self.action_ensembler.ensemble_action(raw_actions)[None]
+            if self.action_ensemble and action_chunk_size > 1:
+                self.action_ensembler.ensemble_action(self.raw_actions)
             
-        # print(f"raw_actions shape after ensemble: {raw_actions.shape}") #(1,23)
-
-        raw_actions = self.raw_actions[self.current_step % action_chunk_size][None]
+        if self.action_ensemble:
+            if action_chunk_size == 1:
+                raw_actions = self.action_ensembler.ensemble_action(self.raw_actions)[None]
+            else:
+                raw_actions = self.action_ensembler.step()[None]
+        else:
+            raw_actions = self.raw_actions[self.current_step % action_chunk_size][None]
         self.current_step += 1
 
         # Process raw actions for BEHAVIOR environment
@@ -415,7 +340,6 @@ class M1Inference:
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)
         
-        # unnorm_key = baseframework._check_unnorm_key(norm_stats, unnorm_key)
         return norm_stats[unnorm_key]["action"]
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
@@ -423,7 +347,6 @@ class M1Inference:
         
         image = image.numpy()
                                         
-        # print(f"Resizing image from {image.shape} to {self.image_size}")
         image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)
         return image
 
