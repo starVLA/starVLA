@@ -1,7 +1,7 @@
 # StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing
 
 <!-- [![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)](https://github.com/starVLA/starVLA) -->
-[![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](assets/starVLA_wechat.jpg)
+[![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845)
 
 **[205/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchs with the community!
 
