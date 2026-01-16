@@ -405,10 +405,16 @@ StarVLA is released under the MIT License, which permits commercial use, modific
 
 ```
 @misc{starvla2025,
-  title  = {StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
-  author = {starVLA Community},
-  url = {https://github.com/starVLA/starVLA}
-  year   = {2025}
+  title        = {StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
+  author       = {starVLA Contributors},
+  year         = {2025},
+  month        = {1},
+  version      = {1.2.0},
+  url          = {https://github.com/starVLA/starVLA},
+  doi          = {10.5281/zenodo.18264214},
+  howpublished = {GitHub repository},
+  publisher    = {GitHub},
+  keywords     = {vision-language-action, robot-learning, modular-framework}
 }
 ```
 
