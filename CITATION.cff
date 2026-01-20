@@ -1,16 +1,28 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
 cff-version: 1.2.0
-message: "If you use StarVLA, please cite it using the following metadata."
-title: "StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing"
+title: >-
+  StarVLA: A Lego-like Codebase for Vision-Language-Action
+  Model Developing
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
 authors:
-  - name: "starVLA Community"
-version: 1.2.0
-date-released: 2026-01-15
-url: "https://github.com/starVLA/starVLA"
-repository-code: "https://github.com/starVLA/starVLA"
-doi: "10.5281/zenodo.18264214"
-license: MIT
+  - name: starVLA Community
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.18264214
+repository-code: 'https://github.com/starVLA/starVLA'
+url: 'https://starvla.github.io/'
+abstract: >-
+  A modular, Lego-like codebase for developing
+  Vision-Language-Action models.
 keywords:
-  - "vision-language-action"
-  - "robot-learning"
-  - "modular-framework"
-abstract: "A modular, Lego-like codebase for developing Vision-Language-Action models."
+  - vision-language-action
+  - robot-learning
+  - modular-framework
+license: MIT
+version: 1.2.0
+date-released: '2026-01-15'
