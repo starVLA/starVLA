@@ -15,6 +15,9 @@ def get_vlm_model(config):
     elif "florence" in vlm_name.lower(): # temp for some ckpt
         from .Florence2 import _Florence_Interface 
         return _Florence_Interface(config)
+    elif "cosmos-reason2" in vlm_name.lower():
+        from .CosmosReason2 import _CosmosReason2_Interface
+        return _CosmosReason2_Interface(config)
     else:
         raise NotImplementedError(f"VLM model {vlm_name} not implemented")
 
