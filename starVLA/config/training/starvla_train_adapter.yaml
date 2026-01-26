@@ -9,29 +9,38 @@ is_debug: false
 framework:
   name: QwenAdapter
   qwenvl:
-    base_vlm: /path/to/your/qwen_vl_base_checkpoint
+    base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct-Action
     attn_implementation: flash_attention_2
-    vl_hidden_dim: 2048
+    vl_hidden_dim: 2048 # 2b while 2560 # fit qwen3-vl-4b
+  dino:
+    dino_backbone: dinov2_vits14
   action_model:
     action_model_type: VLA-Adapter
-    hidden_dim: 2048
-    action_dim: 14
-    state_dim: 14
+    hidden_dim: 2048 # fit for 2b 2560 # fit qwen3-vl-4b
+    action_dim: 7 # libero specific action dim
+    state_dim: 14 # no proprio for libero though
     action_query_num: 64
     use_pro_version: true  # use the pro version of MLPResNet
-    use_proprio: false
+    use_proprio: false # no proprio for libero
     phase: Training
-    num_actions_chunk: 16
+    num_actions_chunk: 8 # ! libero specific action chunk 
+    future_action_window_size: 7 # ! not quite sure why this is num_actions_chunk -1
+  reduce_in_full_precision: true
 
 
 datasets:
   vla_data:
     dataset_py: lerobot_datasets
-    data_root_dir: path/to/train_data
-    data_mix: train_data
-    per_device_batch_size: 16
-    num_workers: 16
+    data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
+    data_mix: libero_all # libero_goal
     action_type: delta_qpos
+    CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
+    CoT_answer: bbox
+    default_image_resolution: [3, 224, 224]
+    per_device_batch_size: 16
+    load_all_data_for_training: true
+    obs: ["image_0"]
+    video_backend: torchvision_av
 
 
 trainer:
@@ -39,26 +48,25 @@ trainer:
   max_train_steps: 100000
   num_warmup_steps: 5000
   save_interval: 5000
-  # save_interval: 5
   eval_interval: 100
   learning_rate:
-    base: 2.5e-05
-    qwen_vl_interface: 1.0e-05
+    base: 2.0e-05  # Changed from 2.5e-05 (VLA-Adapter uses 2e-5)
+    qwen_vl_interface: 2.0e-05  # Align with base lr (VLA-Adapter doesn't differentiate)
     action_model: 1.0e-04
-  lr_scheduler_type: cosine_with_min_lr
+  lr_scheduler_type: constant  # Changed from cosine_with_min_lr (VLA-Adapter uses "constant")
   scheduler_specific_kwargs:
     min_lr: 1.0e-06
   freeze_modules: ''
   loss_scale:
     vla: 1.0
-    vlm: 0.1
+    vlm: 1.0 # Increased from 0.1 to 1.0 for VLA-Adapter, for the action query learning
   max_grad_norm: 1.0
   warmup_ratio: 0.1
   weight_decay: 0.0
   logging_frequency: 10
   gradient_clipping: 1.0
   gradient_accumulation_steps: 1
-  pretrained_checkpoint: "your pretrained checkpoint path"
+
   optimizer:
     name: AdamW
     betas: [0.9, 0.95]
@@ -71,3 +79,4 @@ trainer:
   resume_step: null
   enable_gradient_checkpointing: true
   enable_mixed_precision_training: true
+
