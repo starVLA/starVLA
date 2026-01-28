@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
+from deployment.model_server.tools.image_tools import to_pil_preserve
 
 
 from starVLA.training.trainer_utils import initialize_overwatch
@@ -26,18 +27,23 @@ IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.modules.vlm import get_vlm_model
-from starVLA.model.modules.action_model.VLA_AdapterHeader import get_action_model, L1RegressionActionHead
+from starVLA.model.modules.action_model.VLA_AdapterHeader import get_action_model, VLA_Adapter_L1RegressionActionHead
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.model.modules.vlm.QWen3 import IMAGE_TOKEN_INDEX, VIDEO_TOKEN_INDEX
 
 def get_image_token_counts(batch_inputs):
-    IMAGE_TOKEN_ID = 151655 
+    IMAGE_TOKEN_ID = IMAGE_TOKEN_INDEX 
     
     # input_ids shape: [Batch_Size, Seq_Len]
     # result shape: [Batch_Size]
     num_tokens_per_sample = torch.sum(batch_inputs['input_ids'] == IMAGE_TOKEN_ID, dim=1)
+    # also get the last index of the image token for each sample if needed
+    last_index_per_sample = (batch_inputs['input_ids'] == IMAGE_TOKEN_ID).int().cumsum(dim=1).argmax(dim=1)
+    # also get the first index of the image token for each sample if needed
+    first_index_per_sample = (batch_inputs['input_ids'] == IMAGE_TOKEN_ID).int().cumsum(dim=1).argmin(dim=1)
     
-    return num_tokens_per_sample
+    return num_tokens_per_sample, first_index_per_sample, last_index_per_sample
 
 
 class ProprioProjector(nn.Module):
@@ -86,19 +92,26 @@ class Qwen_Adapter(baseframework):
         """
         super().__init__()
         self.config = config
-        self.use_proprio = self.config.framework.action_model.get("use_proprio", False)
-        self.proprio_projector = ProprioProjector(
-            llm_dim=self.qwen_vl_interface.model.config.hidden_size,
-            proprio_dim=self.config.framework.action_model.get("state_dim", 0),
-        ) if self.use_proprio else None
         self.phase = self.config.framework.action_model.get("phase", "Training")
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.config.framework.qwenvl.vl_hidden_dim = self.qwen_vl_interface.model.config.hidden_size
         self.action_query_num = self.config.framework.action_model.get("action_query_num", 64)
-        self.action_model: L1RegressionActionHead = get_action_model(config=self.config)
+        self.action_model: VLA_Adapter_L1RegressionActionHead = get_action_model(config=self.config)
         self.action_query = nn.Parameter(torch.randn(self.action_query_num, self.qwen_vl_interface.model.config.hidden_size))
+        self.dummy_action_token = "🔍" # TODO also can add spacail token to Qwen, but too complex
+        self.dummy_action_token_id = self.qwen_vl_interface.processor.tokenizer("🔍", add_special_tokens=False)["input_ids"][0]
+        self.dummy_action_prompt = self.dummy_action_token * self.action_query_num
+        self.chunk_len = self.config.framework.action_model.get("num_actions_chunk", None)
+        if self.chunk_len is None:
+            raise ValueError("num_actions_chunk must be specified in action_model config.")
+        if self.config.framework.action_model.get("use_proprio", False):
+            self.proprio_projector = ProprioProjector(
+                llm_dim=self.qwen_vl_interface.model.config.hidden_size,
+                proprio_dim=self.config.framework.action_model.get("state_dim", 14),
+            )
+        else:
+            self.proprio_projector = None
         nn.init.normal_(self.action_query, mean=0.0, std=0.02)
-
 
     def forward(
         self,
@@ -112,39 +125,64 @@ class Qwen_Adapter(baseframework):
         instructions = [example["lang"] for example in examples]  # [B, str]
         gt_actions = [example["action"] for example in examples]  # label [B， len, 7]
         
-        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+        # # debug print 
+        # print(f'gt action shape is {np.array(gt_actions).shape}')
+        # raise NotImplementedError("Debug stop here.")
         
-
-        # Step 1: QWenVL input format
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
-        num_patches = get_image_token_counts(qwen_inputs) # [B, ]
-
+        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+        # ! often state is None 
+        # ============================================================
+        # FIX: Insert action placeholder tokens BEFORE tokenization
+        # ============================================================
+        
+        # Append to instruction text (will be tokenized naturally)
+        prompt_suffix = f" Please predict the next {self.chunk_len} robot actions: <action>{self.dummy_action_prompt}<action>."
+        instructions = [instruction + prompt_suffix for instruction in instructions]
+        
+        # Step 1: Build Qwen-VL inputs with modified instructions
+        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+            images=batch_images, 
+            instructions=instructions
+        )
+        # Now: [BOS, text, <img>, more_text, 🔍, 🔍, ..., 🔍, EOS]
+        #                                    ^^^^^^^^^^^^^^^^
+        #                                    Action placeholders BEFORE EOS
+        # Create mask for action token positions
+        input_ids = qwen_inputs['input_ids']
+        action_mask = (input_ids == self.dummy_action_token_id)  # [B, L]
+            
+        # ============================================================
+        # Hook to replace action token embeddings (OPTIMIZED)
+        # ============================================================
+        # Pre-compute action positions outside the hook
         batch_size = qwen_inputs['input_ids'].shape[0]
-        pad_id = self.qwen_vl_interface.model.config.pad_token_id
-        if pad_id is None:
-            pad_id = getattr(self.qwen_vl_interface.model.config, "eos_token_id", 0)
-            if pad_id is None:
-                pad_id = 0
         device = qwen_inputs['input_ids'].device
+        action_positions_tensor = torch.full((batch_size, self.action_query_num), 0, dtype=torch.long, device=device)
+        valid_counts = torch.zeros(batch_size, dtype=torch.bool, device=device)
 
-        dummy_ids = torch.full(
-            (batch_size, self.action_query_num),pad_id, device=device, dtype=qwen_inputs['input_ids'].dtype
-        )  # (B, action_query_num)
-        dummy_mask = torch.ones(
-            (batch_size, self.action_query_num), device=device, dtype=qwen_inputs['attention_mask'].dtype
-        )  # (B, action_query_num)
-
-        qwen_inputs['input_ids'] = torch.cat([qwen_inputs['input_ids'], dummy_ids], dim=1)  # (B, L + action_query_num)
-        qwen_inputs['attention_mask'] = torch.cat([qwen_inputs['attention_mask'], dummy_mask], dim=1)  # (B, L + action_query_num)
+        for b in range(batch_size):
+            act_pos = torch.where(action_mask[b])[0]
+            if len(act_pos) == self.action_query_num:
+                action_positions_tensor[b] = act_pos
+                valid_counts[b] = True
 
         def inject_query_hook(module, inputs, output):
-            query_embed = self.action_query.to(dtype=output.dtype, device=output.device)  # (action_query_num, hidden_dim)
-            batch_query = query_embed.unsqueeze(0).expand(output.shape[0], -1, -1)  # (B, action_query_num, hidden_dim)
-            output[:, -self.action_query_num:, :] = batch_query
+            """Replace action placeholder embeddings with learnable queries (VECTORIZED)."""
+            query_embed = self.action_query.to(dtype=output.dtype, device=output.device)  # [N, H]
+            
+            # Vectorized replacement using advanced indexing
+            batch_indices = torch.arange(batch_size, device=output.device).unsqueeze(1).expand(-1, self.action_query_num)  # [B, N]
+            
+            # Only update valid samples (where action token count matches)
+            valid_batch_indices = batch_indices[valid_counts]
+            valid_action_positions = action_positions_tensor[valid_counts]
+            
+            if len(valid_batch_indices) > 0:
+                output[valid_batch_indices, valid_action_positions, :] = query_embed.unsqueeze(0)
+            
             return output
-
+        # Register hook on text embedding layer (this is OK!)
         embedding_layer = self.qwen_vl_interface.model.model.get_input_embeddings()
-        assert isinstance(embedding_layer, nn.Embedding), "Cannot find qwenvl embedding layer"
         hook_handle = embedding_layer.register_forward_hook(inject_query_hook)
         try:
             with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -157,46 +195,79 @@ class Qwen_Adapter(baseframework):
         finally:
             hook_handle.remove()
                 
-
+        hidden_states = qwenvl_outputs.hidden_states # list of [B, L, H]
+        # ============================================================
+        # Extract features (FULLY VECTORIZED)
+        # ============================================================
         multi_layer_hidden_states = []
-
-        for item in qwenvl_outputs.hidden_states[0:]:
-            batch_size = item.shape[0]
-            hidden_dim = item.shape[-1]
-
-            max_patch_len = num_patches.max().item()
-
-            batch_vision_states = []
-            batch_action_query_states = []
-
-            for i in range(batch_size):
-                n_p = num_patches[i].item()
-                vis_feat = item[i, :n_p, :]  # [n_p, D]
-                if n_p < max_patch_len:
-                    pad_len = max_patch_len - n_p
-                    padding = torch.zeros((pad_len, hidden_dim), device=vis_feat.device, dtype=vis_feat.dtype)
-                    vis_feat = torch.cat([vis_feat, padding], dim=0)  # [max_patch_len, D]
-
-                batch_vision_states.append(vis_feat)
-                
-                act_query_feat = item[i, -self.action_query_num:, :]  # [action_query_num, D]
-                batch_action_query_states.append(act_query_feat)
+        num_images, first_index_per_sample, last_index_per_sample = get_image_token_counts(qwen_inputs)
+        
+        max_patch_len = -999
+        for b in range(batch_size):
+            sample_patch_len = last_index_per_sample[b] - first_index_per_sample[b] + 1
+            if sample_patch_len > max_patch_len:
+                max_patch_len = sample_patch_len.item()
+        
+        for layer_hidden in hidden_states[0:]:
+            # layer_hidden: [B, L, H]
             
-            vision_hidden_states = torch.stack(batch_vision_states).unsqueeze(1)  # [B, 1, max_patch_len, D]
-            action_query_hidden_states = torch.stack(batch_action_query_states).unsqueeze(1)  # [B, 1, action_query_num, D]
+            # ============================================================
+            # 1. Vision Features (Fully Vectorized)
+            # ============================================================
+            # Create batch of indices [B, max_patch_len]
+            batch_indices = torch.arange(batch_size, device=device).unsqueeze(1).expand(-1, max_patch_len)  # [B, max_patch_len]
+            seq_indices = torch.arange(max_patch_len, device=device).unsqueeze(0).expand(batch_size, -1)  # [B, max_patch_len]
 
-            all_hidden_states = torch.cat([vision_hidden_states, action_query_hidden_states], dim=2)  # [B, 1, max_patch_len + action_query_num, D]
-            multi_layer_hidden_states.append(all_hidden_states)  # [num_layers][B, 1, L_total, D]
+            # Add first_index_per_sample offset to get actual positions
+            seq_indices = seq_indices + first_index_per_sample.unsqueeze(1)  # [B, max_patch_len]
 
-        multi_layer_hidden_states = torch.cat(multi_layer_hidden_states, dim=1)  # [B, num_layers, L_total, D]
+            # Clamp to valid range (shouldn't exceed last_index_per_sample)
+            seq_indices = torch.clamp(seq_indices, max=last_index_per_sample.unsqueeze(1))  # [B, max_patch_len]
 
+            # Advanced indexing to extract vision features
+            batch_vision_states = layer_hidden[batch_indices, seq_indices, :]  # [B, max_patch_len, H]
+
+            # Mask padding - now based on actual vision patch lengths per sample
+            vision_patch_lengths = last_index_per_sample - first_index_per_sample + 1  # [B]
+            padding_mask = torch.arange(max_patch_len, device=device).unsqueeze(0) >= vision_patch_lengths.unsqueeze(1)  # [B, max_patch_len]
+            batch_vision_states = batch_vision_states.masked_fill(padding_mask.unsqueeze(-1), 0.0)
+            
+            # ============================================================
+            # 2. Action Query Features (Fully Vectorized)
+            # ============================================================
+            # Use advanced indexing
+            # When you index with two tensors in the first two dims, PyTorch treats them as matching coordinates:
+            # batch_indices_action is shape [B, N]
+            # action_positions_tensor is shape [B, N]
+            
+            batch_indices_action = torch.arange(batch_size, device=device).unsqueeze(1).expand(-1, self.action_query_num)  # [B, N]
+            action_query_states = layer_hidden[batch_indices_action, action_positions_tensor, :]  # [B, action_query_num, H]
+            
+            # ============================================================
+            # 3. Concatenate
+            # ============================================================
+            all_hidden_states = torch.cat([
+                batch_vision_states.unsqueeze(1),  # [B, 1, max_patch_len, H]
+                action_query_states.unsqueeze(1)   # [B, 1, action_query_num, H]
+            ], dim=2)  # [B, 1, L_total, H]
+            
+            multi_layer_hidden_states.append(all_hidden_states)
+
+        multi_layer_hidden_states = torch.cat(multi_layer_hidden_states, dim=1)  # [B, num_layers, L_total, H]
+        state_projected = None
+        if state is not None: # repeat state 
+            state = torch.tensor(
+                    np.array(state), device=multi_layer_hidden_states.device, dtype=multi_layer_hidden_states.dtype
+                ) #  [B, 1, state_dim]
+            if self.proprio_projector is not None:
+                state_projected = self.proprio_projector(proprio=state.squeeze(1))  # [B, llm_dim]
 
         # Step 3: Action Expert Forward
         self.action_model = self.action_model.to(device=multi_layer_hidden_states.device, dtype=multi_layer_hidden_states.dtype)
         predicted_actions = self.action_model.predict_action(
             multi_layer_hidden_states,
-            proprio=state if self.use_proprio else None,
-            proprio_projector=self.proprio_projector if self.use_proprio else None,
+            vision_hidden_len=max_patch_len,
+            state_projected=state_projected,
             phase=self.phase,
         ) # (B, chunk_len, action_dim)
 
@@ -217,55 +288,76 @@ class Qwen_Adapter(baseframework):
     ) -> np.ndarray:
         """
         Inference: Predict future continuous actions aligned with the Forward logic (Hook + Multi-layer states).
+        
+        Steps:
+          1. Resize images to training resolution (if specified)
+          2. Insert action placeholder tokens into instruction
+          3. Encode with QwenVL (hidden states retained) with hook to inject action queries
+          4. Extract multi-layer features at action query positions
+          5. Predict actions via action model
+          6. Return normalized action trajectory
+        
+        Returns:
+            dict:
+                normalized_actions (np.ndarray): Shape [B, chunk_len, action_dim], predicted normalized actions.
         """
-        from deployment.model_server.tools.image_tools import to_pil_preserve
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-    
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
-
-        # Step 0: Preprocessing (Resize)
+    
         train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         if train_obs_image_size:
-            # Assuming resize_images is a valid helper function available in context
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
-
-        # Step 1: QWenVL input format
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
-        num_patches = get_image_token_counts(qwen_inputs) # [B, ]
-
-        # Step 2: Prepare Dummy Tokens & Hook for Action Query Injection
+        
+        # ============================================================
+        # Insert action placeholder tokens into instruction
+        # ============================================================
+        prompt_suffix = f" Please predict the next {self.chunk_len} robot actions: <action>{self.dummy_action_prompt}<action>."
+        instructions = [instruction + prompt_suffix for instruction in instructions]
+        
+        # Step 1: Build Qwen-VL inputs with modified instructions
+        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+            images=batch_images, 
+            instructions=instructions
+        )
+        
+        # Create mask for action token positions
+        input_ids = qwen_inputs['input_ids']
+        action_mask = (input_ids == self.dummy_action_token_id)  # [B, L]
+        
+        # ============================================================
+        # Hook to replace action token embeddings (OPTIMIZED)
+        # ============================================================
+        # Pre-compute action positions outside the hook
         batch_size = qwen_inputs['input_ids'].shape[0]
-        pad_id = self.qwen_vl_interface.model.config.pad_token_id
-        if pad_id is None:
-            pad_id = getattr(self.qwen_vl_interface.model.config, "eos_token_id", 0)
-            if pad_id is None:
-                pad_id = 0
         device = qwen_inputs['input_ids'].device
+        action_positions_tensor = torch.full((batch_size, self.action_query_num), 0, dtype=torch.long, device=device)
+        valid_counts = torch.zeros(batch_size, dtype=torch.bool, device=device)
 
-        # Create dummy placeholders
-        dummy_ids = torch.full(
-            (batch_size, self.action_query_num), pad_id, device=device, dtype=qwen_inputs['input_ids'].dtype
-        )
-        dummy_mask = torch.ones(
-            (batch_size, self.action_query_num), device=device, dtype=qwen_inputs['attention_mask'].dtype
-        )
+        for b in range(batch_size):
+            act_pos = torch.where(action_mask[b])[0]
+            if len(act_pos) == self.action_query_num:
+                action_positions_tensor[b] = act_pos
+                valid_counts[b] = True
 
-        # Concat to inputs
-        qwen_inputs['input_ids'] = torch.cat([qwen_inputs['input_ids'], dummy_ids], dim=1)
-        qwen_inputs['attention_mask'] = torch.cat([qwen_inputs['attention_mask'], dummy_mask], dim=1)
-
-        # Define Hook
         def inject_query_hook(module, inputs, output):
-            query_embed = self.action_query.to(dtype=output.dtype, device=output.device)
-            batch_query = query_embed.unsqueeze(0).expand(output.shape[0], -1, -1)
-            output[:, -self.action_query_num:, :] = batch_query
+            """Replace action placeholder embeddings with learnable queries (VECTORIZED)."""
+            query_embed = self.action_query.to(dtype=output.dtype, device=output.device)  # [N, H]
+            
+            # Vectorized replacement using advanced indexing
+            batch_indices = torch.arange(batch_size, device=output.device).unsqueeze(1).expand(-1, self.action_query_num)  # [B, N]
+            
+            # Only update valid samples (where action token count matches)
+            valid_batch_indices = batch_indices[valid_counts]
+            valid_action_positions = action_positions_tensor[valid_counts]
+            
+            if len(valid_batch_indices) > 0:
+                output[valid_batch_indices, valid_action_positions, :] = query_embed.unsqueeze(0)
+            
             return output
-
-        # Register Hook
+        # Register hook on text embedding layer (this is OK!)
         embedding_layer = self.qwen_vl_interface.model.model.get_input_embeddings()
         hook_handle = embedding_layer.register_forward_hook(inject_query_hook)
-
         try:
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 qwenvl_outputs = self.qwen_vl_interface(
@@ -276,77 +368,91 @@ class Qwen_Adapter(baseframework):
                 )
         finally:
             hook_handle.remove()
-
-        # Step 3: Process Multi-layer Hidden States
-        # Logic copied from forward: Concatenate Vision Tokens + Action Query Tokens across layers
+                
+        hidden_states = qwenvl_outputs.hidden_states # list of [B, L, H]
+        # ============================================================
+        # Extract features (FULLY VECTORIZED)
+        # ============================================================
         multi_layer_hidden_states = []
-
-        for item in qwenvl_outputs.hidden_states[0:]:
-            # item shape: [B, Seq_Len, H]
-            hidden_dim = item.shape[-1]
-            max_patch_len = num_patches.max().item()
-
-            batch_vision_states = []
-            batch_action_query_states = []
-
-            for i in range(batch_size):
-                n_p = num_patches[i].item()
-                # Extract vision features
-                vis_feat = item[i, :n_p, :]  # [n_p, D]
-                
-                # Handle padding for vision tokens if batch has varying aspect ratios
-                if n_p < max_patch_len:
-                    pad_len = max_patch_len - n_p
-                    padding = torch.zeros((pad_len, hidden_dim), device=vis_feat.device, dtype=vis_feat.dtype)
-                    vis_feat = torch.cat([vis_feat, padding], dim=0)  # [max_patch_len, D]
-
-                batch_vision_states.append(vis_feat)
-                
-                # Extract action query features (last N tokens)
-                act_query_feat = item[i, -self.action_query_num:, :]  # [action_query_num, D]
-                batch_action_query_states.append(act_query_feat)
+        num_images, first_index_per_sample, last_index_per_sample = get_image_token_counts(qwen_inputs)
+        
+        max_patch_len = -999
+        for b in range(batch_size):
+            sample_patch_len = last_index_per_sample[b] - first_index_per_sample[b] + 1
+            if sample_patch_len > max_patch_len:
+                max_patch_len = sample_patch_len.item()
+        
+        for layer_hidden in hidden_states[0:]:
+            # layer_hidden: [B, L, H]
             
-            vision_hidden_states = torch.stack(batch_vision_states).unsqueeze(1)  # [B, 1, max_patch_len, D]
-            action_query_hidden_states = torch.stack(batch_action_query_states).unsqueeze(1)  # [B, 1, action_query_num, D]
+            # ============================================================
+            # 1. Vision Features (Fully Vectorized)
+            # ============================================================
+            # Create batch of indices [B, max_patch_len]
+            batch_indices = torch.arange(batch_size, device=device).unsqueeze(1).expand(-1, max_patch_len)  # [B, max_patch_len]
+            seq_indices = torch.arange(max_patch_len, device=device).unsqueeze(0).expand(batch_size, -1)  # [B, max_patch_len]
 
-            all_hidden_states = torch.cat([vision_hidden_states, action_query_hidden_states], dim=2)
+            # Add first_index_per_sample offset to get actual positions
+            seq_indices = seq_indices + first_index_per_sample.unsqueeze(1)  # [B, max_patch_len]
+
+            # Clamp to valid range (shouldn't exceed last_index_per_sample)
+            seq_indices = torch.clamp(seq_indices, max=last_index_per_sample.unsqueeze(1))  # [B, max_patch_len]
+
+            # Advanced indexing to extract vision features
+            batch_vision_states = layer_hidden[batch_indices, seq_indices, :]  # [B, max_patch_len, H]
+
+            # Mask padding - now based on actual vision patch lengths per sample
+            vision_patch_lengths = last_index_per_sample - first_index_per_sample + 1  # [B]
+            padding_mask = torch.arange(max_patch_len, device=device).unsqueeze(0) >= vision_patch_lengths.unsqueeze(1)  # [B, max_patch_len]
+            batch_vision_states = batch_vision_states.masked_fill(padding_mask.unsqueeze(-1), 0.0)
+            
+            # ============================================================
+            # 2. Action Query Features (Fully Vectorized)
+            # ============================================================
+            # Use advanced indexing
+            # When you index with two tensors in the first two dims, PyTorch treats them as matching coordinates:
+            # batch_indices_action is shape [B, N]
+            # action_positions_tensor is shape [B, N]
+            
+            batch_indices_action = torch.arange(batch_size, device=device).unsqueeze(1).expand(-1, self.action_query_num)  # [B, N]
+            action_query_states = layer_hidden[batch_indices_action, action_positions_tensor, :]  # [B, action_query_num, H]
+            
+            # ============================================================
+            # 3. Concatenate
+            # ============================================================
+            all_hidden_states = torch.cat([
+                batch_vision_states.unsqueeze(1),  # [B, 1, max_patch_len, H]
+                action_query_states.unsqueeze(1)   # [B, 1, action_query_num, H]
+            ], dim=2)  # [B, 1, L_total, H]
+            
             multi_layer_hidden_states.append(all_hidden_states)
-
-        # [B, num_layers, L_total, D]
-        multi_layer_hidden_states = torch.cat(multi_layer_hidden_states, dim=1)
-
-        # Step 4: Proprioception Processing
-        proprio_tensor = None
-        if self.use_proprio and state is not None:
-            # Convert numpy state to tensor, match device/dtype of hidden states
-            proprio_tensor = torch.from_numpy(np.array(state)).to(
+            
+        multi_layer_hidden_states = torch.cat(multi_layer_hidden_states, dim=1)  # [B, num_layers, L_total, H]
+        state_projected = None
+        if state is not None: # repeat state 
+            state = torch.tensor(
+                    np.array(state), device=multi_layer_hidden_states.device, dtype=multi_layer_hidden_states.dtype
+                ) #  [B, 1, state_dim]
+            if self.proprio_projector is not None:
+                state_projected = self.proprio_projector(proprio=state.squeeze(1))  # [B, llm_dim]
+        
+        # ============================================================
+        # Action prediction
+        # ============================================================
+        with torch.autocast("cuda", dtype=torch.float32):
+            self.action_model = self.action_model.to(
                 device=multi_layer_hidden_states.device, 
                 dtype=multi_layer_hidden_states.dtype
             )
-            # Ensure shape is [B, proprio_dim] or [B, 1, proprio_dim] depending on projector expectation
-            if proprio_tensor.ndim == 1:
-                proprio_tensor = proprio_tensor.unsqueeze(0) # Batch dim
-            if proprio_tensor.ndim == 3:
-                proprio_tensor = proprio_tensor.squeeze(1) # Remove seq dim if present for projector
-
-        # Step 5: Action Expert Prediction
-        # Handle DDP wrapper if present, otherwise call model directly
-        action_model_ref = self.action_model.module if hasattr(self.action_model, "module") else self.action_model
-        
-        # Ensure model is on correct device/dtype
-        action_model_ref = action_model_ref.to(device=multi_layer_hidden_states.device, dtype=multi_layer_hidden_states.dtype)
-
-        with torch.autocast("cuda", dtype=torch.float32):
-            pred_actions = action_model_ref.predict_action(
+            predicted_actions = self.action_model.predict_action(
                 multi_layer_hidden_states,
-                proprio=proprio_tensor,
-                proprio_projector=self.proprio_projector if self.use_proprio else None,
-                phase="Inference", # Explicitly set phase for inference logic
+                vision_hidden_len=max_patch_len,
+                state_projected=state_projected,
+                phase=self.phase,
             )  # (B, chunk_len, action_dim)
-
-        normalized_actions = pred_actions.detach().cpu().numpy()
-        return {"normalized_actions": normalized_actions}
-
+        
+        normalized_actions = predicted_actions.detach().cpu().numpy()
+        return {"normalized_actions": normalized_actions} 
 
 
 if __name__ == "__main__":

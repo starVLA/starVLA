@@ -10,13 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def learnable_random_perturbations(seq_len, dim, device, dtype):
-    random_perturbations = nn.Parameter(torch.zeros(seq_len, dim, device=device, dtype=dtype))
-    nn.init.normal_(random_perturbations, mean=0.0, std=0.02)
-    return random_perturbations
-
-
-class L1RegressionActionHead(nn.Module):
+class VLA_Adapter_L1RegressionActionHead(nn.Module):
     """Simple MLP-based action head that generates continuous actions via L1 regression."""
     def __init__(
         self,
@@ -35,7 +29,17 @@ class L1RegressionActionHead(nn.Module):
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
 
-        self.num_actions_chunk = self.config.framework.action_model.num_actions_chunk
+        self.num_actions_chunk = self.config.framework.action_model.get("num_actions_chunk", None)
+        if self.num_actions_chunk is None:
+            raise ValueError("num_actions_chunk must be specified in action_model config.")
+        
+        # Learnable action chunk embeddings (like positional embeddings)
+        # Applied during both training and inference
+        self.action_chunk_embeddings = nn.Parameter(
+            torch.zeros(self.num_actions_chunk, action_dim * hidden_dim)
+        )
+        nn.init.normal_(self.action_chunk_embeddings, mean=0.0, std=0.02)
+        
         self.model = MLPResNet(
             num_blocks=24, 
             input_dim=input_dim*action_dim, 
@@ -43,12 +47,13 @@ class L1RegressionActionHead(nn.Module):
             output_dim=action_dim,
             use_pro_version=use_pro_version
             )
+ 
 
     def predict_action(
             self, 
             actions_hidden_states, 
-            proprio=None, 
-            proprio_projector=None,
+            vision_hidden_len: int,
+            state_projected=None,
             phase="Inference"
             ):
         """
@@ -62,10 +67,8 @@ class L1RegressionActionHead(nn.Module):
         device = actions_hidden_states.device
 
         # 1. Proprioception Processing
-        if proprio is not None and proprio_projector is not None:
-            proprio = proprio.reshape(batch_size, -1).to(dtype=actions_hidden_states.dtype)
-            proprio_features = proprio_projector(proprio)
-            proprio_features = proprio_features.unsqueeze(dim=1)  # (bsz, 1, llm_dim)
+        if state_projected is not None:
+            proprio_features = state_projected.unsqueeze(dim=1)  # (bsz, 1, llm_dim)
         else:
             proprio_features = None
         
@@ -73,6 +76,7 @@ class L1RegressionActionHead(nn.Module):
         action_query_states = actions_hidden_states[:, :, -self.action_query_num:, :]
         
         task_hidden_states = actions_hidden_states[:, :, :-self.action_query_num, :]
+        assert vision_hidden_len == task_hidden_states.shape[2], "Vision hidden length mismatch"
 
         # 3. Action Chunk Queries Init
         cond_actions_hidden_states = torch.zeros(
@@ -84,11 +88,9 @@ class L1RegressionActionHead(nn.Module):
             batch_size, self.num_actions_chunk, -1
         ) 
 
-        # Denoising Noise
-        if phase == "Training":
-            batch_size, seq_len, dim = rearranged_actions_hidden_states.shape
-            random_perturbations = learnable_random_perturbations(seq_len, dim, device=rearranged_actions_hidden_states.device, dtype=rearranged_actions_hidden_states.dtype) 
-            rearranged_actions_hidden_states = (rearranged_actions_hidden_states + random_perturbations)
+        # Add learnable action chunk embeddings (applied during both training and inference)
+        embeddings = self.action_chunk_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
+        rearranged_actions_hidden_states = rearranged_actions_hidden_states + embeddings
 
         # 4. MLP Forward
         action = self.model(
@@ -97,7 +99,9 @@ class L1RegressionActionHead(nn.Module):
             p=proprio_features,       # [B, 1, D]
             h_t=task_hidden_states    # [B, Layers, vis_len, D]
             )
-
+        
+        # Assert shape 
+        assert action.shape == (batch_size, self.num_actions_chunk, self.action_dim), "Action shape mismatch"
         return action
     
 
@@ -386,6 +390,6 @@ class MLPResNetBlock_Pro(nn.Module):
 
 
 def get_action_model(config=None):
-    return L1RegressionActionHead(
+    return VLA_Adapter_L1RegressionActionHead(
         full_config=config
     )
