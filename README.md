@@ -3,9 +3,9 @@
 <!-- [![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)](https://github.com/starVLA/starVLA) -->
 [![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845)
 
-**[205/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchs with the community!
+**[2025/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchs with the community!
 
-**[205/12/25]**  We've released RoboCasa evaluation support, which trained **without pretraining and reach SOTA performance**. Check out more details in [examples/Robocasa_tabletop](examples/Robocasa_tabletop).
+**[2025/12/25]**  We've released RoboCasa evaluation support, which trained **without pretraining and reach SOTA performance**. Check out more details in [examples/Robocasa_tabletop](examples/Robocasa_tabletop).
 
 **[2025/12/15]** Completed a release regression check to ensure the public code runs smoothly. Routine updates—including recent support for the LeRobot dataset v3.0 and DeepSpeed ZeRO-3—will continue to appear in the [🚧 Daily Development Log](https://github.com/starVLA/starVLA/issues/64#issue-3727060165).
 
