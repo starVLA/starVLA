@@ -130,62 +130,86 @@ def get_frames_by_timestamps(
         frames = np.array(frames)
         return frames
     elif video_backend == "torchvision_av":
+        # TODO: FIX, only support T=1
+
+        # set backend
         torchvision.set_video_backend("pyav")
+
+        # set a video stream reader
+        # TODO(rcadene): also load audio stream at the same time
+        reader = torchvision.io.VideoReader(video_path, "video")
+
+        # set the first and last requested timestamps
+        # Note: previous timestamps are usually loaded, since we need to access the previous key frame
+        first_ts = timestamps[0]
+        last_ts = timestamps[-1]
+
+        # access closest key frame of the first requested frame
+        # Note: closest key frame timestamp is usally smaller than `first_ts` (e.g. key frame can be the first frame of the video)
+        # for details on what `seek` is doing see: https://pyav.basswood-io.com/docs/stable/api/container.html?highlight=inputcontainer#av.container.InputContainer.seek
+        reader.seek(first_ts, keyframes_only=True)
+
+        # load all frames until last requested frame
         loaded_frames = []
         loaded_ts = []
-        
+        for frame in reader:
+            current_ts = frame["pts"]
+            loaded_frames.append(frame["data"])
+            loaded_ts.append(current_ts)
+            if current_ts >= last_ts:
+                break
+
+        reader.container.close()
         reader = None
-        try:
-            reader = torchvision.io.VideoReader(video_path, "video")
-            
-            for target_ts in timestamps:
-                # Reset reader state
-                reader.seek(target_ts, keyframes_only=True)
-                
-                closest_frame = None
-                closest_ts_diff = float('inf')
-                
-                for frame in reader:
-                    current_ts = frame["pts"]
-                    current_diff = abs(current_ts - target_ts)
-                    
-                    if closest_frame is None:
-                        closest_frame = frame
-                    
-                    if current_diff < closest_ts_diff:
-                        # Release the previous frame
-                        if closest_frame is not None:
-                            del closest_frame
-                        closest_ts_diff = current_diff
-                        closest_frame = frame
-                    else:
-                        # The time difference starts to increase, stop searching
-                        break
-                
-                if closest_frame is not None:
-                    frame_data = closest_frame["data"]
-                    if isinstance(frame_data, torch.Tensor):
-                        frame_data = frame_data.cpu().numpy()
-                    loaded_frames.append(frame_data)
-                    loaded_ts.append(closest_frame["pts"])
-                    
-                    # Immediately release frame reference
-                    del closest_frame
-                    
-        finally:
-            # Thoroughly clean resources
-            if reader is not None:
-                if hasattr(reader, '_c'):
-                    reader._c = None
-                if hasattr(reader, 'container'):
-                    reader.container.close()
-                    reader.container = None
-            # Force garbage collection
-            import gc
-            gc.collect()
-        
         frames = np.array(loaded_frames)
         return frames.transpose(0, 2, 3, 1)
+
+
+        # torchvision.set_video_backend("pyav")
+        # reader = torchvision.io.VideoReader(video_path, "video")
+        
+
+        # first_ts = timestamps[0]
+        # last_ts = timestamps[-1]
+        # reader.seek(max(0, first_ts - 0.5), keyframes_only=True)
+
+        # selected_frames = [None] * len(timestamps)
+        # closest_diffs = [float('inf')] * len(timestamps)
+        
+        # for frame in reader:
+        #     current_ts = frame["pts"]
+            
+        #     for i, target_ts in enumerate(timestamps):
+        #         diff = abs(current_ts - target_ts)
+        #         if diff < closest_diffs[i]:
+        #             closest_diffs[i] = diff
+        #             frame_data = frame["data"]
+        #             if isinstance(frame_data, torch.Tensor):
+        #                 frame_data = frame_data.cpu().numpy()
+        #             selected_frames[i] = frame_data
+            
+        #     if current_ts > last_ts + 0.5:
+        #         break
+
+        # last_valid_frame = None
+        # for i in range(len(selected_frames)):
+        #     if selected_frames[i] is not None:
+        #         last_valid_frame = selected_frames[i]
+        #     else:
+        #         if last_valid_frame is None:
+        #             for j in range(i + 1, len(selected_frames)):
+        #                 if selected_frames[j] is not None:
+        #                     last_valid_frame = selected_frames[j]
+        #                     break
+        #         selected_frames[i] = last_valid_frame
+
+        # if selected_frames[0] is None:
+        #     raise ValueError(f"Could not load any frames from {video_path}")
+
+        # frames = np.array(selected_frames)
+        # return frames.transpose(0, 2, 3, 1)
+
+
     else:
         raise NotImplementedError
 
