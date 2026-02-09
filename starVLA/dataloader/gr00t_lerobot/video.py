@@ -68,6 +68,57 @@ def get_frames_by_indices(
         cap.release()
         frames = np.array(frames)
         return frames
+    elif video_backend == "pyav":
+        # Use PyAV directly without torchvision wrapper
+        container = None
+        try:
+            container = av.open(video_path)
+            stream = container.streams.video[0]
+            time_base = float(stream.time_base)
+            fps = float(stream.average_rate) if stream.average_rate else float(stream.guessed_rate)
+            
+            loaded_frames = []
+            
+            for target_idx in indices:
+                # Convert frame index to timestamp, then to pts
+                target_ts = target_idx / fps
+                target_pts = int(target_ts / time_base)
+                
+                # Seek to the target position
+                container.seek(target_pts, stream=stream, backward=True, any_frame=False)
+                
+                closest_frame = None
+                closest_idx_diff = float('inf')
+                
+                for frame in container.decode(video=0):
+                    current_ts = float(frame.pts * time_base)
+                    current_idx = int(round(current_ts * fps))
+                    current_diff = abs(current_idx - target_idx)
+                    
+                    if current_diff < closest_idx_diff:
+                        closest_idx_diff = current_diff
+                        closest_frame = frame
+                    
+                    # If we've passed the target and diff is increasing, stop
+                    if current_idx > target_idx and current_diff > closest_idx_diff:
+                        break
+                    
+                    # Stop if we're significantly past the target
+                    if current_idx > target_idx + 5:
+                        break
+                
+                if closest_frame is not None:
+                    frame_data = closest_frame.to_ndarray(format="rgb24")
+                    loaded_frames.append(frame_data)
+                else:
+                    raise ValueError(f"Unable to find frame at index {target_idx}")
+            
+            frames = np.array(loaded_frames)
+            return frames
+            
+        finally:
+            if container is not None:
+                container.close()
     else:
         raise NotImplementedError
 
@@ -129,6 +180,59 @@ def get_frames_by_timestamps(
         cap.release()
         frames = np.array(frames)
         return frames
+    elif video_backend == "pyav":
+        # Use PyAV directly without torchvision wrapper
+        container = None
+        try:
+            container = av.open(video_path)
+            stream = container.streams.video[0]
+            
+            # Get video properties
+            time_base = float(stream.time_base)
+            fps = float(stream.average_rate) if stream.average_rate else float(stream.guessed_rate)
+            duration = float(stream.duration * time_base) if stream.duration else None
+            
+            loaded_frames = []
+            
+            for target_ts in timestamps:
+                # Convert timestamp to pts (presentation timestamp)
+                target_pts = int(target_ts / time_base)
+                
+                # Seek to the target timestamp (seek to keyframe before target)
+                container.seek(target_pts, stream=stream, backward=True, any_frame=False)
+                
+                closest_frame = None
+                closest_ts_diff = float('inf')
+                
+                for frame in container.decode(video=0):
+                    current_ts = float(frame.pts * time_base)
+                    current_diff = abs(current_ts - target_ts)
+                    
+                    if current_diff < closest_ts_diff:
+                        closest_ts_diff = current_diff
+                        closest_frame = frame
+                    
+                    # If we've passed the target and diff is increasing, stop
+                    if current_ts > target_ts and current_diff > closest_ts_diff:
+                        break
+                    
+                    # Also stop if we're significantly past the target (optimization)
+                    if current_ts > target_ts + 1.0:
+                        break
+                
+                if closest_frame is not None:
+                    frame_data = closest_frame.to_ndarray(format="rgb24")
+                    loaded_frames.append(frame_data)
+                else:
+                    raise ValueError(f"Unable to find frame at timestamp {target_ts}")
+            
+            frames = np.array(loaded_frames)
+            return frames
+            
+        finally:
+            if container is not None:
+                container.close()
+    
     elif video_backend == "torchvision_av":
         torchvision.set_video_backend("pyav")
         loaded_frames = []
