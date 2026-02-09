@@ -44,7 +44,7 @@ In StarVLA (also a pun on “start VLA” ),  each functional component (model, 
 
 **TwinBrainVLA**: [*TwinBrainVLA: Unleashing the Potential of Generalist VLMs for Embodied Tasks via Asymmetric Mixture-of-Transformers*](https://github.com/ZGC-EmbodyAI/TwinBrainVLA)
 
-**BayesianVLA**: [*BayesianVLA: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/BayesianVLA)
+**LangForce**: [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
 
 
 ## 🔥 Key Features
