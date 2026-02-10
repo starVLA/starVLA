@@ -52,6 +52,7 @@ from starVLA.dataloader.gr00t_lerobot.transform import ComposedModalityTransform
 from functools import partial
 from typing import Tuple, List
 import pickle
+import gc
 
 # LeRobot v2.0 dataset file names 
 LE_ROBOT_MODALITY_FILENAME = "meta/modality.json"
@@ -1667,6 +1668,8 @@ class LeRobotMixtureDataset(Dataset):
         trajectory_id, base_index = dataset.all_steps[single_step_index]
         return dataset, trajectory_id, base_index
 
+    _getitem_count = 0
+
     def __getitem__(self, index: int) -> dict:
         """Get the data for a single trajectory and start index.
 
@@ -1676,9 +1679,13 @@ class LeRobotMixtureDataset(Dataset):
         Returns:
             dict: The data for the trajectory and start index.
         """
+        LeRobotMixtureDataset._getitem_count += 1
+        if LeRobotMixtureDataset._getitem_count % 1000 == 0:
+            gc.collect()
+
         max_retries = 10
         last_exception = None
-        
+
         for attempt in range(max_retries):
             try:
                 while True: # @DUG
