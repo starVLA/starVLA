@@ -1226,27 +1226,44 @@ class LeRobotSingleDataset(Dataset):
             dict: The data for the step.
         """
         trajectory_id, base_index = self.all_steps[index]
-        data = self.get_step_data(trajectory_id, base_index)
-        
-        # Process all video keys dynamically
-        images = []
+        raw_data = self.get_step_data(trajectory_id, base_index)
+        data = self.transforms(raw_data)
+        return self._pack_sample(data)
+
+    def _pack_sample(self, data: dict) -> dict:
+        """Pack transformed modality data into training sample format."""
+        prim_images = []
+        wrist_views = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
-            
-            # Apply image cropping if enabled and the video key is base_view
-            # Note: crop_obs_camera functionality has been removed
-            
             image = Image.fromarray(image).resize((224, 224))
-            images.append(image)
-        
-        # Get language and action data
+            if "wrist" not in video_key:
+                prim_images.append(image)
+            else:
+                wrist_views.append(image)
+        all_images = prim_images + wrist_views
+
         language = data[self.modality_keys["language"][0]][0]
         action = []
         for action_key in self.modality_keys["action"]:
             action.append(data[action_key])
-        action = np.concatenate(action, axis=1)
-        
-        return dict(action=action, image=images, language=language)
+        action = np.concatenate(action, axis=1).astype(np.float16)
+
+        sample = {
+            "action": action,
+            "image": all_images,
+            "lang": language,
+            "language": language,
+        }
+
+        if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
+            state = []
+            for state_key in self.modality_keys["state"]:
+                state.append(data[state_key])
+            state = np.concatenate(state, axis=1).astype(np.float16)
+            sample["state"] = state
+
+        return sample
 
     def get_step_data(self, trajectory_id: int, base_index: int) -> dict:
         """Get the RAW data for a single step in a trajectory. No transforms are applied.
@@ -2030,6 +2047,21 @@ class LeRobotMixtureDataset(Dataset):
         # Set the epoch and sample the first epoch
         self.set_epoch(0)
 
+        self._sequential_step_sampling = True
+        if self.data_cfg is not None:
+            seq_cfg = self.data_cfg.get("sequential_step_sampling", True)
+            self._sequential_step_sampling = seq_cfg not in ["False", False]
+
+        self._step_order: list[np.ndarray] = []
+        self._step_pos: list[int] = []
+        if self._sequential_step_sampling:
+            for dataset in self.datasets:
+                self._step_order.append(np.arange(len(dataset.all_steps)))
+                if self.mode == "train":
+                    rng = np.random.default_rng(self.seed)
+                    rng.shuffle(self._step_order[-1])
+                self._step_pos.append(0)
+
         self.update_metadata(metadata_config)
 
     @property
@@ -2092,7 +2124,24 @@ class LeRobotMixtureDataset(Dataset):
         # # Sample step
         # base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
         # return dataset, trajectory_id, base_index
-        single_step_index = rng.choice(len(dataset.all_steps))
+        if len(dataset.all_steps) == 0:
+            raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
+
+        if not self._sequential_step_sampling:
+            single_step_index = rng.choice(len(dataset.all_steps))
+        else:
+            step_pos = self._step_pos[dataset_index]
+            if step_pos >= len(dataset.all_steps):
+                order = np.arange(len(dataset.all_steps))
+                if self.mode == "train":
+                    seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
+                    rng = np.random.default_rng(seed)
+                    rng.shuffle(order)
+                self._step_order[dataset_index] = order
+                step_pos = 0
+
+            single_step_index = self._step_order[dataset_index][step_pos]
+            self._step_pos[dataset_index] = step_pos + 1
         trajectory_id, base_index = dataset.all_steps[single_step_index]
         return dataset, trajectory_id, base_index
 
@@ -2120,46 +2169,9 @@ class LeRobotMixtureDataset(Dataset):
                     
                 raw_data = dataset.get_step_data(trajectory_id, step)    
                 data = dataset.transforms(raw_data)
-                
-                # Process all video keys dynamically
-                prim_images = []
-                wrist_views = []
-                for video_key in dataset.modality_keys["video"]:
-                    image = data[video_key][0]
-                    
-                    # Apply image cropping if enabled and the video key is base_view
-                    # Note: crop_obs_camera functionality has been removed
-                    image = Image.fromarray(image).resize((224, 224))
-                    if "wrist" not in video_key:
-                        prim_images.append(image)
-                    else:
-                        wrist_views.append(image)
-                all_images = prim_images + wrist_views
-                
-                # Get language and action data
-                language = data[dataset.modality_keys["language"][0]][0]
-                action = []
-                for action_key in dataset.modality_keys["action"]:
-                    action.append(data[action_key])
-                action = np.concatenate(action, axis=1).astype(np.float16)
-
-                state = []
-                for state_key in dataset.modality_keys["state"]:
-                    state.append(data[state_key])
-                state = np.concatenate(state, axis=1).astype(np.float16)
-                
-                state = None
-                
-                if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
-                    
-                    state = []
-                    for state_key in dataset.modality_keys["state"]:
-                        state.append(data[state_key])
-                    state = np.concatenate(state, axis=1).astype(np.float16)
-                    # prim_images
-                    return dict(action=action, image=all_images, lang=language, state=state)
-
-                return dict(action=action, image=all_images, lang=language)
+                sample = dataset._pack_sample(data)
+                sample["robot_tag"] = dataset.tag
+                return sample
                 
             except Exception as e:
                 last_exception = e
