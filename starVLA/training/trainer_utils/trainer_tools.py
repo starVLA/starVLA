@@ -223,7 +223,12 @@ class TrainerUtils:
         if dist.get_rank() == 0:
             print(f"📦 loading checkpoint: {checkpoint_path}")
         try:
-            checkpoint = torch.load(checkpoint_path, map_location="cpu")
+            if _is_safetensors_path(checkpoint_path):
+                from safetensors.torch import load_file
+
+                checkpoint = load_file(checkpoint_path)
+            else:
+                checkpoint = torch.load(checkpoint_path, map_location="cpu")
         except Exception as e:
             raise RuntimeError(f"❌ loading checkpoint failed: {e}")
 
@@ -280,6 +285,86 @@ class TrainerUtils:
         # use accelerator.prepare method to wrap components
         prepared_components = accelerator.prepare(*components)
         return prepared_components
+
+    def save_full_checkpoint(self, completed_steps, checkpoint_dir, output_dir):
+        """Save full training state (prepared components + RNG) for resume,
+        plus a standalone model weights file for deployment.
+
+        The standalone file format is controlled by ``self.config.trainer.save_format``
+        (``"pt"`` or ``"safetensors"``).  Defaults to ``"pt"`` when unset.
+
+        Must be called after accelerator.prepare().
+
+        Args:
+            completed_steps: Current training step count.
+            checkpoint_dir: Directory to save checkpoints (e.g. results/<run_id>/checkpoints).
+            output_dir: Top-level run directory for summary.jsonl and config.
+        """
+        from pathlib import Path
+
+        save_format = getattr(self.config.trainer, "save_format", "pt")
+
+        # Save full accelerator state for all prepared components.
+        state_dir = os.path.join(checkpoint_dir, f"steps_{completed_steps}")
+        use_safe = save_format == "safetensors"
+        self.accelerator.save_state(state_dir, safe_serialization=use_safe)
+
+        # Save standalone weights & metadata (main process only)
+        if self.accelerator.is_main_process:
+            import json as _json
+
+            # Save standalone model weights for deployment
+            state_dict = self.accelerator.get_state_dict(self.model)
+            if state_dict is not None:
+                if save_format == "safetensors":
+                    from safetensors.torch import save_file
+
+                    weights_path = os.path.join(
+                        checkpoint_dir, f"steps_{completed_steps}_model.safetensors"
+                    )
+                    save_file(state_dict, weights_path)
+                else:
+                    weights_path = os.path.join(
+                        checkpoint_dir, f"steps_{completed_steps}_pytorch_model.pt"
+                    )
+                    torch.save(state_dict, weights_path)
+
+            # Append to summary log
+            summary_data = {"steps": completed_steps}
+            with open(os.path.join(output_dir, "summary.jsonl"), "a") as f:
+                f.write(_json.dumps(summary_data) + "\n")
+
+            self.accelerator.print(f"✅ Checkpoint saved at {state_dir}")
+
+            # Save accessed config if available
+            from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig
+
+            if isinstance(self.config, AccessTrackedConfig):
+                self.config.save_accessed_config(
+                    Path(output_dir) / "config.yaml",
+                    use_original_values=False,
+                )
+
+        self.accelerator.wait_for_everyone()
+
+    def resume_from_full_checkpoint(self, checkpoint_dir):
+        """Load full training state from an accelerator state directory.
+
+        Must be called **after** accelerator.prepare() (DeepSpeed requirement).
+
+        Args:
+            checkpoint_dir: Path to a steps_N/ directory containing full state.
+
+        Returns:
+            int: The completed_steps parsed from directory name (steps_N), or 0.
+        """
+        self.accelerator.load_state(checkpoint_dir)
+        self.accelerator.print(f"Resumed full training state from: {checkpoint_dir}")
+
+        # Parse completed_steps from directory name (e.g. "steps_5000")
+        dir_name = os.path.basename(checkpoint_dir)
+        match = re.match(r"^steps_(\d+)$", dir_name)
+        return int(match.group(1)) if match else 0
 
     @staticmethod
     def euclidean_distance(predicted: np.ndarray, ground_truth: np.ndarray) -> float:
@@ -458,39 +543,46 @@ class TrainerUtils:
             return None
 
     def _get_latest_checkpoint(self, checkpoint_dir):
-        """Find the latest checkpoint in the directory based on step number."""
+        """Find the latest checkpoint in the directory based on step number.
+
+        Supports both new directory format (steps_N/) and legacy file format
+        (steps_N_pytorch_model.pt). Prefers new directory format when both exist
+        at the same step.
+        """
         if not os.path.exists(checkpoint_dir):
             self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
             return None, 0
 
-        # 获取所有符合命名规则，确保只匹配以 .pt 结尾的文件
-        checkpoints = [
-            f for f in os.listdir(checkpoint_dir) 
-            if re.match(r"steps_(\d+)_pytorch_model\.pt$", f)  # 添加 $ 确保以 .pt 结尾
-            and os.path.isfile(os.path.join(checkpoint_dir, f))  # 确保是文件
-        ]
+        checkpoints_with_steps = []
 
-        if not checkpoints:
+        for entry in os.listdir(checkpoint_dir):
+            full_path = os.path.join(checkpoint_dir, entry)
+
+            # New format: steps_N/ directories (with training_state.json inside)
+            dir_match = re.match(r"^steps_(\d+)$", entry)
+            if dir_match and os.path.isdir(full_path):
+                step = int(dir_match.group(1))
+                # Directory checkpoints contain full accelerator state for resume.
+                checkpoints_with_steps.append((full_path, step, "dir"))
+                continue
+
+            # Weight-only files: steps_N_pytorch_model.pt or steps_N_model.safetensors
+            file_match = re.match(r"^steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", entry)
+            if file_match and os.path.isfile(full_path):
+                step = int(file_match.group(1))
+                checkpoints_with_steps.append((full_path, step, "file"))
+
+        if not checkpoints_with_steps:
             self.accelerator.print(f"No checkpoints found in {checkpoint_dir}")
             return None, 0
 
-        # 提取步数并排序
-        try:
-            checkpoints_with_steps = [
-                (ckpt, int(re.search(r"steps_(\d+)_pytorch_model\.pt", ckpt).group(1)))
-                for ckpt in checkpoints
-            ]
-        except AttributeError as e:
-            self.accelerator.print(f"Error parsing checkpoint filenames: {e}")
-            return None, 0
+        # Sort by step number, then by type priority (dir > file) so directory wins ties.
+        type_priority = {"file": 0, "dir": 1}
+        checkpoints_with_steps.sort(key=lambda x: (x[1], type_priority[x[2]]))
+        latest_path, completed_steps, fmt = checkpoints_with_steps[-1]
 
-        # 按步数排序，获取最新的 checkpoint
-        checkpoints_with_steps.sort(key=lambda x: x[1])
-        latest_checkpoint, completed_steps = checkpoints_with_steps[-1]
-
-        latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
-        self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
-        return latest_checkpoint_path, completed_steps
+        self.accelerator.print(f"Latest checkpoint found: {latest_path} (format={fmt})")
+        return latest_path, completed_steps
 
 import os
 
@@ -498,3 +590,8 @@ import os
 def is_main_process():
     rank = int(os.environ.get("RANK", 0))  # if RANK is not set, default to 0
     return rank == 0
+
+
+def _is_safetensors_path(path):
+    """Check if a path refers to a safetensors file."""
+    return str(path).endswith(".safetensors")
