@@ -209,6 +209,9 @@ def get_frames_by_timestamps(
                     current_diff = abs(current_ts - target_ts)
                     
                     if current_diff < closest_ts_diff:
+                        # Release the previous frame
+                        if closest_frame is not None:
+                            del closest_frame
                         closest_ts_diff = current_diff
                         closest_frame = frame
                     
@@ -223,6 +226,7 @@ def get_frames_by_timestamps(
                 if closest_frame is not None:
                     frame_data = closest_frame.to_ndarray(format="rgb24")
                     loaded_frames.append(frame_data)
+                    del closest_frame
                 else:
                     raise ValueError(f"Unable to find frame at timestamp {target_ts}")
             
@@ -232,6 +236,7 @@ def get_frames_by_timestamps(
         finally:
             if container is not None:
                 container.close()
+                container = None
     
     elif video_backend == "torchvision_av":
         torchvision.set_video_backend("pyav")
@@ -284,9 +289,6 @@ def get_frames_by_timestamps(
                 if hasattr(reader, 'container'):
                     reader.container.close()
                     reader.container = None
-            # Force garbage collection
-            import gc
-            gc.collect()
         
         frames = np.array(loaded_frames)
         return frames.transpose(0, 2, 3, 1)
