@@ -43,8 +43,7 @@ def make_LeRobotSingleDataset(
     else:
         embodiment_tag = ROBOT_TYPE_TO_EMBODIMENT_TAG[robot_type]
     
-    video_backend = data_cfg.get("video_backend", "decord") if data_cfg else "decord"
-    
+    video_backend = data_cfg.get("video_backend", "decord") if data_cfg else "torchvision_av"
     return LeRobotSingleDataset(
         dataset_path=dataset_path,
         modality_configs=modality_config,
@@ -98,15 +97,15 @@ def get_vla_dataset(
 
 if __name__ == "__main__":
 
-    import debugpy
+    # import debugpy
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_behavior.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    # debugpy.listen(("0.0.0.0", 10092))
+    # print("🔍 Rank 0 waiting for debugger attach on port 10092...")
+    # debugpy.wait_for_client()
     args.config_yaml = "./examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # cfg.datasets.vla_data.data_mix = "robotwin"
