@@ -540,6 +540,43 @@ class LeRobotSingleDataset(Dataset):
         """The tasks for the dataset."""
         return self._tasks
 
+    def _init_action_mode(self) -> None:
+        if self.data_cfg is None:
+            self._action_mode = "abs"
+            return
+
+        action_mode = self.data_cfg.get("action_mode", "abs")
+        if action_mode is None:
+            action_mode = "abs"
+        action_mode = str(action_mode).lower()
+        if action_mode in {"absolute", "raw"}:
+            action_mode = "abs"
+        if action_mode not in {"abs", "delta", "rel"}:
+            raise ValueError(f"Invalid action_mode: {action_mode}. Expected one of: abs, delta, rel.")
+        self._action_mode = action_mode
+
+        apply_keys = self.data_cfg.get("action_mode_apply_keys", None)
+        if apply_keys:
+            normalized = []
+            for key in apply_keys:
+                key = str(key)
+                if not key.startswith("action."):
+                    key = f"action.{key}"
+                normalized.append(key)
+            self._action_mode_apply_keys = normalized
+
+        state_map = self.data_cfg.get("action_mode_state_map", {}) or {}
+        normalized_map = {}
+        for action_key, state_key in state_map.items():
+            action_key = str(action_key)
+            state_key = str(state_key)
+            if not action_key.startswith("action."):
+                action_key = f"action.{action_key}"
+            if not state_key.startswith("state."):
+                state_key = f"state.{state_key}"
+            normalized_map[action_key] = state_key
+        self._action_mode_state_map = normalized_map
+
     def _get_metadata(self, embodiment_tag: EmbodimentTag) -> DatasetMetadata:
         """Get the metadata for the dataset.
 
@@ -753,6 +790,50 @@ class LeRobotSingleDataset(Dataset):
 
         return metadata
 
+    def _get_lerobot_modality_meta(self) -> LeRobotModalityMetadata:
+        """Get the metadata for the LeRobot dataset."""
+        modality_meta_path = self.dataset_path / LE_ROBOT_MODALITY_FILENAME
+        assert modality_meta_path.exists(), f"Please provide a {LE_ROBOT_MODALITY_FILENAME} file in {self.dataset_path}"
+        with open(modality_meta_path, "r") as f:
+            modality_meta = LeRobotModalityMetadata.model_validate(json.load(f))
+        return modality_meta
+
+    def _get_lerobot_info_meta(self) -> dict:
+        """Get the metadata for the LeRobot dataset."""
+        info_meta_path = self.dataset_path / LE_ROBOT_INFO_FILENAME
+        with open(info_meta_path, "r") as f:
+            info_meta = json.load(f)
+        return info_meta
+
+    def _get_data_path_pattern(self) -> str:
+        """Get the data path pattern for the LeRobot dataset."""
+        return self.lerobot_info_meta["data_path"]
+
+    def _get_video_path_pattern(self) -> str:
+        """Get the video path pattern for the LeRobot dataset."""
+        return self.lerobot_info_meta["video_path"]
+
+    def _get_chunk_size(self) -> int:
+        """Get the chunk size for the LeRobot dataset."""
+        return self.lerobot_info_meta["chunks_size"]
+
+    def _get_tasks(self) -> pd.DataFrame:
+        """Get the tasks for the dataset."""
+        if self._lerobot_version == "v2.0":
+            tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
+            with open(tasks_path, "r") as f:
+                tasks = [json.loads(line) for line in f]
+            df = pd.DataFrame(tasks)
+            return df.set_index("task_index")
+
+        elif self._lerobot_version == "v3.0":
+            tasks_path = self.dataset_path / LE_ROBOT3_TASKS_FILENAME
+            df = pd.read_parquet(tasks_path)
+            df = df.reset_index()  # 把索引变成一列，列名通常为 'index'
+            df = df.rename(columns={"index": "task"})  # 把 'index' 列重命名为 'task'
+            df = df[["task_index", "task"]]  # 调整列顺序
+            return df
+
     def _get_trajectories(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
@@ -795,6 +876,24 @@ class LeRobotSingleDataset(Dataset):
 
             # 这里应该可以直接读取到 save index 信息
             return np.array(trajectory_ids), np.array(trajectory_lengths)
+
+    def _get_modality_keys(self) -> dict:
+        """Get the modality keys for the dataset.
+        The keys are the modality names, and the values are the keys for each modality.
+        See property `modality_keys` for the expected format.
+        """
+        modality_keys = defaultdict(list)
+        for modality, config in self.modality_configs.items():
+            modality_keys[modality] = config.modality_keys
+        return modality_keys
+
+    def _get_delta_indices(self) -> dict[str, np.ndarray]:
+        """Restructure the delta indices to use modality.key as keys instead of just the modalities."""
+        delta_indices: dict[str, np.ndarray] = {}
+        for config in self.modality_configs.values():
+            for key in config.modality_keys:
+                delta_indices[key] = np.array(config.delta_indices)
+        return delta_indices
 
     def _get_all_steps(self) -> list[tuple[int, int]]:
         """Get the trajectory IDs and base indices for all steps in the dataset.
@@ -913,255 +1012,6 @@ class LeRobotSingleDataset(Dataset):
 
         return all_steps
 
-    def _get_position_and_gripper_values(self, data: pd.DataFrame) -> tuple[list, list]:
-        """Get position and gripper values based on available columns in the dataset."""
-        # Get action keys from modality_keys
-        action_keys = self.modality_keys.get("action", [])
-
-        # Extract position data
-        delta_position_values = None
-        position_candidates = ["delta_eef_position"]
-        coordinate_candidates = ["x", "y", "z"]
-
-        # First try combined position fields
-        for pos_key in position_candidates:
-            full_key = f"action.{pos_key}"
-            if full_key in action_keys:
-                try:
-                    # Get the lerobot key for this modality
-                    le_action_cfg = self.lerobot_modality_meta.action
-                    subkey = pos_key
-                    if subkey in le_action_cfg:
-                        le_key = le_action_cfg[subkey].original_key or subkey
-                        if le_key in data.columns:
-                            data_array = np.stack(data[le_key])
-                            le_indices = np.arange(le_action_cfg[subkey].start, le_action_cfg[subkey].end)
-                            filtered_data = data_array[:, le_indices]
-                            delta_position_values = filtered_data.tolist()
-                            break
-                except Exception:
-                    continue
-
-        # If combined fields not found, try individual x,y,z coordinates
-        if delta_position_values is None:
-            x_data, y_data, z_data = None, None, None
-            for coord in coordinate_candidates:
-                full_key = f"action.{coord}"
-                if full_key in action_keys:
-                    try:
-                        le_action_cfg = self.lerobot_modality_meta.action
-                        if coord in le_action_cfg:
-                            le_key = le_action_cfg[coord].original_key or coord
-                            if le_key in data.columns:
-                                data_array = np.stack(data[le_key])
-                                le_indices = np.arange(le_action_cfg[coord].start, le_action_cfg[coord].end)
-                                coord_data = data_array[:, le_indices].flatten()
-                                if coord == "x":
-                                    x_data = coord_data
-                                elif coord == "y":
-                                    y_data = coord_data
-                                elif coord == "z":
-                                    z_data = coord_data
-                    except Exception:
-                        continue
-
-            if x_data is not None and y_data is not None and z_data is not None:
-                delta_position_values = np.column_stack((x_data, y_data, z_data)).tolist()
-
-        if delta_position_values is None:
-            # Fallback to the old hardcoded approach if metadata approach fails
-            if "action.delta_eef_position" in data.columns:
-                delta_position_values = data["action.delta_eef_position"].to_numpy().tolist()
-            elif all(col in data.columns for col in ["action.x", "action.y", "action.z"]):
-                x_vals = data["action.x"].to_numpy()
-                y_vals = data["action.y"].to_numpy()
-                z_vals = data["action.z"].to_numpy()
-                delta_position_values = np.column_stack((x_vals, y_vals, z_vals)).tolist()
-            else:
-                raise ValueError(f"No suitable position columns found. Available columns: {data.columns.tolist()}")
-
-        # Extract gripper data
-        gripper_values = None
-        gripper_candidates = ["gripper_close", "gripper"]
-
-        for grip_key in gripper_candidates:
-            full_key = f"action.{grip_key}"
-            if full_key in action_keys:
-                try:
-                    le_action_cfg = self.lerobot_modality_meta.action
-                    if grip_key in le_action_cfg:
-                        le_key = le_action_cfg[grip_key].original_key or grip_key
-                        if le_key in data.columns:
-                            data_array = np.stack(data[le_key])
-                            le_indices = np.arange(le_action_cfg[grip_key].start, le_action_cfg[grip_key].end)
-                            gripper_data = data_array[:, le_indices].flatten()
-                            gripper_values = gripper_data.tolist()
-                            break
-                except Exception:
-                    continue
-
-        if gripper_values is None:
-            # Fallback to the old hardcoded approach if metadata approach fails
-            if "action.gripper_close" in data.columns:
-                gripper_values = data["action.gripper_close"].to_numpy().tolist()
-            elif "action.gripper" in data.columns:
-                gripper_values = data["action.gripper"].to_numpy().tolist()
-            else:
-                raise ValueError(f"No suitable gripper columns found. Available columns: {data.columns.tolist()}")
-
-        return delta_position_values, gripper_values
-
-    def _get_modality_keys(self) -> dict:
-        """Get the modality keys for the dataset.
-        The keys are the modality names, and the values are the keys for each modality.
-        See property `modality_keys` for the expected format.
-        """
-        modality_keys = defaultdict(list)
-        for modality, config in self.modality_configs.items():
-            modality_keys[modality] = config.modality_keys
-        return modality_keys
-
-    def _get_delta_indices(self) -> dict[str, np.ndarray]:
-        """Restructure the delta indices to use modality.key as keys instead of just the modalities."""
-        delta_indices: dict[str, np.ndarray] = {}
-        for config in self.modality_configs.values():
-            for key in config.modality_keys:
-                delta_indices[key] = np.array(config.delta_indices)
-        return delta_indices
-
-    def _init_action_mode(self) -> None:
-        if self.data_cfg is None:
-            self._action_mode = "abs"
-            return
-
-        action_mode = self.data_cfg.get("action_mode", "abs")
-        if action_mode is None:
-            action_mode = "abs"
-        action_mode = str(action_mode).lower()
-        if action_mode in {"absolute", "raw"}:
-            action_mode = "abs"
-        if action_mode not in {"abs", "delta", "rel"}:
-            raise ValueError(f"Invalid action_mode: {action_mode}. Expected one of: abs, delta, rel.")
-        self._action_mode = action_mode
-
-        apply_keys = self.data_cfg.get("action_mode_apply_keys", None)
-        if apply_keys:
-            normalized = []
-            for key in apply_keys:
-                key = str(key)
-                if not key.startswith("action."):
-                    key = f"action.{key}"
-                normalized.append(key)
-            self._action_mode_apply_keys = normalized
-
-        state_map = self.data_cfg.get("action_mode_state_map", {}) or {}
-        normalized_map = {}
-        for action_key, state_key in state_map.items():
-            action_key = str(action_key)
-            state_key = str(state_key)
-            if not action_key.startswith("action."):
-                action_key = f"action.{action_key}"
-            if not state_key.startswith("state."):
-                state_key = f"state.{state_key}"
-            normalized_map[action_key] = state_key
-        self._action_mode_state_map = normalized_map
-
-    def _infer_state_key_for_action(self, action_key: str) -> str | None:
-        if action_key in self._action_mode_state_map:
-            return self._action_mode_state_map[action_key]
-
-        if not action_key.startswith("action."):
-            return None
-        base = action_key.replace("action.", "", 1)
-        if f"state.{base}" in self.modality_keys.get("state", []):
-            return f"state.{base}"
-        return None
-
-    def _apply_action_mode(self, data: dict) -> dict:
-        if self._action_mode in (None, "abs"):
-            return data
-
-        action_keys = self._action_mode_apply_keys or self.modality_keys.get("action", [])
-        for action_key in action_keys:
-            if action_key not in data:
-                print(f"[WARNING] Action key {action_key} not found in data")
-                continue
-            state_key = self._infer_state_key_for_action(action_key)
-
-            # for safety, check if the state key is valid
-            if state_key is None or state_key not in data:
-                continue
-
-            action_values = np.asarray(data[action_key])
-            state_values = np.asarray(data[state_key])
-            if action_values.ndim != 2 or state_values.ndim != 2:
-                raise ValueError(
-                    f"Expected 2D arrays for action/state, got {action_key}: {action_values.shape}, {state_key}: {state_values.shape}"
-                )
-            if action_values.shape[1] != state_values.shape[1]:
-                raise ValueError(
-                    f"Action/state dim mismatch for {action_key} vs {state_key}: {action_values.shape} vs {state_values.shape}"
-                )
-
-            state0 = state_values[0]
-            if self._action_mode == "delta":
-                out = action_values.copy()
-                if len(out) > 1:
-                    out[1:] = action_values[1:] - action_values[:-1]
-                out[0] = action_values[0] - state0
-            elif self._action_mode == "rel":
-                out = action_values - state0
-            else:
-                out = action_values
-
-            data[action_key] = out
-
-        return data
-
-    def _get_lerobot_modality_meta(self) -> LeRobotModalityMetadata:
-        """Get the metadata for the LeRobot dataset."""
-        modality_meta_path = self.dataset_path / LE_ROBOT_MODALITY_FILENAME
-        assert modality_meta_path.exists(), f"Please provide a {LE_ROBOT_MODALITY_FILENAME} file in {self.dataset_path}"
-        with open(modality_meta_path, "r") as f:
-            modality_meta = LeRobotModalityMetadata.model_validate(json.load(f))
-        return modality_meta
-
-    def _get_lerobot_info_meta(self) -> dict:
-        """Get the metadata for the LeRobot dataset."""
-        info_meta_path = self.dataset_path / LE_ROBOT_INFO_FILENAME
-        with open(info_meta_path, "r") as f:
-            info_meta = json.load(f)
-        return info_meta
-
-    def _get_data_path_pattern(self) -> str:
-        """Get the data path pattern for the LeRobot dataset."""
-        return self.lerobot_info_meta["data_path"]
-
-    def _get_video_path_pattern(self) -> str:
-        """Get the video path pattern for the LeRobot dataset."""
-        return self.lerobot_info_meta["video_path"]
-
-    def _get_chunk_size(self) -> int:
-        """Get the chunk size for the LeRobot dataset."""
-        return self.lerobot_info_meta["chunks_size"]
-
-    def _get_tasks(self) -> pd.DataFrame:
-        """Get the tasks for the dataset."""
-        if self._lerobot_version == "v2.0":
-            tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
-            with open(tasks_path, "r") as f:
-                tasks = [json.loads(line) for line in f]
-            df = pd.DataFrame(tasks)
-            return df.set_index("task_index")
-
-        elif self._lerobot_version == "v3.0":
-            tasks_path = self.dataset_path / LE_ROBOT3_TASKS_FILENAME
-            df = pd.read_parquet(tasks_path)
-            df = df.reset_index()  # 把索引变成一列，列名通常为 'index'
-            df = df.rename(columns={"index": "task"})  # 把 'index' 列重命名为 'task'
-            df = df[["task_index", "task"]]  # 调整列顺序
-            return df
-
     def _check_integrity(self):
         """Use the config to check if the keys are valid and detect silent data corruption."""
         ERROR_MSG_HEADER = f"Error occurred in initializing dataset {self.dataset_name}:\n"
@@ -1214,41 +1064,6 @@ class LeRobotSingleDataset(Dataset):
         data = self.transforms(raw_data)
         return self._pack_sample(data)
 
-    def _pack_sample(self, data: dict) -> dict:
-        """Pack transformed modality data into training sample format."""
-        prim_images = []
-        wrist_views = []
-        for video_key in self.modality_keys["video"]:
-            image = data[video_key][0]
-            image = Image.fromarray(image).resize((224, 224))
-            if "wrist" not in video_key:
-                prim_images.append(image)
-            else:
-                wrist_views.append(image)
-        all_images = prim_images + wrist_views
-
-        language = data[self.modality_keys["language"][0]][0]
-        action = []
-        for action_key in self.modality_keys["action"]:
-            action.append(data[action_key])
-        action = np.concatenate(action, axis=1).astype(np.float16)
-
-        sample = {
-            "action": action,
-            "image": all_images,
-            "lang": language,
-            "language": language,
-        }
-
-        if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
-            state = []
-            for state_key in self.modality_keys["state"]:
-                state.append(data[state_key])
-            state = np.concatenate(state, axis=1).astype(np.float16)
-            sample["state"] = state
-
-        return sample
-
     def get_step_data(self, trajectory_id: int, base_index: int) -> dict:
         """Get the RAW data for a single step in a trajectory. No transforms are applied.
 
@@ -1289,18 +1104,22 @@ class LeRobotSingleDataset(Dataset):
     def get_trajectory_data(self, trajectory_id: int) -> pd.DataFrame:
         """Get the data for a trajectory."""
         if self._lerobot_version == "v2.0":
-
-            if self.curr_traj_id == trajectory_id and self.curr_traj_data is not None:
-                return self.curr_traj_data
-            else:
-                chunk_index = self.get_episode_chunk(trajectory_id)
-                parquet_path = self.dataset_path / self.data_path_pattern.format(
-                    episode_chunk=chunk_index, episode_index=trajectory_id
-                )
-                assert parquet_path.exists(), f"Parquet file not found at {parquet_path}"
-                return pd.read_parquet(parquet_path)
+            return self.get_trajectory_data_lerobot_v2(trajectory_id)
         elif self._lerobot_version == "v3.0":
             return self.get_trajectory_data_lerobot_v3(trajectory_id)
+        else:
+            raise ValueError(f"Invalid lerobot version: {self._lerobot_version}")
+
+    def get_trajectory_data_lerobot_v2(self, trajectory_id: int) -> pd.DataFrame:
+        if self.curr_traj_id == trajectory_id and self.curr_traj_data is not None:
+            return self.curr_traj_data
+        else:
+            chunk_index = self.get_episode_chunk(trajectory_id)
+            parquet_path = self.dataset_path / self.data_path_pattern.format(
+                episode_chunk=chunk_index, episode_index=trajectory_id
+            )
+            assert parquet_path.exists(), f"Parquet file not found at {parquet_path}"
+            return pd.read_parquet(parquet_path)
 
     def get_trajectory_data_lerobot_v3(self, trajectory_id: int) -> pd.DataFrame:
         """Get the data for a trajectory from lerobot v3."""
@@ -1329,99 +1148,33 @@ class LeRobotSingleDataset(Dataset):
 
             return episode_data
 
-    def get_trajectory_index(self, trajectory_id: int) -> int:
-        """Get the index of the trajectory in the dataset by the trajectory ID.
-        This is useful when you need to get the trajectory length or sampling weight corresponding to the trajectory ID.
-
-        Args:
-            trajectory_id (str): The ID of the trajectory.
-
-        Returns:
-            int: The index of the trajectory in the dataset.
-        """
-        trajectory_indices = np.where(self.trajectory_ids == trajectory_id)[0]
-        if len(trajectory_indices) != 1:
-            raise ValueError(f"Error finding trajectory index for {trajectory_id}, found {trajectory_indices=}")
-        return trajectory_indices[0]
-
-    def get_episode_chunk(self, ep_index: int) -> int:
-        """Get the chunk index for an episode index."""
-        return ep_index // self.chunk_size
-
-    def get_episode_file_index(self, ep_index: int) -> int:
-        """Get the file index for an episode index."""
-        episode_meta = self.trajectory_ids_to_metadata[ep_index]
-        return episode_meta["data/file_index"]
-
-    def get_episode_file_from_index(self, ep_index: int) -> int:
-        """Get the file from index for an episode index."""
-        episode_meta = self.trajectory_ids_to_metadata[ep_index]
-        return episode_meta["data/file_from_index"]
-
-    def retrieve_data_and_pad(
+    def get_data_by_modality(
         self,
-        array: np.ndarray,
-        step_indices: np.ndarray,
-        max_length: int,
-        padding_strategy: str = "first_last",
-    ) -> np.ndarray:
-        """Retrieve the data from the dataset and pad it if necessary.
+        trajectory_id: int,
+        modality: str,
+        key: str,
+        base_index: int,
+    ):
+        """Get the data corresponding to the modality for a trajectory by a base index.
+        This method will call the corresponding helper method based on the modality.
+        See the helper methods for more details.
+        NOTE: For the language modality, the data is padded with empty strings if no matching data is found.
+
         Args:
-            array (np.ndarray): The array to retrieve the data from.
-            step_indices (np.ndarray): The step indices to retrieve the data for.
-            max_length (int): The maximum length of the data.
-            padding_strategy (str): The padding strategy, either "first" or "last".
+            dataset (BaseSingleDataset): The dataset to retrieve the data from.
+            trajectory_id (int): The ID of the trajectory.
+            modality (str): The modality of the data.
+            key (str): The key of the data.
+            base_index (int): The base index of the trajectory.
         """
-        # Get the padding indices
-        front_padding_indices = step_indices < 0
-        end_padding_indices = step_indices >= max_length
-        padding_positions = np.logical_or(front_padding_indices, end_padding_indices)
-        # Retrieve the data with the non-padding indices
-        # If there exists some padding, Given T step_indices, the shape of the retrieved data will be (T', ...) where T' < T
-        raw_data = array[step_indices[~padding_positions]]
-        assert isinstance(raw_data, np.ndarray), f"{type(raw_data)=}"
-        # This is the shape of the output, (T, ...)
-        if raw_data.ndim == 1:
-            expected_shape = (len(step_indices),)
+        if modality == "video":
+            return self.get_video(trajectory_id, key, base_index)
+        elif modality == "state" or modality == "action":
+            return self.get_state_or_action(trajectory_id, modality, key, base_index)
+        elif modality == "language":
+            return self.get_language(trajectory_id, key, base_index)
         else:
-            expected_shape = (len(step_indices), *array.shape[1:])
-
-        # Pad the data
-        output = np.zeros(expected_shape)
-        # Assign the non-padded data
-        output[~padding_positions] = raw_data
-        # If there exists some padding, pad the data
-        if padding_positions.any():
-            if padding_strategy == "first_last":
-                # Use first / last step data to pad
-                front_padding_data = array[0]
-                end_padding_data = array[-1]
-                output[front_padding_indices] = front_padding_data
-                output[end_padding_indices] = end_padding_data
-            elif padding_strategy == "zero":
-                # Use zero padding
-                output[padding_positions] = 0
-            else:
-                raise ValueError(f"Invalid padding strategy: {padding_strategy}")
-        return output
-
-    def get_video_path(self, trajectory_id: int, key: str) -> Path:
-        chunk_index = self.get_episode_chunk(trajectory_id)
-        original_key = self.lerobot_modality_meta.video[key].original_key
-        if original_key is None:
-            original_key = key
-        if self._lerobot_version == "v2.0":
-            video_filename = self.video_path_pattern.format(
-                episode_chunk=chunk_index, episode_index=trajectory_id, video_key=original_key
-            )
-        elif self._lerobot_version == "v3.0":
-            episode_meta = self.trajectory_ids_to_metadata[trajectory_id]
-            video_filename = self.video_path_pattern.format(
-                video_key=original_key,
-                chunk_index=episode_meta["data/chunk_index"],
-                file_index=episode_meta["data/file_index"],
-            )
-        return self.dataset_path / video_filename
+            raise ValueError(f"Invalid modality: {modality}")
 
     def get_video(
         self,
@@ -1466,6 +1219,24 @@ class LeRobotSingleDataset(Dataset):
             video_backend=self.video_backend,  # TODO
             video_backend_kwargs=self.video_backend_kwargs,
         )
+
+    def get_video_path(self, trajectory_id: int, key: str) -> Path:
+        chunk_index = self.get_episode_chunk(trajectory_id)
+        original_key = self.lerobot_modality_meta.video[key].original_key
+        if original_key is None:
+            original_key = key
+        if self._lerobot_version == "v2.0":
+            video_filename = self.video_path_pattern.format(
+                episode_chunk=chunk_index, episode_index=trajectory_id, video_key=original_key
+            )
+        elif self._lerobot_version == "v3.0":
+            episode_meta = self.trajectory_ids_to_metadata[trajectory_id]
+            video_filename = self.video_path_pattern.format(
+                video_key=original_key,
+                chunk_index=episode_meta["data/chunk_index"],
+                file_index=episode_meta["data/file_index"],
+            )
+        return self.dataset_path / video_filename
 
     def get_state_or_action(
         self,
@@ -1525,6 +1296,53 @@ class LeRobotSingleDataset(Dataset):
             # padding_strategy="zero",           # HACK for realdata
         )
 
+    def retrieve_data_and_pad(
+        self,
+        array: np.ndarray,
+        step_indices: np.ndarray,
+        max_length: int,
+        padding_strategy: str = "first_last",
+    ) -> np.ndarray:
+        """Retrieve the data from the dataset and pad it if necessary.
+        Args:
+            array (np.ndarray): The array to retrieve the data from.
+            step_indices (np.ndarray): The step indices to retrieve the data for.
+            max_length (int): The maximum length of the data.
+            padding_strategy (str): The padding strategy, either "first" or "last".
+        """
+        # Get the padding indices
+        front_padding_indices = step_indices < 0
+        end_padding_indices = step_indices >= max_length
+        padding_positions = np.logical_or(front_padding_indices, end_padding_indices)
+        # Retrieve the data with the non-padding indices
+        # If there exists some padding, Given T step_indices, the shape of the retrieved data will be (T', ...) where T' < T
+        raw_data = array[step_indices[~padding_positions]]
+        assert isinstance(raw_data, np.ndarray), f"{type(raw_data)=}"
+        # This is the shape of the output, (T, ...)
+        if raw_data.ndim == 1:
+            expected_shape = (len(step_indices),)
+        else:
+            expected_shape = (len(step_indices), *array.shape[1:])
+
+        # Pad the data
+        output = np.zeros(expected_shape)
+        # Assign the non-padded data
+        output[~padding_positions] = raw_data
+        # If there exists some padding, pad the data
+        if padding_positions.any():
+            if padding_strategy == "first_last":
+                # Use first / last step data to pad
+                front_padding_data = array[0]
+                end_padding_data = array[-1]
+                output[front_padding_indices] = front_padding_data
+                output[end_padding_indices] = end_padding_data
+            elif padding_strategy == "zero":
+                # Use zero padding
+                output[padding_positions] = 0
+            else:
+                raise ValueError(f"Invalid padding strategy: {padding_strategy}")
+        return output
+
     def get_language(
         self,
         trajectory_id: int,
@@ -1572,35 +1390,122 @@ class LeRobotSingleDataset(Dataset):
 
         return self.tasks.loc[task_indices]["task"].tolist()
 
-    def get_data_by_modality(
-        self,
-        trajectory_id: int,
-        modality: str,
-        key: str,
-        base_index: int,
-    ):
-        """Get the data corresponding to the modality for a trajectory by a base index.
-        This method will call the corresponding helper method based on the modality.
-        See the helper methods for more details.
-        NOTE: For the language modality, the data is padded with empty strings if no matching data is found.
+    def _apply_action_mode(self, data: dict) -> dict:
+        if self._action_mode in (None, "abs"):
+            return data
+
+        def infer_state_key_for_action(action_key: str) -> str | None:
+            if action_key in self._action_mode_state_map:
+                return self._action_mode_state_map[action_key]
+            if not action_key.startswith("action."):
+                return None
+            base = action_key.replace("action.", "", 1)
+            if f"state.{base}" in self.modality_keys.get("state", []):
+                return f"state.{base}"
+            return None
+
+        action_keys = self._action_mode_apply_keys or self.modality_keys.get("action", [])
+        for action_key in action_keys:
+            if action_key not in data:
+                print(f"[WARNING] Action key {action_key} not found in data")
+                continue
+            state_key = infer_state_key_for_action(action_key)
+
+            # for safety, check if the state key is valid
+            if state_key is None or state_key not in data:
+                continue
+
+            action_values = np.asarray(data[action_key])
+            state_values = np.asarray(data[state_key])
+            if action_values.ndim != 2 or state_values.ndim != 2:
+                raise ValueError(
+                    f"Expected 2D arrays for action/state, got {action_key}: {action_values.shape}, {state_key}: {state_values.shape}"
+                )
+            if action_values.shape[1] != state_values.shape[1]:
+                raise ValueError(
+                    f"Action/state dim mismatch for {action_key} vs {state_key}: {action_values.shape} vs {state_values.shape}"
+                )
+
+            state0 = state_values[0]
+            if self._action_mode == "delta":
+                out = action_values.copy()
+                if len(out) > 1:
+                    out[1:] = action_values[1:] - action_values[:-1]
+                out[0] = action_values[0] - state0
+            elif self._action_mode == "rel":
+                out = action_values - state0
+            else:
+                out = action_values
+
+            data[action_key] = out
+
+        return data
+
+    def _pack_sample(self, data: dict) -> dict:
+        """Pack transformed modality data into training sample format."""
+        prim_images = []
+        wrist_views = []
+        for video_key in self.modality_keys["video"]:
+            image = data[video_key][0]
+            image = Image.fromarray(image).resize((224, 224))
+            if "wrist" not in video_key:
+                prim_images.append(image)
+            else:
+                wrist_views.append(image)
+        all_images = prim_images + wrist_views
+
+        language = data[self.modality_keys["language"][0]][0]
+        action = []
+        for action_key in self.modality_keys["action"]:
+            action.append(data[action_key])
+        action = np.concatenate(action, axis=1).astype(np.float16)
+
+        sample = {
+            "action": action,
+            "image": all_images,
+            "lang": language,
+            "language": language,
+        }
+
+        if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
+            state = []
+            for state_key in self.modality_keys["state"]:
+                state.append(data[state_key])
+            state = np.concatenate(state, axis=1).astype(np.float16)
+            sample["state"] = state
+
+        return sample
+
+    def get_trajectory_index(self, trajectory_id: int) -> int:
+        """Get the index of the trajectory in the dataset by the trajectory ID.
+        This is useful when you need to get the trajectory length or sampling weight corresponding to the trajectory ID.
 
         Args:
-            dataset (BaseSingleDataset): The dataset to retrieve the data from.
-            trajectory_id (int): The ID of the trajectory.
-            modality (str): The modality of the data.
-            key (str): The key of the data.
-            base_index (int): The base index of the trajectory.
-        """
-        if modality == "video":
-            return self.get_video(trajectory_id, key, base_index)
-        elif modality == "state" or modality == "action":
-            return self.get_state_or_action(trajectory_id, modality, key, base_index)
-        elif modality == "language":
-            return self.get_language(trajectory_id, key, base_index)
-        else:
-            raise ValueError(f"Invalid modality: {modality}")
+            trajectory_id (str): The ID of the trajectory.
 
-    def _save_dataset_statistics_(self, save_path: Path | str, format: str = "json") -> None:
+        Returns:
+            int: The index of the trajectory in the dataset.
+        """
+        trajectory_indices = np.where(self.trajectory_ids == trajectory_id)[0]
+        if len(trajectory_indices) != 1:
+            raise ValueError(f"Error finding trajectory index for {trajectory_id}, found {trajectory_indices=}")
+        return trajectory_indices[0]
+
+    def get_episode_chunk(self, ep_index: int) -> int:
+        """Get the chunk index for an episode index."""
+        return ep_index // self.chunk_size
+
+    def get_episode_file_index(self, ep_index: int) -> int:
+        """Get the file index for an episode index."""
+        episode_meta = self.trajectory_ids_to_metadata[ep_index]
+        return episode_meta["data/file_index"]
+
+    def get_episode_file_from_index(self, ep_index: int) -> int:
+        """Get the file from index for an episode index."""
+        episode_meta = self.trajectory_ids_to_metadata[ep_index]
+        return episode_meta["data/file_from_index"]
+
+    def save_dataset_statistics(self, save_path: Path | str, format: str = "json") -> None:
         """
         Save dataset statistics to specified path in the required format.
         Only includes statistics for keys that are actually used in the dataset.
