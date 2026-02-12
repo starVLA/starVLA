@@ -95,7 +95,7 @@ and edit `ROBOTWIN_PATH` in `examples/Robotwin/eval_files/eval.sh`.
 In the first terminal, activate the `starVLA` conda environment and run:  
 
 ```bash
-python examples/Robotwin/eval_files/run_policy_server.sh
+bash examples/Robotwin/eval_files/run_policy_server.sh
 ```
 
 Edit your checkpoint path in `examples/Robotwin/eval_files/deploy_policy.yml` and `examples/Robotwin/eval_files/run_policy_server.sh`.
