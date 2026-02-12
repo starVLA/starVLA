@@ -104,6 +104,7 @@ trainer:
     weight_decay: 1.0e-08
 
   # parameters to be determined
+  save_format: pt  # pt or safetensors
   is_resume: false
   resume_epoch: null
   resume_step: null

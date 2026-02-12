@@ -90,9 +90,13 @@ class baseframework(PreTrainedModel):
         FrameworkModel = build_framework(cfg=model_config)
         # set for action un-norm
         FrameworkModel.norm_stats = norm_stats
-        # Load from Checkpoint (Custom --> should load both *projector* and *llm* weights)
-        model_state_dict = torch.load(pretrained_checkpoint, map_location="cpu")
-        # logger.info(f"Loading model weights from `{pretrained_checkpoint}`")
+        # Load from Checkpoint - support both safetensors and pt formats
+        if pretrained_checkpoint.suffix == ".safetensors":
+            from safetensors.torch import load_file
+
+            model_state_dict = load_file(str(pretrained_checkpoint))
+        else:
+            model_state_dict = torch.load(pretrained_checkpoint, map_location="cpu")
         model_keys = set(FrameworkModel.state_dict().keys())
         checkpoint_keys = set(model_state_dict.keys())
         try:

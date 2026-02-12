@@ -97,27 +97,43 @@ class VLAMTrainer(TrainerUtils):
         self.accelerator = accelerator
         self.completed_steps = 0
         self.total_batch_size = self._calculate_total_batch_size()
+        self.checkpoint_dir = os.path.join(cfg.output_dir, "checkpoints")
 
     def prepare_training(self):
         rank = dist.get_rank() if dist.is_initialized() else 0
         seed = self.config.seed + rank if hasattr(self.config, "seed") else rank + 3047
         set_seed(seed)
 
-        if hasattr(self.config.trainer, "pretrained_checkpoint") and self.config.trainer.pretrained_checkpoint:
-            pretrained_checkpoint = self.config.trainer.pretrained_checkpoint
-            reload_modules = self.config.trainer.reload_modules if hasattr(self.config.trainer, "reload_modules") else None
-            self.model = self.load_pretrained_backbones(self.model, pretrained_checkpoint, reload_modules=reload_modules)
+        is_resume = getattr(self.config.trainer, "is_resume", False)
 
+        # Step 1: Load pretrained weights (only when NOT resuming full state)
+        if not is_resume:
+            if hasattr(self.config.trainer, "pretrained_checkpoint") and self.config.trainer.pretrained_checkpoint:
+                pretrained_checkpoint = self.config.trainer.pretrained_checkpoint
+                reload_modules = (
+                    self.config.trainer.reload_modules if hasattr(self.config.trainer, "reload_modules") else None
+                )
+                self.model = self.load_pretrained_backbones(
+                    self.model, pretrained_checkpoint, reload_modules=reload_modules
+                )
+
+        # Step 2: Freeze parameters
         freeze_modules = self.config.trainer.freeze_modules if hasattr(self.config.trainer, "freeze_modules") else None
         self.model = self.freeze_backbones(self.model, freeze_modules=freeze_modules)
         self.print_trainable_parameters(self.model)
 
-        self.model, self.optimizer, self.vlm_train_dataloader = self.setup_distributed_training(
-            self.accelerator, self.model, self.optimizer, self.vlm_train_dataloader
+        # Step 3: accelerator.prepare() - wraps with DeepSpeed
+        # Include lr_scheduler so accelerator.save_state/load_state can restore it.
+        self.model, self.optimizer, self.lr_scheduler, self.vlm_train_dataloader = self.setup_distributed_training(
+            self.accelerator, self.model, self.optimizer, self.lr_scheduler, self.vlm_train_dataloader
         )
 
+        # Step 4: Resume full training state (must be after prepare!)
+        if is_resume:
+            self._resume_training_state()
+
+        # Step 5: Init wandb
         self._init_wandb()
-        self._init_checkpointing()
 
     def _calculate_total_batch_size(self):
         """Calculate global batch size."""
@@ -135,45 +151,32 @@ class VLAMTrainer(TrainerUtils):
                 group="vla-train",
             )
 
-    def _init_checkpointing(self):
-        """Initialize checkpoint directory."""
-        self.checkpoint_dir = os.path.join(self.config.output_dir, "checkpoints")
+    def _resume_training_state(self):
+        """Resume full training state from latest checkpoint (after accelerator.prepare)."""
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        pretrained_checkpoint = getattr(self.config.trainer, "pretrained_checkpoint", None)
-        is_resume = getattr(self.config.trainer, "is_resume", False)
 
-        if pretrained_checkpoint and is_resume:
-            self._load_checkpoint(self.config.resume_from_checkpoint)
-
-    def _load_checkpoint(self, checkpoint_path):
-        """Load checkpoint."""
-        self.accelerator.load_state(checkpoint_path)
-        self.accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
+        latest_path, step = self._get_latest_checkpoint(self.checkpoint_dir)
+        if latest_path and os.path.isdir(latest_path):
+            self.completed_steps = self.resume_from_full_checkpoint(latest_path)
+            logger.info(f"Resumed full training state from {latest_path}, step={self.completed_steps}")
+        elif latest_path:
+            logger.warning(
+                f"Found legacy checkpoint {latest_path}. "
+                "Only model weights will be restored (optimizer/scheduler state lost)."
+            )
+            self.model = self.load_pretrained_backbones(self.model, latest_path, reload_modules=None)
+            self.completed_steps = step
+        else:
+            logger.warning(f"No checkpoint found in {self.checkpoint_dir}. Starting from scratch.")
+            self.completed_steps = 0
 
     def _save_checkpoint(self):
-        """Save current training state."""
-        if self.accelerator.is_main_process:
-            checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
-            state_dict = self.accelerator.get_state_dict(self.model)
-            torch.save(state_dict, checkpoint_path + "_pytorch_model.pt")
-            summary_data = {"steps": self.completed_steps}
-            with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
-                f.write(json.dumps(summary_data) + "\n")
-            self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
-            # ✅ Save accessed configuration only
-            if isinstance(self.config, AccessTrackedConfig):
-                logger.info("📊 Saving accessed configuration...")
-                output_dir = Path(self.config.output_dir)
-                # self.config.save_accessed_config(
-                #     output_dir / "config.json", 
-                #     use_original_values=False
-                # )
-                self.config.save_accessed_config(
-                    output_dir / "config.yaml", 
-                    use_original_values=False 
-                )
-                logger.info("✅ Configuration files saved")
-        self.accelerator.wait_for_everyone()
+        """Save current training state (full accelerator state + standalone weights)."""
+        self.save_full_checkpoint(
+            completed_steps=self.completed_steps,
+            checkpoint_dir=self.checkpoint_dir,
+            output_dir=self.config.output_dir,
+        )
 
     def eval_action_model(self, step_metrics=None):
         """No-op evaluation for VLM-only training."""
@@ -262,10 +265,16 @@ class VLAMTrainer(TrainerUtils):
     def _finalize_training(self):
         """Training end processing."""
         if self.accelerator.is_main_process:
+            save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)
             state_dict = self.accelerator.get_state_dict(self.model)
-            torch.save(state_dict, os.path.join(final_checkpoint, "pytorch_model.pt"))
+            if save_format == "safetensors":
+                from safetensors.torch import save_file
+
+                save_file(state_dict, os.path.join(final_checkpoint, "model.safetensors"))
+            else:
+                torch.save(state_dict, os.path.join(final_checkpoint, "pytorch_model.pt"))
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
         # close W&B

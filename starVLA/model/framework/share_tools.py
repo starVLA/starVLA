@@ -200,18 +200,29 @@ def merge_pram_config(init):
     return wrapper
 
 
+_SUPPORTED_CKPT_SUFFIXES = {".pt", ".safetensors"}
+
+
+def _resolve_run_dir(checkpoint_pt):
+    """Resolve run directory from a checkpoint path.
+
+    For files in checkpoints/ (e.g. run_dir/checkpoints/model.pt), go up 2 levels.
+    """
+    return checkpoint_pt.parents[1]
+
+
 def read_model_config(pretrained_checkpoint):
     """
     Load global model configuration and dataset normalization statistics
-    associated with a saved checkpoint (.pt).
+    associated with a saved checkpoint (.pt or .safetensors).
 
     Expected directory layout:
-        <run_dir>/checkpoints/<name>.pt
+        <run_dir>/checkpoints/<name>.pt|.safetensors
         <run_dir>/config.json
         <run_dir>/dataset_statistics.json
 
     Args:
-        pretrained_checkpoint: Path to a .pt checkpoint file.
+        pretrained_checkpoint: Path to a .pt or .safetensors checkpoint file.
 
     Returns:
         tuple:
@@ -223,23 +234,22 @@ def read_model_config(pretrained_checkpoint):
         AssertionError: If file suffix or structure invalid.
     """
     if os.path.isfile(pretrained_checkpoint):
-        overwatch.info(f"Loading from local checkpoint path `{(checkpoint_pt := Path(pretrained_checkpoint))}`")
+        checkpoint_pt = Path(pretrained_checkpoint)
+        overwatch.info(f"Loading from local checkpoint path `{checkpoint_pt}`")
 
-        # [Validate] Checkpoint Path should look like `.../<RUN_ID>/checkpoints/<CHECKPOINT_PATH>.pt`
-        assert checkpoint_pt.suffix == ".pt"
-        run_dir = checkpoint_pt.parents[1]
+        assert checkpoint_pt.suffix in _SUPPORTED_CKPT_SUFFIXES, (
+            f"Unsupported checkpoint suffix `{checkpoint_pt.suffix}`, expected one of {_SUPPORTED_CKPT_SUFFIXES}"
+        )
+        run_dir = _resolve_run_dir(checkpoint_pt)
 
         # Get paths for `config.json`, `dataset_statistics.json` and pretrained checkpoint
         config_json, dataset_statistics_json = run_dir / "config.json", run_dir / "dataset_statistics.json"
         assert config_json.exists(), f"Missing `config.json` for `{run_dir = }`"
         assert dataset_statistics_json.exists(), f"Missing `dataset_statistics.json` for `{run_dir = }`"
 
-        # Otherwise =>> try looking for a match on `model_id_or_path` on the HF Hub (`model_id_or_path`)
-        # Load VLA Config (and corresponding base VLM `ModelConfig`) from `config.json`
         with open(config_json, "r") as f:
             global_cfg = json.load(f)
 
-        # Load Dataset Statistics for Action Denormalization
         with open(dataset_statistics_json, "r") as f:
             norm_stats = json.load(f)
     else:
@@ -250,10 +260,11 @@ def read_model_config(pretrained_checkpoint):
 
 def read_mode_config(pretrained_checkpoint):
     """
-    Same as read_model_config (legacy duplicate kept for backward compatibility).
+    Load YAML model configuration and dataset normalization statistics
+    associated with a saved checkpoint (.pt or .safetensors).
 
     Args:
-        pretrained_checkpoint: Path to a .pt checkpoint file.
+        pretrained_checkpoint: Path to a .pt or .safetensors checkpoint file.
 
     Returns:
         tuple:
@@ -261,19 +272,18 @@ def read_mode_config(pretrained_checkpoint):
             norm_stats (dict)
     """
     if os.path.isfile(pretrained_checkpoint):
-        overwatch.info(f"Loading from local checkpoint path `{(checkpoint_pt := Path(pretrained_checkpoint))}`")
+        checkpoint_pt = Path(pretrained_checkpoint)
+        overwatch.info(f"Loading from local checkpoint path `{checkpoint_pt}`")
 
-        # [Validate] Checkpoint Path should look like `.../<RUN_ID>/checkpoints/<CHECKPOINT_PATH>.pt`
-        assert checkpoint_pt.suffix == ".pt"
-        run_dir = checkpoint_pt.parents[1]
+        assert checkpoint_pt.suffix in _SUPPORTED_CKPT_SUFFIXES, (
+            f"Unsupported checkpoint suffix `{checkpoint_pt.suffix}`, expected one of {_SUPPORTED_CKPT_SUFFIXES}"
+        )
+        run_dir = _resolve_run_dir(checkpoint_pt)
 
-        # Get paths for `config.json`, `dataset_statistics.json` and pretrained checkpoint
         config_yaml, dataset_statistics_json = run_dir / "config.yaml", run_dir / "dataset_statistics.json"
         assert config_yaml.exists(), f"Missing `config.yaml` for `{run_dir = }`"
         assert dataset_statistics_json.exists(), f"Missing `dataset_statistics.json` for `{run_dir = }`"
 
-        # Otherwise =>> try looking for a match on `model_id_or_path` on the HF Hub (`model_id_or_path`)
-        # Load VLA Config (and corresponding base VLM `ModelConfig`) from `config.json`
         try:
             ocfg = OmegaConf.load(str(config_yaml))
             global_cfg = OmegaConf.to_container(ocfg, resolve=True)
@@ -281,7 +291,6 @@ def read_mode_config(pretrained_checkpoint):
             overwatch.error(f"❌ Failed to load YAML config `{config_yaml}`: {e}")
             raise
 
-        # Load Dataset Statistics for Action Denormalization
         with open(dataset_statistics_json, "r") as f:
             norm_stats = json.load(f)
     else:
