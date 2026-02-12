@@ -7,20 +7,14 @@ wandb_project: llavavla
 is_debug: false
 
 framework:
-  name: spikevla_xiaonaoM
+  name: QwenFM
   qwenvl:
-    base_vlm: /workspace/model/models--Qwen--Qwen2.5-VL-3B-Instruct/snapshots/66285546d2b821cf421d4f5eb2576359d3770cd3
+    base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
     attn_implementation: flash_attention_2
     vl_hidden_dim: 2048
   dino:
     dino_backbone: dinov2_vits14
-  layer_qformer: 
-    qformer_end_layer: 37
-    qformer_start_layer: 36
-    num_query_tokens: 16
-    input_dim: 2048
-    ouptput_dim: 768
-    grad_scale: 0.5
+
   action_model:
     action_model_type: DiT-B
     hidden_size: 1024     # 和 DiT 最后的 projection 对应，用于 ActionDecoder
@@ -45,7 +39,7 @@ framework:
       interleave_self_attention: true
       norm_type: "ada_norm"
       num_layers: 16
-      output_dim: 1024
+      output_dim: 2560
       positional_embeddings: null
 
 
@@ -65,7 +59,6 @@ datasets:
     per_device_batch_size: 4
 
   vla_data:
-    include_state: True
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/OXE_LEROBOT_DATASET
     data_mix: bridge_rt_1 # bridge_rt_1
@@ -77,14 +70,13 @@ datasets:
     load_all_data_for_training: true
     obs: ["image_0"]
     image_size: [224,224]
-    video_backend: torchvision_av
 
 trainer:
   epochs: 100
   max_train_steps: 100000
   num_warmup_steps: 5000
-  save_interval: 10000
-  eval_interval: 1000
+  save_interval: 5000
+  eval_interval: 100
   learning_rate:
     base: 1e-05
     qwen_vl_interface: 1.0e-05

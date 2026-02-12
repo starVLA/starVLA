@@ -465,7 +465,7 @@ class Libero4in1DataConfig:
 
     observation_indices = [0]
     action_indices = list(range(8))
-    state_indices = list(range(-16, 0))
+
 
     def modality_config(self):
         video_modality = ModalityConfig(
@@ -473,7 +473,7 @@ class Libero4in1DataConfig:
             modality_keys=self.video_keys,
         )
         state_modality = ModalityConfig(
-            delta_indices=self.state_indices,
+            delta_indices=self.observation_indices,
             modality_keys=self.state_keys,
         )
         action_modality = ModalityConfig(
