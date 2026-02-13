@@ -42,12 +42,15 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
         vla_dataset_cfg = cfg.datasets.vla_data
 
         vla_dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+        num_workers = int(getattr(vla_dataset_cfg, "num_workers", 4))
+        persistent_workers = num_workers > 0
         
         vla_train_dataloader = DataLoader(
             vla_dataset,
             batch_size=cfg.datasets.vla_data.per_device_batch_size,
             collate_fn=collate_fn,
-            num_workers=4,
+            num_workers=num_workers,
+            persistent_workers=persistent_workers,
             # shuffle=True
         )        
         if _is_main_process():

@@ -1,6 +1,8 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025/05/01 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# developed by [Fangjing Wang/ SUST University] in [2025/05/01].
+# developed by [Jinhui YE/ HKUST University] in [2025/09/01].
+# developed by [Ning Gao/ SHANGHAI ARTIFICIAL INTELLIGENCE LABORATORY] in [2026/02/13].
 # SPDX-License-Identifier: Apache-2.0
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -34,7 +36,7 @@ import os, random
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, get_worker_info
 from tqdm import tqdm
 from PIL import Image
 import torch.distributed as dist
@@ -1924,23 +1926,24 @@ class LeRobotMixtureDataset(Dataset):
             self._primary_dataset_indices = np.zeros(len(self.datasets), dtype=bool)
             self._primary_dataset_indices[0] = True
 
-        # Set the epoch and sample the first epoch
-        self.set_epoch(0)
-
         self._sequential_step_sampling = True
         if self.data_cfg is not None:
             seq_cfg = self.data_cfg.get("sequential_step_sampling", True)
             self._sequential_step_sampling = seq_cfg not in ["False", False]
 
-        self._step_order: list[np.ndarray] = []
-        self._step_pos: list[int] = []
-        if self._sequential_step_sampling:
-            for dataset in self.datasets:
-                self._step_order.append(np.arange(len(dataset.all_steps)))
-                if self.mode == "train":
-                    rng = np.random.default_rng(self.seed)
-                    rng.shuffle(self._step_order[-1])
-                self._step_pos.append(0)
+        self._init_distributed_context()
+
+        self._step_order: list[np.ndarray] = [np.array([], dtype=np.int64) for _ in self.datasets]
+        self._step_pos: list[int] = [0 for _ in self.datasets]
+        # Per-dataset global position in a virtual globally interleaved stream.
+        # Rank r consumes positions: r, r + world_size, r + 2 * world_size, ...
+        initial_global_pos = self._rank if self._world_size > 1 else 0
+        self._step_global_pos: list[int] = [initial_global_pos for _ in self.datasets]
+        self._effective_rank = self._rank
+        self._effective_world_size = self._world_size
+
+        # Set the epoch and sample the first epoch
+        self.set_epoch(0)
 
         self.update_metadata(metadata_config)
 
@@ -2010,17 +2013,20 @@ class LeRobotMixtureDataset(Dataset):
         if not self._sequential_step_sampling:
             single_step_index = rng.choice(len(dataset.all_steps))
         else:
+            self._sync_worker_shard_state()
             step_pos = self._step_pos[dataset_index]
-            if step_pos >= len(dataset.all_steps):
-                order = np.arange(len(dataset.all_steps))
-                if self.mode == "train":
-                    seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-                    rng = np.random.default_rng(seed)
-                    rng.shuffle(order)
-                self._step_order[dataset_index] = order
-                step_pos = 0
+            order = self._step_order[dataset_index]
+            if step_pos >= len(order):
+                self._refresh_dataset_order(dataset_index)
+                order = self._step_order[dataset_index]
+                step_pos = self._step_pos[dataset_index]
 
-            single_step_index = self._step_order[dataset_index][step_pos]
+            if len(order) == 0:
+                raise ValueError(
+                    f"Dataset {dataset.dataset_name} has no steps assigned to shard {self._effective_rank}."
+                )
+
+            single_step_index = order[step_pos]
             self._step_pos[dataset_index] = step_pos + 1
         trajectory_id, base_index = dataset.all_steps[single_step_index]
         return dataset, trajectory_id, base_index
@@ -2141,6 +2147,77 @@ class LeRobotMixtureDataset(Dataset):
         if result == 0:
             print(f"Warning: Dataset mixture length is 0")
         return result
+
+    def _init_distributed_context(self) -> None:
+        """Detect torch.distributed context and cache rank/world size."""
+        self._is_distributed = dist.is_available() and dist.is_initialized()
+        if self._is_distributed:
+            self._world_size = dist.get_world_size()
+            self._rank = dist.get_rank()
+        else:
+            self._world_size = 1
+            self._rank = 0
+
+    def _get_effective_shard(self) -> tuple[int, int]:
+        """Expand distributed shard id by dataloader worker id."""
+        worker_info = get_worker_info()
+        if worker_info is None:
+            return self._rank, self._world_size
+
+        effective_rank = self._rank * worker_info.num_workers + worker_info.id
+        effective_world_size = self._world_size * worker_info.num_workers
+        return effective_rank, effective_world_size
+
+    def _sync_worker_shard_state(self) -> None:
+        """Rebuild shard-dependent cursors when shard identity changes."""
+        effective_rank, effective_world_size = self._get_effective_shard()
+        if (
+            effective_rank == self._effective_rank
+            and effective_world_size == self._effective_world_size
+        ):
+            return
+
+        self._effective_rank = effective_rank
+        self._effective_world_size = effective_world_size
+        self._step_order = [np.array([], dtype=np.int64) for _ in self.datasets]
+        self._step_pos = [0 for _ in self.datasets]
+        initial_global_pos = effective_rank if effective_world_size > 1 else 0
+        self._step_global_pos = [initial_global_pos for _ in self.datasets]
+
+    def _refresh_dataset_order(self, dataset_index: int) -> None:
+        """Shuffle (if needed) and slice the per-dataset step order for this rank."""
+        dataset = self.datasets[dataset_index]
+        total_steps = len(dataset.all_steps)
+
+        if total_steps == 0:
+            self._step_order[dataset_index] = np.array([], dtype=np.int64)
+            self._step_pos[dataset_index] = 0
+            return
+
+        global_pos = int(self._step_global_pos[dataset_index])
+        dataset_epoch = global_pos // total_steps
+        epoch_end_global_pos = (dataset_epoch + 1) * total_steps
+
+        # Number of steps this rank can consume before the virtual stream crosses
+        # into the next dataset epoch.
+        num_local_steps = ((epoch_end_global_pos - 1 - global_pos) // self._effective_world_size) + 1
+        num_local_steps = max(int(num_local_steps), 1)
+
+        positions = global_pos + np.arange(num_local_steps, dtype=np.int64) * self._effective_world_size
+        epoch_offsets = positions % total_steps
+
+        order = np.arange(total_steps, dtype=np.int64)
+        if self.mode == "train":
+            seed = safe_hash((dataset_epoch, dataset_index, self.seed))
+            rng = np.random.default_rng(seed)
+            rng.shuffle(order)
+
+        rank_order = order[epoch_offsets]
+
+        dataset.set_epoch(int(dataset_epoch))
+        self._step_global_pos[dataset_index] = int(global_pos + num_local_steps * self._effective_world_size)
+        self._step_order[dataset_index] = rank_order
+        self._step_pos[dataset_index] = 0
 
     @staticmethod
     def compute_overall_statistics(
