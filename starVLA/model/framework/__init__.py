@@ -26,11 +26,13 @@ except NameError:
 
 # Auto-import all framework submodules to trigger registration
 if pkg_path is not None:
-    try:
-        for _, module_name, _ in pkgutil.iter_modules(pkg_path):
+    for _, module_name, _ in pkgutil.iter_modules(pkg_path):
+        if module_name.startswith("_"):
+            continue
+        try:
             importlib.import_module(f"{__name__}.{module_name}")
-    except Exception as e:
-        logger.log(f"Warning: Failed to auto-import framework submodules: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to auto-import framework submodule `{module_name}`: {e}")
         
 def build_framework(cfg):
     """
@@ -42,22 +44,26 @@ def build_framework(cfg):
         nn.Module: Instantiated framework model.
     """
 
-    if not hasattr(cfg.framework, "name"): 
-        cfg.framework.name = cfg.framework.framework_py  # Backward compatibility for legacy config yaml
-        
-    if cfg.framework.name == "QwenOFT":
-        from starVLA.model.framework.QwenOFT import Qwenvl_OFT
-        return Qwenvl_OFT(cfg)
-    elif cfg.framework.name == "QwenFast":
-        from starVLA.model.framework.QwenFast import Qwenvl_Fast
-        return Qwenvl_Fast(cfg)
+    if not hasattr(cfg, "framework"):
+        raise ValueError("Missing `cfg.framework` in configuration.")
 
-    # auto detect from registry
-    framework_id = cfg.framework.name
-    if framework_id not in FRAMEWORK_REGISTRY._registry:
-        raise NotImplementedError(f"Framework {cfg.framework.name} is not implemented. Plz, python yourframework_py to specify framework module.")
-    
-    MODLE_CLASS = FRAMEWORK_REGISTRY[framework_id]
-    return MODLE_CLASS(cfg)
+    framework_id = getattr(cfg.framework, "name", None)
+    if not framework_id:
+        framework_id = getattr(cfg.framework, "framework_py", None)  # Backward compatibility for legacy config yaml
+        if framework_id:
+            cfg.framework.name = framework_id
+
+    if not framework_id:
+        raise ValueError("Missing framework identifier. Set `cfg.framework.name` (or legacy `framework_py`).")
+
+    registry = FRAMEWORK_REGISTRY.list()
+    if framework_id not in registry:
+        raise NotImplementedError(
+            f"Framework `{framework_id}` is not implemented. "
+            "Make sure its module is importable and registers via FRAMEWORK_REGISTRY."
+        )
+
+    model_class = FRAMEWORK_REGISTRY[framework_id]
+    return model_class(cfg)
 
 __all__ = ["build_framework", "FRAMEWORK_REGISTRY"]
