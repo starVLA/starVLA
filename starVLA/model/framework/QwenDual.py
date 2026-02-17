@@ -255,6 +255,7 @@ if __name__ == "__main__":
     # # Advance: try forward model with dataloader
     # # can be fake sample， but here get from dataloader for simpler
     from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+    from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotMixtureBatchSampler
 
     vla_dataset_cfg = cfg.datasets.vla_data
     # vla_dataset_cfg.include_state = True
@@ -263,12 +264,17 @@ if __name__ == "__main__":
     vla_dataset_cfg.task_id = 40
     vla_dataset_cfg.video_backend = "torchvision_av"
     dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    batch_sampler = LeRobotMixtureBatchSampler(
+        dataset,
+        batch_size=2,
+        drop_last=False,
+    )
 
     from torch.utils.data import DataLoader
 
     train_dataloader = DataLoader(
         dataset,
-        batch_size=2,
+        batch_sampler=batch_sampler,
         num_workers=1,  # For Debug
         collate_fn=collate_fn,
     )
