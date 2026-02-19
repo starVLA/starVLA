@@ -98,9 +98,10 @@ class RotationTransform:
 class Normalizer:
     valid_modes = ["q99", "mean_std", "min_max", "binary"]
 
-    def __init__(self, mode: str, statistics: dict):
+    def __init__(self, mode: str, statistics: dict, binary_threshold: float = 0.5):
         self.mode = mode
         self.statistics = statistics
+        self.binary_threshold = binary_threshold
         for key, value in self.statistics.items():
             self.statistics[key] = torch.tensor(value)
 
@@ -184,7 +185,7 @@ class Normalizer:
 
         elif self.mode == "binary":
             # Range of binary is [0, 1]
-            normalized = (x > 0.5).to(x.dtype)
+            normalized = (x > self.binary_threshold).to(x.dtype)
         else:
             raise ValueError(f"Invalid normalization mode: {self.mode}")
 
@@ -207,7 +208,7 @@ class Normalizer:
             max = self.statistics["max"].to(x.dtype)
             return (x + 1) / 2 * (max - min) + min
         elif self.mode == "binary":
-            return (x > 0.5).to(x.dtype)
+            return (x > self.binary_threshold).to(x.dtype)
         else:
             raise ValueError(f"Invalid normalization mode: {self.mode}")
 
@@ -295,6 +296,9 @@ class StateActionTransform(InvertibleModalityTransform):
     )
     normalization_statistics: dict[str, dict] = Field(
         default_factory=dict, description="The statistics for each state key."
+    )
+    binary_threshold: float = Field(
+        default=0.5, description="Threshold for binary normalization mode."
     )
     modality_metadata: dict[str, StateActionMetadata] = Field(
         default_factory=dict, description="The modality metadata for each state key."
@@ -467,7 +471,8 @@ class StateActionTransform(InvertibleModalityTransform):
             else:
                 statistics = self.normalization_statistics[key]
             self._normalizers[key] = Normalizer(
-                mode=self.normalization_modes[key], statistics=statistics
+                mode=self.normalization_modes[key], statistics=statistics,
+                binary_threshold=self.binary_threshold,
             )
 
     def apply(self, data: dict[str, Any]) -> dict[str, Any]:

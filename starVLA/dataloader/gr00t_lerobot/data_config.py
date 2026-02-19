@@ -959,6 +959,7 @@ class AgilexData50Config:
             StateActionToTensor(apply_to=self.state_keys),
             StateActionTransform(
                 apply_to=self.state_keys,
+                binary_threshold=0.49,
                 normalization_modes={
                     "state.left_joints": "min_max",
                     "state.right_joints": "min_max",
@@ -970,6 +971,7 @@ class AgilexData50Config:
             StateActionToTensor(apply_to=self.action_keys),
             StateActionTransform(
                 apply_to=self.action_keys,
+                binary_threshold=0.49,
                 normalization_modes={
                     "action.left_joints": "min_max",
                     "action.right_joints": "min_max",
