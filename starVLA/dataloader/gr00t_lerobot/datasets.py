@@ -1,6 +1,8 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025/05/01 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# developed by [Fangjing Wang/ SUST University] in [2025/05/01].
+# developed by [Jinhui YE/ HKUST University] in [2025/09/01].
+# developed by [Ning Gao/ SHANGHAI ARTIFICIAL INTELLIGENCE LABORATORY] in [2026/02/13].
 # SPDX-License-Identifier: Apache-2.0
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -27,6 +29,7 @@ import os
 import hashlib
 import json, torch
 import copy
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Sequence
@@ -34,7 +37,7 @@ import os, random
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 from PIL import Image
 import torch.distributed as dist
@@ -1810,6 +1813,126 @@ def get_used_modality_keys(modality_keys: dict) -> tuple[list, list]:
     return used_action_keys, used_state_keys
 
 
+class LeRobotMixtureBatchSampler(Sampler[list[tuple[int, int, int]]]):
+    """
+    Batch sampler for LeRobotMixtureDataset.
+
+    Each yielded item is a list of tokens:
+      (dataset_index, single_step_index, dataset_epoch)
+    The dataset then performs pure data fetch by this token.
+    """
+
+    def __init__(
+        self,
+        mixture_dataset: "LeRobotMixtureDataset",
+        batch_size: int,
+        drop_last: bool = False,
+    ):
+        if batch_size <= 0:
+            raise ValueError(f"batch_size must be > 0, got {batch_size}")
+
+        self.dataset = mixture_dataset
+        self.batch_size = int(batch_size)
+        self.drop_last = bool(drop_last)
+        self.mode = mixture_dataset.mode
+        self.seed = mixture_dataset.seed
+        self.epoch = 0
+
+        self._num_samples = len(mixture_dataset)
+        self._dataset_sampling_weights = np.asarray(
+            mixture_dataset.dataset_sampling_weights, dtype=np.float64
+        )
+        self._dataset_count = len(mixture_dataset.datasets)
+        self._dataset_lengths = np.asarray(
+            [len(ds.all_steps) for ds in mixture_dataset.datasets], dtype=np.int64
+        )
+
+        self._init_distributed_context()
+        # Global sample cursor in the mixture stream.
+        self._sample_cursor = 0
+        # Per-dataset global cursor in a virtual interleaved stream.
+        initial_pos = self._rank if self._world_size > 1 else 0
+        self._step_global_pos: list[int] = [initial_pos for _ in range(self._dataset_count)]
+        # Per-dataset order cache for the current dataset epoch.
+        self._cached_epoch: list[int] = [-1 for _ in range(self._dataset_count)]
+        self._cached_order: list[np.ndarray] = [
+            np.array([], dtype=np.int64) for _ in range(self._dataset_count)
+        ]
+
+    def _init_distributed_context(self) -> None:
+        self._is_distributed = dist.is_available() and dist.is_initialized()
+        if self._is_distributed:
+            self._world_size = dist.get_world_size()
+            self._rank = dist.get_rank()
+        else:
+            self._world_size = 1
+            self._rank = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        # Keep stream cursors continuous across outer epochs.
+        self.epoch = int(epoch)
+
+    def __len__(self) -> int:
+        if self.drop_last:
+            return self._num_samples // self.batch_size
+        return math.ceil(self._num_samples / self.batch_size)
+
+    def _sample_dataset_index(self, sample_index: int) -> int:
+        if self.mode == "train":
+            seed = safe_hash((self.seed, sample_index))
+        else:
+            seed = sample_index
+        rng = np.random.default_rng(seed)
+        return int(rng.choice(self._dataset_count, p=self._dataset_sampling_weights))
+
+    def _get_dataset_order(self, dataset_index: int, dataset_epoch: int) -> np.ndarray:
+        if self._cached_epoch[dataset_index] == dataset_epoch:
+            return self._cached_order[dataset_index]
+
+        total_steps = int(self._dataset_lengths[dataset_index])
+        order = np.arange(total_steps, dtype=np.int64)
+        if self.mode == "train":
+            seed = safe_hash((dataset_epoch, dataset_index, self.seed))
+            rng = np.random.default_rng(seed)
+            rng.shuffle(order)
+
+        self._cached_epoch[dataset_index] = dataset_epoch
+        self._cached_order[dataset_index] = order
+        return order
+
+    def _sample_step_token(self, dataset_index: int) -> tuple[int, int, int]:
+        total_steps = int(self._dataset_lengths[dataset_index])
+        if total_steps <= 0:
+            raise ValueError(
+                f"Dataset {self.dataset.datasets[dataset_index].dataset_name} has no steps."
+            )
+
+        global_pos = int(self._step_global_pos[dataset_index])
+        dataset_epoch = global_pos // total_steps
+        epoch_offset = global_pos % total_steps
+        order = self._get_dataset_order(dataset_index, dataset_epoch)
+        single_step_index = int(order[epoch_offset])
+
+        self._step_global_pos[dataset_index] = int(global_pos + self._world_size)
+        return dataset_index, single_step_index, int(dataset_epoch)
+
+    def __iter__(self):
+        batch: list[tuple[int, int, int]] = []
+        for _ in range(self._num_samples):
+            sample_index = self._sample_cursor
+            self._sample_cursor += 1
+            dataset_index = self._sample_dataset_index(sample_index)
+            token = self._sample_step_token(dataset_index)
+            batch.append(token)
+
+            if len(batch) == self.batch_size:
+                yield batch
+                batch = []
+
+        if batch and not self.drop_last:
+            yield batch
+
+
 class LeRobotMixtureDataset(Dataset):
     """
     A mixture of multiple datasets. This class samples a single dataset based on the dataset weights and then calls the `__getitem__` method of the sampled dataset.
@@ -1927,21 +2050,6 @@ class LeRobotMixtureDataset(Dataset):
         # Set the epoch and sample the first epoch
         self.set_epoch(0)
 
-        self._sequential_step_sampling = True
-        if self.data_cfg is not None:
-            seq_cfg = self.data_cfg.get("sequential_step_sampling", True)
-            self._sequential_step_sampling = seq_cfg not in ["False", False]
-
-        self._step_order: list[np.ndarray] = []
-        self._step_pos: list[int] = []
-        if self._sequential_step_sampling:
-            for dataset in self.datasets:
-                self._step_order.append(np.arange(len(dataset.all_steps)))
-                if self.mode == "train":
-                    rng = np.random.default_rng(self.seed)
-                    rng.shuffle(self._step_order[-1])
-                self._step_pos.append(0)
-
         self.update_metadata(metadata_config)
 
     @property
@@ -1983,55 +2091,14 @@ class LeRobotMixtureDataset(Dataset):
         self.epoch = epoch
         # self.sampled_steps = self.sample_epoch()
 
-    def sample_step(self, index: int) -> tuple[LeRobotSingleDataset, int, int]:
-        """Sample a single step from the dataset."""
-        # return self.sampled_steps[index]
-
-        # Set seed
-        seed = index if self.mode != "train" else safe_hash((self.epoch, index, self.seed))
-        rng = np.random.default_rng(seed)
-
-        # Sample dataset
-        dataset_index = rng.choice(len(self.datasets), p=self.dataset_sampling_weights)
-        dataset = self.datasets[dataset_index]
-
-        # Sample trajectory
-        # trajectory_index = rng.choice(
-        #     len(dataset.trajectory_ids), p=self.trajectory_sampling_weights[dataset_index]
-        # )
-        # trajectory_id = dataset.trajectory_ids[trajectory_index]
-
-        # # Sample step
-        # base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
-        # return dataset, trajectory_id, base_index
-        if len(dataset.all_steps) == 0:
-            raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
-
-        if not self._sequential_step_sampling:
-            single_step_index = rng.choice(len(dataset.all_steps))
-        else:
-            step_pos = self._step_pos[dataset_index]
-            if step_pos >= len(dataset.all_steps):
-                order = np.arange(len(dataset.all_steps))
-                if self.mode == "train":
-                    seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-                    rng = np.random.default_rng(seed)
-                    rng.shuffle(order)
-                self._step_order[dataset_index] = order
-                step_pos = 0
-
-            single_step_index = self._step_order[dataset_index][step_pos]
-            self._step_pos[dataset_index] = step_pos + 1
-        trajectory_id, base_index = dataset.all_steps[single_step_index]
-        return dataset, trajectory_id, base_index
-
     _getitem_count = 0
 
-    def __getitem__(self, index: int) -> dict:
+    def __getitem__(self, index: tuple[int, int, int] | list[int]) -> dict:
         """Get the data for a single trajectory and start index.
 
         Args:
-            index (int): The index of the trajectory to get.
+            index: Token sampled by LeRobotMixtureBatchSampler:
+                (dataset_index, single_step_index, dataset_epoch)
 
         Returns:
             dict: The data for the trajectory and start index.
@@ -2043,15 +2110,42 @@ class LeRobotMixtureDataset(Dataset):
         max_retries = 10
         last_exception = None
 
+        if not isinstance(index, (tuple, list)) or len(index) < 2:
+            raise TypeError(
+                "LeRobotMixtureDataset expects a sampler token "
+                "(dataset_index, single_step_index, dataset_epoch). "
+                "Use LeRobotMixtureBatchSampler instead of DataLoader(batch_size=...)."
+            )
+
+        token_dataset_index = int(index[0])
+        token_step_index = int(index[1])
+        token_dataset_epoch = int(index[2]) if len(index) >= 3 else self.epoch
+
+        if token_dataset_index < 0 or token_dataset_index >= len(self.datasets):
+            raise IndexError(
+                f"Invalid dataset index {token_dataset_index}. "
+                f"Expected [0, {len(self.datasets) - 1}]."
+            )
+
+        dataset = self.datasets[token_dataset_index]
+        if len(dataset.all_steps) == 0:
+            raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
+        dataset.set_epoch(token_dataset_epoch)
+
         for attempt in range(max_retries):
             try:
-                while True:  # @DUG
-                    dataset, trajectory_id, step = self.sample_step(index)
+                while True:
+                    if token_step_index < 0 or token_step_index >= len(dataset.all_steps):
+                        token_step_index = random.randint(0, len(dataset.all_steps) - 1)
+                    trajectory_id, step = dataset.all_steps[token_step_index]
+
                     key = dataset.modality_keys["video"][0].replace("video.", "")
                     video_path = dataset.get_video_path(trajectory_id, key)
                     if os.path.exists(video_path):
                         break
-                    index = random.randint(0, len(self) - 1)
+
+                    # Keep retries inside the same dataset when current video path is invalid.
+                    token_step_index = random.randint(0, len(dataset.all_steps) - 1)
 
                 raw_data = dataset.get_step_data(trajectory_id, step)
                 data = dataset.transforms(raw_data)
@@ -2063,16 +2157,21 @@ class LeRobotMixtureDataset(Dataset):
                 last_exception = e
                 if attempt < max_retries - 1:
                     # Log the error but continue trying
-                    print(f"Attempt {attempt + 1}/{max_retries} failed for index {index}: {e}")
+                    print(
+                        "Attempt "
+                        f"{attempt + 1}/{max_retries} failed for token "
+                        f"({token_dataset_index}, {token_step_index}, {token_dataset_epoch}): {e}"
+                    )
                     print(f"Retrying with new sample...")
-                    # For retry, we can use a slightly different index to get a new sample
-                    # This helps avoid getting stuck on the same problematic sample
-                    index = random.randint(0, len(self) - 1)
+                    token_step_index = random.randint(0, len(dataset.all_steps) - 1)
                 else:
                     # All retries exhausted
-                    print(f"All {max_retries} attempts failed for index {index}")
+                    print(
+                        "All "
+                        f"{max_retries} attempts failed for token "
+                        f"({token_dataset_index}, {token_step_index}, {token_dataset_epoch})"
+                    )
                     print(f"Last error: {last_exception}")
-                    # Return a dummy sample or re-raise the exception
                     raise last_exception
 
     def __len__(self) -> int:
@@ -2141,6 +2240,16 @@ class LeRobotMixtureDataset(Dataset):
         if result == 0:
             print(f"Warning: Dataset mixture length is 0")
         return result
+
+    def _init_distributed_context(self) -> None:
+        """Detect torch.distributed context and cache rank/world size."""
+        self._is_distributed = dist.is_available() and dist.is_initialized()
+        if self._is_distributed:
+            self._world_size = dist.get_world_size()
+            self._rank = dist.get_rank()
+        else:
+            self._world_size = 1
+            self._rank = 0
 
     @staticmethod
     def compute_overall_statistics(

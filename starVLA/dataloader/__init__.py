@@ -39,16 +39,25 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
 
     if dataset_py == "lerobot_datasets":
         from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+        from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotMixtureBatchSampler
         vla_dataset_cfg = cfg.datasets.vla_data
 
         vla_dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+        num_workers = int(getattr(vla_dataset_cfg, "num_workers", 4))
+        persistent_workers = num_workers > 0
+        per_device_batch_size = int(cfg.datasets.vla_data.per_device_batch_size)
+        batch_sampler = LeRobotMixtureBatchSampler(
+            vla_dataset,
+            batch_size=per_device_batch_size,
+            drop_last=False,
+        )
         
         vla_train_dataloader = DataLoader(
             vla_dataset,
-            batch_size=cfg.datasets.vla_data.per_device_batch_size,
+            batch_sampler=batch_sampler,
             collate_fn=collate_fn,
-            num_workers=4,
-            # shuffle=True
+            num_workers=num_workers,
+            persistent_workers=persistent_workers,
         )        
         if _is_main_process():
             output_dir = Path(cfg.output_dir)
