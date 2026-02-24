@@ -47,6 +47,7 @@ In StarVLA (also a pun on “start VLA” ),  each functional component (model, 
 
 **LangForce**: [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
 
+**ABot-M0**: [*ABot-M0: VLA Foundation Model for Robotic Manipulation with Action Manifold Learning*](https://github.com/amap-cvlab/ABot-Manipulation)
 
 ## 🔥 Key Features
 
