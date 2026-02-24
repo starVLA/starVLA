@@ -65,7 +65,7 @@ def preprocess_qwen_2_visual(
         try:
             if roles[source[0]["from"]] != roles["human"]:
                 source = source[1:]
-        except:
+        except (KeyError, IndexError):
             print(sources)
 
         input_id, target = [], []
@@ -77,7 +77,7 @@ def preprocess_qwen_2_visual(
             try:
                 role = conv["role"]
                 content = conv["content"]
-            except:
+            except KeyError:
                 role = conv["from"]
                 content = conv["value"]
 

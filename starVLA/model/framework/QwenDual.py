@@ -185,7 +185,7 @@ class Qwen_Dual(baseframework):
             last_hidden = qwenvl_outputs.hidden_states[connect_layer_index]   # [B, L, H]
             
             # Step 2: DINO Forward
-            if wrist_views == None:
+            if wrist_views is None:
                 wrist_views = batch_images
             image_tensors = self.dino_encoder.prepare_dino_input(wrist_views)  #
             B = len(batch_images)

@@ -47,7 +47,7 @@ class DINOv2BackBone(nn.Module):
         super().__init__()
         try:
             self.body = torch.hub.load("facebookresearch/dinov2", backone_name)
-        except:
+        except Exception:
             import traceback
 
             traceback.print_exc()
