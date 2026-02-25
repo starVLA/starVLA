@@ -293,6 +293,8 @@ class TrainerUtils:
 
         The standalone file format is controlled by ``self.config.trainer.save_format``
         (``"pt"`` or ``"safetensors"``).  Defaults to ``"pt"`` when unset.
+        Full-state retention is controlled by ``self.config.trainer.full_state_keep_last``:
+        keep latest N full states when N >= 1 (default: 1), disable full-state saving with -1.
 
         Must be called after accelerator.prepare().
 
@@ -302,13 +304,35 @@ class TrainerUtils:
             output_dir: Top-level run directory for summary.jsonl and config.
         """
         from pathlib import Path
+        import shutil
 
         save_format = getattr(self.config.trainer, "save_format", "pt")
+        full_state_keep_last = getattr(self.config.trainer, "full_state_keep_last", 1)
+
+        try:
+            full_state_keep_last = int(full_state_keep_last)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"trainer.full_state_keep_last must be an integer >=1 or -1, got: {full_state_keep_last}"
+            ) from exc
+
+        if full_state_keep_last == -1:
+            save_full_state = False
+        elif full_state_keep_last >= 1:
+            save_full_state = True
+        else:
+            raise ValueError(
+                f"trainer.full_state_keep_last must be an integer >=1 or -1, got: {full_state_keep_last}"
+            )
 
         # Save full accelerator state for all prepared components.
         state_dir = os.path.join(checkpoint_dir, f"steps_{completed_steps}")
         use_safe = save_format == "safetensors"
-        self.accelerator.save_state(state_dir, safe_serialization=use_safe)
+        if save_full_state:
+            self.accelerator.save_state(state_dir, safe_serialization=use_safe)
+
+        # Ensure all processes finish state writing before any retention cleanup.
+        self.accelerator.wait_for_everyone()
 
         # Save standalone weights & metadata (main process only)
         if self.accelerator.is_main_process:
@@ -330,12 +354,30 @@ class TrainerUtils:
                     )
                     torch.save(state_dict, weights_path)
 
+            # Keep only the most recent N full-state checkpoints when enabled.
+            if save_full_state:
+                step_dirs = []
+                for entry in os.listdir(checkpoint_dir):
+                    full_path = os.path.join(checkpoint_dir, entry)
+                    match = re.match(r"^steps_(\d+)$", entry)
+                    if match and os.path.isdir(full_path):
+                        step_dirs.append((int(match.group(1)), full_path))
+                step_dirs.sort(key=lambda x: x[0])
+                stale_dirs = step_dirs[:-full_state_keep_last]
+                for _, stale_dir in stale_dirs:
+                    shutil.rmtree(stale_dir)
+
             # Append to summary log
             summary_data = {"steps": completed_steps}
             with open(os.path.join(output_dir, "summary.jsonl"), "a") as f:
                 f.write(_json.dumps(summary_data) + "\n")
 
-            self.accelerator.print(f"✅ Checkpoint saved at {state_dir}")
+            if save_full_state:
+                self.accelerator.print(
+                    f"✅ Checkpoint saved at {state_dir} (full_state_keep_last={full_state_keep_last})"
+                )
+            else:
+                self.accelerator.print("✅ Checkpoint saved (weight-only, full state disabled)")
 
             # Save accessed config if available
             from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig

@@ -193,8 +193,8 @@ class VLACoTrainer(TrainerUtils):
             logger.info(f"Resumed full training state from {latest_path}, step={self.completed_steps}")
         elif latest_path:
             logger.warning(
-                f"Found legacy checkpoint {latest_path}. "
-                "Only model weights will be restored (optimizer/scheduler state lost)."
+                f"Found weight-only checkpoint {latest_path}. "
+                "Only model weights will be restored (optimizer/scheduler state not available)."
             )
             self.model = self.load_pretrained_backbones(self.model, latest_path, reload_modules=None)
             self.completed_steps = step
