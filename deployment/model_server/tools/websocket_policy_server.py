@@ -4,9 +4,9 @@
 
 import asyncio
 import logging
+import traceback
 import time
 
-import websockets
 import websockets.asyncio.server
 import websockets.frames
 
@@ -35,25 +35,6 @@ class WebsocketPolicyServer:
         self._idle_timeout = idle_timeout
         self._last_active = time.time()
         logging.getLogger("websockets.server").setLevel(logging.INFO)
-
-    @staticmethod
-    def _ok_response(req_id: str, response_type: str, data: dict | None = None) -> dict:
-        response = {"status": "ok", "ok": True, "type": response_type, "request_id": req_id}
-        if data is not None:
-            response["data"] = data
-        return response
-
-    @staticmethod
-    def _error_response(req_id: str, response_type: str, message: str, **extra) -> dict:
-        error_payload = {"message": message}
-        error_payload.update(extra)
-        return {
-            "status": "error",
-            "ok": False,
-            "type": response_type,
-            "request_id": req_id,
-            "error": error_payload,
-        }
 
     def serve_forever(self) -> None:
         asyncio.run(self.run())
@@ -97,19 +78,10 @@ class WebsocketPolicyServer:
                 logging.info(f"Connection from {websocket.remote_address} closed")
                 break
             except Exception:
-                logging.exception("Unexpected websocket server error")
-                await websocket.send(
-                    packer.pack(
-                        self._error_response(
-                            req_id="unknown",
-                            response_type="internal_error",
-                            message="Internal server error in websocket handler.",
-                        )
-                    )
-                )
+                await websocket.send(traceback.format_exc())
                 await websocket.close(
                     code=websockets.frames.CloseCode.INTERNAL_ERROR,
-                    reason="Internal server error.",
+                    reason="Internal server error. Traceback included in previous frame.",
                 )
                 raise
 
@@ -122,50 +94,60 @@ class WebsocketPolicyServer:
           or a flat dict (will be treated as payload).
         - Does NOT raise inside this function: all exceptions are caught and encoded in response.
         """
-        if not isinstance(msg, dict):
-            return self._error_response(
-                req_id="default",
-                response_type="unknown",
-                message="Top-level websocket message must be a dict.",
-                payload_type=str(type(msg)),
-            )
-
         req_id = msg.get("request_id", "default")
-        mtype = msg.get("type", "infer")  # default = infer
-        payload = msg.get("payload", msg)  # when no explicit payload, treat top-level as payload
+        mtype = msg.get("type", "infer")          # default = infer
+        msg       # when no explicit payload, treat top-level as payload
 
         # ping
         if mtype == "ping":
-            return self._ok_response(req_id=req_id, response_type="ping")
+            return {"status": "ok", "ok": True, "type": "ping", "request_id": req_id}
 
         # infer --> framework.predict_action
-        elif mtype in {"infer", "predict_action"}:
+        elif mtype == "infer" or mtype == "predict_action":
             # Basic payload sanity
-            if not isinstance(payload, dict):
-                return self._error_response(
-                    req_id=req_id,
-                    response_type="inference_result",
-                    message="Payload must be a dict.",
-                    payload_type=str(type(payload)),
-                )
+            if not isinstance(msg, dict):
+                return {
+                    "status": "error",
+                    "ok": False,
+                    "type": "inference_result",
+                    "request_id": req_id,
+                    "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))}
+                }
             try:
-                output_dict = self._policy.predict_action(**payload)
+
+                ouput_dict = self._policy.predict_action(**msg)
             except Exception as e:
                 logging.exception("Policy inference error (request_id=%s)", req_id)
-                return self._error_response(
-                    req_id=req_id,
-                    response_type="inference_result",
-                    message=str(e),
-                )
-            return self._ok_response(req_id=req_id, response_type="inference_result", data=output_dict)
+                logging.exception(e)
+                
+                return {
+                    "status": "error",
+                    "ok": False,
+                    "type": "inference_result",
+                    "request_id": req_id,
+                    "error": {
+                        "message": str(e),
+                        # "traceback": traceback.format_exc(),
+                    },
+                }
+            data = ouput_dict
+            return {
+                "status": "ok",
+                "ok": True,
+                "type": "inference_result",
+                "request_id": req_id,
+                "data": data,
+            }
 
         # unknow request type
         else:
-            return self._error_response(
-                req_id=req_id,
-                response_type="unknown",
-                message=f"Unsupported message type '{mtype}'",
-            )
+            return {
+                "status": "error",
+                "ok": False,
+                "type": "unknown",
+                "request_id": req_id,
+                "error": {"message": f"Unsupported message type '{mtype}'"},
+            }
 
 
 if __name__ == "__main__":

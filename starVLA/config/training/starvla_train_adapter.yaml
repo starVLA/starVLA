@@ -75,7 +75,6 @@ trainer:
 
   # parameters to be determined
   save_format: pt  # pt or safetensors
-  full_state_keep_last: 1  # keep latest N full accelerator states; set -1 to disable full-state saving
   is_resume: false
   resume_epoch: null
   resume_step: null
