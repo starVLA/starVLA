@@ -110,10 +110,6 @@ def build_param_lr_groups(model, cfg):
 import torch.distributed as dist
 
 
-def _is_main_process_dist() -> bool:
-    return (not dist.is_initialized()) or dist.get_rank() == 0
-
-
 def only_main_process(func):
     """
     decorator: only run in main process (rank=0)
@@ -145,6 +141,9 @@ def resize_images(images, target_size=(224, 224)):
         return [resize_images(img, target_size) for img in images]
     else:
         raise ValueError("Unsupported image type or structure.")
+
+
+import torch.distributed as dist
 
 
 class TrainerUtils:
@@ -189,7 +188,7 @@ class TrainerUtils:
                     continue
 
         # accelerator.wait_for_everyone()  # synchronize when distributed training
-        if _is_main_process_dist():
+        if dist.get_rank == 0:
             print(f"🔒 Frozen modules with re pattern: {frozen}")
         return model
 
@@ -199,7 +198,7 @@ class TrainerUtils:
         print the total number of parameters and trainable parameters of the model
         :param model: PyTorch model instance
         """
-        if not _is_main_process_dist():
+        if dist.get_rank() != 0:
             return
         print("📊 model parameter statistics:")
         num_params = sum(p.numel() for p in model.parameters())
@@ -221,7 +220,7 @@ class TrainerUtils:
         """
         if not checkpoint_path:
             return []
-        if _is_main_process_dist():
+        if dist.get_rank() == 0:
             print(f"📦 loading checkpoint: {checkpoint_path}")
         try:
             if _is_safetensors_path(checkpoint_path):
@@ -247,7 +246,7 @@ class TrainerUtils:
                     sub_state_dict = {k[len(prefix) :]: v for k, v in checkpoint.items() if k.startswith(prefix)}
                     if sub_state_dict:
                         module.load_state_dict(sub_state_dict, strict=True)
-                        if _is_main_process_dist():
+                        if dist.get_rank() == 0:
                             print(f"✅ parameters loaded to module '{path}'")
                         loaded_modules.append(path)
                     else:
@@ -257,7 +256,7 @@ class TrainerUtils:
         else:  # full load
             try:
                 model.load_state_dict(checkpoint, strict=False)
-                if _is_main_process_dist():
+                if dist.get_rank() == 0:
                     print("✅ loaded <full_model> model parameters")
                 loaded_modules = ["<full_model>"]
             except Exception as e:
@@ -287,128 +286,6 @@ class TrainerUtils:
         prepared_components = accelerator.prepare(*components)
         return prepared_components
 
-    def save_full_checkpoint(self, completed_steps, checkpoint_dir, output_dir):
-        """Save full training state (prepared components + RNG) for resume,
-        plus a standalone model weights file for deployment.
-
-        The standalone file format is controlled by ``self.config.trainer.save_format``
-        (``"pt"`` or ``"safetensors"``).  Defaults to ``"pt"`` when unset.
-        Full-state retention is controlled by ``self.config.trainer.full_state_keep_last``:
-        keep latest N full states when N >= 1 (default: 1), disable full-state saving with -1.
-
-        Must be called after accelerator.prepare().
-
-        Args:
-            completed_steps: Current training step count.
-            checkpoint_dir: Directory to save checkpoints (e.g. results/<run_id>/checkpoints).
-            output_dir: Top-level run directory for summary.jsonl and config.
-        """
-        from pathlib import Path
-        import shutil
-
-        save_format = getattr(self.config.trainer, "save_format", "pt")
-        full_state_keep_last = getattr(self.config.trainer, "full_state_keep_last", 1)
-
-        try:
-            full_state_keep_last = int(full_state_keep_last)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"trainer.full_state_keep_last must be an integer >=1 or -1, got: {full_state_keep_last}"
-            ) from exc
-
-        if full_state_keep_last == -1:
-            save_full_state = False
-        elif full_state_keep_last >= 1:
-            save_full_state = True
-        else:
-            raise ValueError(
-                f"trainer.full_state_keep_last must be an integer >=1 or -1, got: {full_state_keep_last}"
-            )
-
-        # Save full accelerator state for all prepared components.
-        state_dir = os.path.join(checkpoint_dir, f"steps_{completed_steps}")
-        use_safe = save_format == "safetensors"
-        if save_full_state:
-            self.accelerator.save_state(state_dir, safe_serialization=use_safe)
-
-        # Ensure all processes finish state writing before any retention cleanup.
-        self.accelerator.wait_for_everyone()
-
-        # Save standalone weights & metadata (main process only)
-        if self.accelerator.is_main_process:
-            import json as _json
-
-            # Save standalone model weights for deployment
-            state_dict = self.accelerator.get_state_dict(self.model)
-            if state_dict is not None:
-                if save_format == "safetensors":
-                    from safetensors.torch import save_file
-
-                    weights_path = os.path.join(
-                        checkpoint_dir, f"steps_{completed_steps}_model.safetensors"
-                    )
-                    save_file(state_dict, weights_path)
-                else:
-                    weights_path = os.path.join(
-                        checkpoint_dir, f"steps_{completed_steps}_pytorch_model.pt"
-                    )
-                    torch.save(state_dict, weights_path)
-
-            # Keep only the most recent N full-state checkpoints when enabled.
-            if save_full_state:
-                step_dirs = []
-                for entry in os.listdir(checkpoint_dir):
-                    full_path = os.path.join(checkpoint_dir, entry)
-                    match = re.match(r"^steps_(\d+)$", entry)
-                    if match and os.path.isdir(full_path):
-                        step_dirs.append((int(match.group(1)), full_path))
-                step_dirs.sort(key=lambda x: x[0])
-                stale_dirs = step_dirs[:-full_state_keep_last]
-                for _, stale_dir in stale_dirs:
-                    shutil.rmtree(stale_dir)
-
-            # Append to summary log
-            summary_data = {"steps": completed_steps}
-            with open(os.path.join(output_dir, "summary.jsonl"), "a") as f:
-                f.write(_json.dumps(summary_data) + "\n")
-
-            if save_full_state:
-                self.accelerator.print(
-                    f"✅ Checkpoint saved at {state_dir} (full_state_keep_last={full_state_keep_last})"
-                )
-            else:
-                self.accelerator.print("✅ Checkpoint saved (weight-only, full state disabled)")
-
-            # Save accessed config if available
-            from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig
-
-            if isinstance(self.config, AccessTrackedConfig):
-                self.config.save_accessed_config(
-                    Path(output_dir) / "config.yaml",
-                    use_original_values=False,
-                )
-
-        self.accelerator.wait_for_everyone()
-
-    def resume_from_full_checkpoint(self, checkpoint_dir):
-        """Load full training state from an accelerator state directory.
-
-        Must be called **after** accelerator.prepare() (DeepSpeed requirement).
-
-        Args:
-            checkpoint_dir: Path to a steps_N/ directory containing full state.
-
-        Returns:
-            int: The completed_steps parsed from directory name (steps_N), or 0.
-        """
-        self.accelerator.load_state(checkpoint_dir)
-        self.accelerator.print(f"Resumed full training state from: {checkpoint_dir}")
-
-        # Parse completed_steps from directory name (e.g. "steps_5000")
-        dir_name = os.path.basename(checkpoint_dir)
-        match = re.match(r"^steps_(\d+)$", dir_name)
-        return int(match.group(1)) if match else 0
-
     @staticmethod
     def euclidean_distance(predicted: np.ndarray, ground_truth: np.ndarray) -> float:
         return np.linalg.norm(predicted - ground_truth)
@@ -420,10 +297,8 @@ class TrainerUtils:
         epoch_counter += 1
 
         # 2. set new epoch (distributed core)
-        for attr in ("sampler", "batch_sampler"):
-            target = getattr(dataloader, attr, None)
-            if callable(getattr(target, "set_epoch", None)):
-                target.set_epoch(epoch_counter)
+        if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
+            dataloader.sampler.set_epoch(epoch_counter)
 
         # 3. create new iterator
         return iter(dataloader), epoch_counter
@@ -588,46 +463,39 @@ class TrainerUtils:
             return None
 
     def _get_latest_checkpoint(self, checkpoint_dir):
-        """Find the latest checkpoint in the directory based on step number.
-
-        Supports both new directory format (steps_N/) and legacy file format
-        (steps_N_pytorch_model.pt). Prefers new directory format when both exist
-        at the same step.
-        """
+        """Find the latest checkpoint in the directory based on step number."""
         if not os.path.exists(checkpoint_dir):
             self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
             return None, 0
 
-        checkpoints_with_steps = []
+        # 获取所有符合命名规则，支持 .pt 和 .safetensors
+        checkpoints = [
+            f for f in os.listdir(checkpoint_dir) 
+            if re.match(r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", f)
+            and os.path.isfile(os.path.join(checkpoint_dir, f))  # 确保是文件
+        ]
 
-        for entry in os.listdir(checkpoint_dir):
-            full_path = os.path.join(checkpoint_dir, entry)
-
-            # New format: steps_N/ directories (with training_state.json inside)
-            dir_match = re.match(r"^steps_(\d+)$", entry)
-            if dir_match and os.path.isdir(full_path):
-                step = int(dir_match.group(1))
-                # Directory checkpoints contain full accelerator state for resume.
-                checkpoints_with_steps.append((full_path, step, "dir"))
-                continue
-
-            # Weight-only files: steps_N_pytorch_model.pt or steps_N_model.safetensors
-            file_match = re.match(r"^steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", entry)
-            if file_match and os.path.isfile(full_path):
-                step = int(file_match.group(1))
-                checkpoints_with_steps.append((full_path, step, "file"))
-
-        if not checkpoints_with_steps:
+        if not checkpoints:
             self.accelerator.print(f"No checkpoints found in {checkpoint_dir}")
             return None, 0
 
-        # Sort by step number, then by type priority (dir > file) so directory wins ties.
-        type_priority = {"file": 0, "dir": 1}
-        checkpoints_with_steps.sort(key=lambda x: (x[1], type_priority[x[2]]))
-        latest_path, completed_steps, fmt = checkpoints_with_steps[-1]
+        # 提取步数并排序
+        try:
+            checkpoints_with_steps = [
+                (ckpt, int(re.search(r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", ckpt).group(1)))
+                for ckpt in checkpoints
+            ]
+        except AttributeError as e:
+            self.accelerator.print(f"Error parsing checkpoint filenames: {e}")
+            return None, 0
 
-        self.accelerator.print(f"Latest checkpoint found: {latest_path} (format={fmt})")
-        return latest_path, completed_steps
+        # 按步数排序，获取最新的 checkpoint
+        checkpoints_with_steps.sort(key=lambda x: x[1])
+        latest_checkpoint, completed_steps = checkpoints_with_steps[-1]
+
+        latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+        self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
+        return latest_checkpoint_path, completed_steps
 
 import os
 
