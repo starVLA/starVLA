@@ -1927,21 +1927,6 @@ class LeRobotMixtureDataset(Dataset):
         # Set the epoch and sample the first epoch
         self.set_epoch(0)
 
-        self._sequential_step_sampling = True
-        if self.data_cfg is not None:
-            seq_cfg = self.data_cfg.get("sequential_step_sampling", True)
-            self._sequential_step_sampling = seq_cfg not in ["False", False]
-
-        self._step_order: list[np.ndarray] = []
-        self._step_pos: list[int] = []
-        if self._sequential_step_sampling:
-            for dataset in self.datasets:
-                self._step_order.append(np.arange(len(dataset.all_steps)))
-                if self.mode == "train":
-                    rng = np.random.default_rng(self.seed)
-                    rng.shuffle(self._step_order[-1])
-                self._step_pos.append(0)
-
         self.update_metadata(metadata_config)
 
     @property
@@ -2007,21 +1992,7 @@ class LeRobotMixtureDataset(Dataset):
         if len(dataset.all_steps) == 0:
             raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
 
-        if not self._sequential_step_sampling:
-            single_step_index = rng.choice(len(dataset.all_steps))
-        else:
-            step_pos = self._step_pos[dataset_index]
-            if step_pos >= len(dataset.all_steps):
-                order = np.arange(len(dataset.all_steps))
-                if self.mode == "train":
-                    seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-                    rng = np.random.default_rng(seed)
-                    rng.shuffle(order)
-                self._step_order[dataset_index] = order
-                step_pos = 0
-
-            single_step_index = self._step_order[dataset_index][step_pos]
-            self._step_pos[dataset_index] = step_pos + 1
+        single_step_index = rng.choice(len(dataset.all_steps))
         trajectory_id, base_index = dataset.all_steps[single_step_index]
         return dataset, trajectory_id, base_index
 
