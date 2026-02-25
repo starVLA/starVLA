@@ -159,6 +159,7 @@ class VLACoTrainer(TrainerUtils):
                 self.lr_scheduler,
                 self.vla_train_dataloader,
                 self.vlm_train_dataloader,
+                cfg=self.config,
             )
         )
 

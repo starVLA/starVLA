@@ -143,6 +143,7 @@ class VLATrainer(TrainerUtils):
             self.optimizer,
             self.lr_scheduler,
             self.vla_train_dataloader,
+            cfg=self.config,
         )
 
         if is_resume:
