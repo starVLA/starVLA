@@ -240,18 +240,12 @@ if __name__ == "__main__":
     vla_dataset_cfg = cfg.datasets.vla_data
     from torch.utils.data import DataLoader
     from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
-    from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotMixtureBatchSampler
     cfg.datasets.vla_data.include_state = "False"
     dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-    batch_sampler = LeRobotMixtureBatchSampler(
-        dataset,
-        batch_size=2,
-        drop_last=False,
-    )
 
     train_dataloader = DataLoader(
         dataset,
-        batch_sampler=batch_sampler,
+        batch_size=2,
         num_workers=1,  # For Debug
         collate_fn=collate_fn,
     )

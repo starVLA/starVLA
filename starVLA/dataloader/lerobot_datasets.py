@@ -8,11 +8,7 @@ from pathlib import Path
 from typing import Sequence
 from omegaconf import OmegaConf
 
-from starVLA.dataloader.gr00t_lerobot.datasets import (
-    LeRobotSingleDataset,
-    LeRobotMixtureDataset,
-    LeRobotMixtureBatchSampler,
-)
+from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotSingleDataset, LeRobotMixtureDataset
 from starVLA.dataloader.gr00t_lerobot.mixtures import DATASET_NAMED_MIXTURES
 from starVLA.dataloader.gr00t_lerobot.data_config import ROBOT_TYPE_CONFIG_MAP
 from starVLA.dataloader.gr00t_lerobot.embodiment_tags import ROBOT_TYPE_TO_EMBODIMENT_TAG, EmbodimentTag
@@ -123,14 +119,9 @@ if __name__ == "__main__":
         dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
         # dataset
     from torch.utils.data import DataLoader
-    batch_sampler = LeRobotMixtureBatchSampler(
-        dataset,
-        batch_size=2,
-        drop_last=False,
-    )
     train_dataloader = DataLoader(
         dataset,
-        batch_sampler=batch_sampler,
+        batch_size=2,
         num_workers=1, # For Debug
         collate_fn=collate_fn,
     )

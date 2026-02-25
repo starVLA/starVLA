@@ -5,12 +5,11 @@ Utility classes defining a Metrics container and multiple Trackers to enable mod
 endpoints (e.g., JSONL local logs, Weights & Biases).
 """
 
-from typing import Optional, Tuple
+from typing import Tuple
 import re
 import json
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 
 from accelerate.logging import get_logger
 
@@ -150,96 +149,6 @@ def resize_images(images, target_size=(224, 224)):
 
 class TrainerUtils:
     @staticmethod
-    def _to_positive_int(value) -> Optional[int]:
-        try:
-            value = int(value)
-        except (TypeError, ValueError):
-            return None
-        return value if value > 0 else None
-
-    @staticmethod
-    def _infer_micro_batch_size_from_components(components) -> Tuple[Optional[int], list[int]]:
-        candidates = []
-        for component in components:
-            if not isinstance(component, DataLoader):
-                continue
-
-            direct_bs = TrainerUtils._to_positive_int(getattr(component, "batch_size", None))
-            if direct_bs is not None:
-                candidates.append(direct_bs)
-                continue
-
-            batch_sampler = getattr(component, "batch_sampler", None)
-            sampler_bs = TrainerUtils._to_positive_int(getattr(batch_sampler, "batch_size", None))
-            if sampler_bs is not None:
-                candidates.append(sampler_bs)
-
-        if not candidates:
-            return None, []
-
-        return candidates[0], candidates
-
-    @staticmethod
-    def _infer_micro_batch_size_from_cfg(cfg) -> Optional[int]:
-        if cfg is None:
-            return None
-
-        for dataset_key in ("vla_data", "vlm_data"):
-            datasets = getattr(cfg, "datasets", None)
-            if datasets is None:
-                continue
-            dataset_cfg = getattr(datasets, dataset_key, None)
-            if dataset_cfg is None:
-                continue
-            inferred = TrainerUtils._to_positive_int(getattr(dataset_cfg, "per_device_batch_size", None))
-            if inferred is not None:
-                return inferred
-
-        return None
-
-    @staticmethod
-    def _auto_inject_deepspeed_batch_sizes(accelerator, components, cfg=None) -> None:
-        state = getattr(accelerator, "state", None)
-        deepspeed_plugin = getattr(state, "deepspeed_plugin", None)
-        if deepspeed_plugin is None:
-            return
-
-        deepspeed_config = getattr(deepspeed_plugin, "deepspeed_config", None)
-        if not isinstance(deepspeed_config, dict):
-            return
-
-        current_micro_batch = deepspeed_config.get("train_micro_batch_size_per_gpu")
-        if current_micro_batch not in (None, "auto"):
-            return
-
-        inferred_micro_batch, component_candidates = TrainerUtils._infer_micro_batch_size_from_components(components)
-        if inferred_micro_batch is None:
-            inferred_micro_batch = TrainerUtils._infer_micro_batch_size_from_cfg(cfg)
-        if inferred_micro_batch is None:
-            return
-
-        deepspeed_config["train_micro_batch_size_per_gpu"] = inferred_micro_batch
-
-        if deepspeed_config.get("train_batch_size") in (None, "auto"):
-            world_size = max(TrainerUtils._to_positive_int(getattr(accelerator, "num_processes", 1)) or 1, 1)
-            grad_accum = max(
-                TrainerUtils._to_positive_int(getattr(accelerator, "gradient_accumulation_steps", 1)) or 1,
-                1,
-            )
-            deepspeed_config["train_batch_size"] = inferred_micro_batch * world_size * grad_accum
-
-        if len(set(component_candidates)) > 1:
-            accelerator.print(
-                "⚠️ Multiple dataloader batch sizes detected for DeepSpeed "
-                f"{component_candidates}; using {inferred_micro_batch}."
-            )
-        else:
-            accelerator.print(
-                "Auto-set DeepSpeed train_micro_batch_size_per_gpu="
-                f"{inferred_micro_batch} to support batch_sampler dataloaders."
-            )
-
-    @staticmethod
     def freeze_backbones(model, freeze_modules=""):
         """
         directly freeze the specified submodules based on the relative module path list (patterns), no longer recursively find all submodule names:
@@ -366,16 +275,14 @@ class TrainerUtils:
             print(f"{name:60s}  |  {status}")
 
     @staticmethod
-    def setup_distributed_training(accelerator, *components, cfg=None):
+    def setup_distributed_training(accelerator, *components):
         """
         use Accelerator to prepare distributed training components
         :param accelerator: Accelerate instance
         :param components: any number of components (such as model, optimizer, dataloader, etc.)
-        :param cfg: optional training config used as fallback when dataloader does not expose batch_size
         :return: prepared distributed components (in the same order as input)
         """
 
-        TrainerUtils._auto_inject_deepspeed_batch_sizes(accelerator, components, cfg=cfg)
         # use accelerator.prepare method to wrap components
         prepared_components = accelerator.prepare(*components)
         return prepared_components
@@ -513,10 +420,8 @@ class TrainerUtils:
         epoch_counter += 1
 
         # 2. set new epoch (distributed core)
-        for attr in ("sampler", "batch_sampler"):
-            target = getattr(dataloader, attr, None)
-            if callable(getattr(target, "set_epoch", None)):
-                target.set_epoch(epoch_counter)
+        if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
+            dataloader.sampler.set_epoch(epoch_counter)
 
         # 3. create new iterator
         return iter(dataloader), epoch_counter
