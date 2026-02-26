@@ -80,4 +80,3 @@ trainer:
   resume_step: null
   enable_gradient_checkpointing: true
   enable_mixed_precision_training: true
-

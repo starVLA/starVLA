@@ -283,22 +283,16 @@ if __name__ == "__main__":
     # # test with dataloader
     # # can be fake sample， but here get from dataloader for simpler
     from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
-    from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotMixtureBatchSampler
 
     vla_dataset_cfg = cfg.datasets.vla_data
     vla_dataset_cfg.video_backend = "torchvision_av"
     dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-    batch_sampler = LeRobotMixtureBatchSampler(
-        dataset,
-        batch_size=2,
-        drop_last=False,
-    )
 
     from torch.utils.data import DataLoader
 
     train_dataloader = DataLoader(
         dataset,
-        batch_sampler=batch_sampler,
+        batch_size=2,
         num_workers=1,  # For Debug
         collate_fn=collate_fn,
     )
