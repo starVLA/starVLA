@@ -785,7 +785,7 @@ class LeRobotSingleDataset(Dataset):
             return np.array(trajectory_ids), np.array(trajectory_lengths)
         # v3.0
         elif self._lerobot_version == "v3.0":
-            file_paths = list((self.dataset_path).glob(LE_ROBOT3_EPISODE_FILENAME))
+            file_paths = sorted(list((self.dataset_path).glob(LE_ROBOT3_EPISODE_FILENAME)))
             trajectory_ids = []
             trajectory_lengths = []
             # data_chunck_index = []
@@ -794,16 +794,30 @@ class LeRobotSingleDataset(Dataset):
             self.trajectory_ids_to_metadata = {}
             for file_path in file_paths:
                 episodes_data = pd.read_parquet(file_path)
+                timestamp_cols = [
+                    c
+                    for c in episodes_data.columns
+                    if str(c).startswith("videos/") and str(c).endswith("/from_timestamp")
+                ]
                 for index, episode in episodes_data.iterrows():
                     trajectory_ids.append(episode["episode_index"])
                     trajectory_lengths.append(episode["length"])
+
+                    from_timestamps = {}
+                    for col in timestamp_cols:
+                        value = episode[col]
+                        if pd.isna(value):
+                            continue
+                        # videos/{video_key}/from_timestamp -> {video_key}
+                        video_key = str(col)[len("videos/") : -len("/from_timestamp")]
+                        from_timestamps[video_key] = float(value)
 
                     # TODO auto map key? just map to file_path and file_from_index
                     episode_meta = {
                         "data/chunk_index": episode["data/chunk_index"],
                         "data/file_index": episode["data/file_index"],
                         "data/file_from_index": index,
-                        "videos/observation.images.wrist/from_timestamp": episode["videos/observation.images.wrist/from_timestamp"],
+                        "videos/from_timestamps": from_timestamps,
                     }
                     self.trajectory_ids_to_metadata[trajectory_ids[-1]] = episode_meta
 
@@ -1324,8 +1338,8 @@ class LeRobotSingleDataset(Dataset):
         if self.curr_traj_id == trajectory_id and self.curr_traj_data is not None:
             return self.curr_traj_data
         else: #TODO check detail later
-            chunk_index = self.get_episode_chunk(trajectory_id)
-
+            episode_meta = self.trajectory_ids_to_metadata[trajectory_id]
+            chunk_index = episode_meta["data/chunk_index"]
             file_index = self.get_episode_file_index(trajectory_id)
             # file_from_index = self.get_episode_file_from_index(trajectory_id)
             
@@ -1338,11 +1352,6 @@ class LeRobotSingleDataset(Dataset):
             
             # filter by trajectory_id
             episode_data = file_data.loc[file_data["episode_index"] == trajectory_id].copy()
-            
-            # fix timestamp from epis index to file index
-            from_timestamp = self.trajectory_ids_to_metadata[trajectory_id]["videos/observation.images.wrist/from_timestamp"]
-            episode_data["timestamp"] = episode_data["timestamp"] + from_timestamp  
-            
             return episode_data
 
 
@@ -1478,6 +1487,14 @@ class LeRobotSingleDataset(Dataset):
         timestamp: np.ndarray = self.curr_traj_data["timestamp"].to_numpy()
         # Get the corresponding video timestamps from the step indices
         video_timestamp = timestamp[step_indices]
+        if self._lerobot_version == "v3.0":
+            episode_meta = self.trajectory_ids_to_metadata.get(trajectory_id, {})
+            from_timestamps = episode_meta.get("videos/from_timestamps", {})
+            original_video_key = self.lerobot_modality_meta.video[key].original_key
+            if original_video_key is None:
+                original_video_key = key
+            from_timestamp = float(from_timestamps.get(original_video_key, 0.0))
+            video_timestamp = video_timestamp + from_timestamp
 
         return get_frames_by_timestamps(
             video_path.as_posix(),
@@ -2668,5 +2685,3 @@ class LeRobotMixtureDataset(Dataset):
                 dataset.set_transforms_metadata(self.merged_metadata[dataset.tag])
         
         print(f"Applied cached statistics for {len(self.merged_metadata)} embodiment tags.")
-
-
