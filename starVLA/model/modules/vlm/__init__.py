@@ -1,6 +1,3 @@
-
-
-
 def get_vlm_model(config):
 
     vlm_name = config.framework.qwenvl.base_vlm
@@ -10,8 +7,10 @@ def get_vlm_model(config):
         return _QWen_VL_Interface(config)
     elif "Qwen3-VL" in vlm_name:
         from .QWen3 import _QWen3_VL_Interface
-
         return _QWen3_VL_Interface(config)
+    elif "Qwen3.5" in vlm_name:
+        from .QWen3_5 import _QWen3_5_VL_Interface
+        return _QWen3_5_VL_Interface(config)
     elif "florence" in vlm_name.lower(): # temp for some ckpt
         from .Florence2 import _Florence_Interface 
         return _Florence_Interface(config)

@@ -1,6 +1,6 @@
 # Copyright 2025 starVLA community. All rights reserved.
 # Licensed under the MIT License, Version 1.0 (the "License");
-# Implemented by [Junqiu YU / Fudan University] in [2025].
+# Implemented by [Shijie LIAN/ Huazhong University of Science & Technology] in [2025].
 # Design and Merged by [Jinhui YE / HKUST University] in [2025].
 """
 Qwen-GR00T Framework
@@ -67,6 +67,8 @@ class LangForce(baseframework):
     Additionally:
       - Training-time assertion: extracted language spans in prior/post must match exactly (token-level).
         If mismatch => raise AssertionError with decoded spans.
+      - LangForce utilizes Qwen3-VL and extends the vocabulary with specialized tokens that serve as Latent Action Queries. 
+        Run the provided example script add_token.py in https://github.com/ZGC-EmbodyAI/LangForce to update the tokenizer with these additional tokens.
     """
 
     def __init__(
@@ -104,13 +106,13 @@ class LangForce(baseframework):
         self.detach_prior_cond = bool(self.config.framework.get("detach_prior_cond", True))
 
         # ===== (2) Hard-token LLR =====
-        self.use_hard_token_llr = bool(self.config.framework.get("use_hard_token_llr", True))
+        self.use_hard_token_llr = bool(self.config.framework.get("use_hard_token_llr", False))
         self.hard_token_k = int(self.config.framework.get("hard_token_k", 16))
         assert self.hard_token_k > 0
 
         # ===== (3) Shortcut gate =====
         # gate computed from posterior language-span NLL: high NLL => log p(L|V) low => gate small
-        self.use_kl_gate = bool(self.config.framework.get("use_kl_gate", True))
+        self.use_kl_gate = bool(self.config.framework.get("use_kl_gate", False))
         self.kl_gate_momentum = float(self.config.framework.get("kl_gate_momentum", 0.99))
         self.kl_gate_temp = float(self.config.framework.get("kl_gate_temp", 0.5))
         self.kl_gate_tau_scale = float(self.config.framework.get("kl_gate_tau_scale", 0.7))  # scale EMA threshold
