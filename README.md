@@ -145,6 +145,7 @@ We release a series of modified models and finetuning checkpoints to facilitate 
 
 - [x] **SimplerEnV**
 - [x] **LIBERO**
+- [x] **LIBERO-plus**
 - [x] **Robocasa**
 - [x] **RoboTwin**
 - [x] **BEHAVIOR**
