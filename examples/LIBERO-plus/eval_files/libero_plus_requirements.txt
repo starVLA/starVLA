@@ -1,0 +1,15 @@
+robosuite==1.4.0
+gym==0.25.2
+tyro 
+matplotlib 
+mediapy 
+websockets 
+msgpack
+bddl==1.0.1
+hydra-core==1.2.0
+easydict==1.9 
+robomimic==0.2.0 
+thop==0.1.1-2209072238
+future==0.18.2 
+wand==0.6.13
+draccus==0.8.0
