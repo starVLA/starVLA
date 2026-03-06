@@ -135,5 +135,7 @@ Additionally, you need to modify the following paths in `eval_calvin.py`:
 * `calvin_config_path`: Path to Calvin models configuration directory (default: `"/path/to/calvin/calvin_models/conf"`)
 * `eval_sequences_path`: Path to evaluation sequences JSON file (default: `"/path/to/calvin/eval_sequences.json"`)
 
+For convenience, we provide a reference evaluation sequence file at `examples/calvin/eval_files/eval_sequences.json`, which can be used directly.
+
 
 
