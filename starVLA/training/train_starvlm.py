@@ -1,42 +1,57 @@
+# Copyright 2025 starVLA community. All rights reserved.
+# Licensed under the MIT License, Version 1.0 (the "License");
+# Implemented by [Jinhui YE / HKUST University] in [2025].
+
+"""
+StarVLA’s trainer is built directly on native PyTorch + Accelerate + DeepSpeed, keeping the loop explicit and easy to hack.
+Conventions:
+1. Store runtime state in dicts where possible (simplifies data info, procesing info, config, etc).
+2. Use multiple dataloaders to adapt heterogeneous data types / task mixtures.
+3. Put each training strategy in its own `trainer_*.py` file (avoid large if‑else chains).
+"""
+
+# Standard Library
 import argparse
 import json
 import os
 from pathlib import Path
+from typing import Tuple
+
+# Third-Party Libraries
 import torch
 import torch.distributed as dist
 import wandb
-import yaml
-from typing import Tuple
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoProcessor, get_scheduler
-from torch.utils.data import DataLoader
 
 # Local Modules
 from starVLA.dataloader import build_dataloader
-from starVLA.training.trainer_utils.trainer_tools import normalize_dotlist_args, TrainerUtils
 from starVLA.model.framework import build_framework
-from starVLA.training.trainer_utils.trainer_tools import build_param_lr_groups
-from starVLA.training.trainer_utils.config_tracker import wrap_config, AccessTrackedConfig
+from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
+from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, normalize_dotlist_args
 
 deepspeed_plugin = DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
 accelerator.print(accelerator.state)
 
-# Disable tokenizers parallelism
+# Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Initialize logger
 logger = get_logger(__name__)
 
+
 def load_fast_tokenizer():
     return AutoProcessor.from_pretrained("physical-intelligence/fast", trust_remote_code=True)
 
+
 def setup_directories(cfg) -> Path:
-    """Create output directory and save config."""
+    """Create output directory and checkpoint directory."""
     cfg.output_dir = os.path.join(cfg.run_root_dir, cfg.run_id)
     output_dir = Path(cfg.output_dir)
 
@@ -44,21 +59,18 @@ def setup_directories(cfg) -> Path:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(output_dir / "checkpoints", exist_ok=True)
 
-        # # Save config
-        # OmegaConf.save(cfg, output_dir / "config.yaml")
-        # with open(output_dir / "config.yaml", "r") as f_yaml, open(output_dir / "config.json", "w") as f_json:
-        #     yaml_cfg = yaml.safe_load(f_yaml)
-        #     json.dump(yaml_cfg, f_json, indent=2)
-
     return output_dir
+
 
 def prepare_data(cfg, accelerator, output_dir) -> DataLoader:
     """Prepare VLM training data."""
     logger.info(f"Creating VLM Dataset `{cfg.datasets.vlm_data.dataset_use}`")
     vlm_train_dataloader = build_dataloader(cfg=cfg, dataset_py=cfg.datasets.vlm_data.dataset_py)
+
     accelerator.dataloader_config.dispatch_batches = False
     dist.barrier()
     return vlm_train_dataloader
+
 
 def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler._LRScheduler]:
     """Set optimizer and learning rate scheduler."""
@@ -71,12 +83,10 @@ def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, to
         eps=cfg.trainer.optimizer.eps,
     )
 
-    # Print optimizer group information
     if dist.is_initialized() and dist.get_rank() == 0:
-        for i, group in enumerate(optimizer.param_groups):
+        for group in optimizer.param_groups:
             logger.info(f"LR Group {group['name']}: lr={group['lr']}, num_params={len(group['params'])}")
 
-    # Initialize learning rate scheduler
     lr_scheduler = get_scheduler(
         name=cfg.trainer.lr_scheduler_type,
         optimizer=optimizer,
@@ -87,6 +97,7 @@ def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, to
 
     return optimizer, lr_scheduler
 
+
 class VLAMTrainer(TrainerUtils):
     def __init__(self, cfg, model, vlm_train_dataloader, optimizer, lr_scheduler, accelerator):
         self.config = cfg
@@ -95,6 +106,7 @@ class VLAMTrainer(TrainerUtils):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.accelerator = accelerator
+
         self.completed_steps = 0
         self.total_batch_size = self._calculate_total_batch_size()
 
@@ -105,7 +117,9 @@ class VLAMTrainer(TrainerUtils):
 
         if hasattr(self.config.trainer, "pretrained_checkpoint") and self.config.trainer.pretrained_checkpoint:
             pretrained_checkpoint = self.config.trainer.pretrained_checkpoint
-            reload_modules = self.config.trainer.reload_modules if hasattr(self.config.trainer, "reload_modules") else None
+            reload_modules = (
+                self.config.trainer.reload_modules if hasattr(self.config.trainer, "reload_modules") else None
+            )
             self.model = self.load_pretrained_backbones(self.model, pretrained_checkpoint, reload_modules=reload_modules)
 
         freeze_modules = self.config.trainer.freeze_modules if hasattr(self.config.trainer, "freeze_modules") else None
@@ -113,7 +127,10 @@ class VLAMTrainer(TrainerUtils):
         self.print_trainable_parameters(self.model)
 
         self.model, self.optimizer, self.vlm_train_dataloader = self.setup_distributed_training(
-            self.accelerator, self.model, self.optimizer, self.vlm_train_dataloader
+            self.accelerator,
+            self.model,
+            self.optimizer,
+            self.vlm_train_dataloader,
         )
 
         self._init_wandb()
@@ -139,9 +156,9 @@ class VLAMTrainer(TrainerUtils):
         """Initialize checkpoint directory."""
         self.checkpoint_dir = os.path.join(self.config.output_dir, "checkpoints")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
+
         pretrained_checkpoint = getattr(self.config.trainer, "pretrained_checkpoint", None)
         is_resume = getattr(self.config.trainer, "is_resume", False)
-
         if pretrained_checkpoint and is_resume:
             self._load_checkpoint(self.config.resume_from_checkpoint)
 
@@ -155,6 +172,7 @@ class VLAMTrainer(TrainerUtils):
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
+
             state_dict = self.accelerator.get_state_dict(self.model)
             if save_format == "safetensors":
                 from safetensors.torch import save_file
@@ -164,40 +182,30 @@ class VLAMTrainer(TrainerUtils):
                 torch.save(state_dict, checkpoint_path + "_pytorch_model.pt")
             else:
                 raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
+
             summary_data = {"steps": self.completed_steps}
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
             self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
-            # ✅ Save accessed configuration only
+
             if isinstance(self.config, AccessTrackedConfig):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
-                # self.config.save_accessed_config(
-                #     output_dir / "config.json", 
-                #     use_original_values=False
-                # )
-                self.config.save_accessed_config(
-                    output_dir / "config.yaml", 
-                    use_original_values=False 
-                )
+                self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
                 logger.info("✅ Configuration files saved")
-        self.accelerator.wait_for_everyone()
 
-    def eval_action_model(self, step_metrics=None):
-        """No-op evaluation for VLM-only training."""
-        return step_metrics or {}
+        self.accelerator.wait_for_everyone()
 
     def _log_metrics(self, metrics):
         """Record training metrics."""
-        if self.completed_steps % self.config.trainer.logging_frequency == 0:
-            if dist.get_rank() == 0:
-                metrics["learning_rate"] = self.lr_scheduler.get_last_lr()[0]
-                if hasattr(self.vlm_train_dataloader, "__len__"):
-                    dataloader_length = len(self.vlm_train_dataloader)
-                    if dataloader_length:
-                        metrics["epoch"] = round(self.completed_steps / dataloader_length, 2)
-                wandb.log(metrics, step=self.completed_steps)
-                logger.info(f"Step {self.completed_steps}, Metrics: {metrics}")
+        if self.completed_steps % self.config.trainer.logging_frequency == 0 and dist.get_rank() == 0:
+            metrics["learning_rate"] = self.lr_scheduler.get_last_lr()[0]
+            if hasattr(self.vlm_train_dataloader, "__len__"):
+                dataloader_length = len(self.vlm_train_dataloader)
+                if dataloader_length:
+                    metrics["epoch"] = round(self.completed_steps / dataloader_length, 2)
+            wandb.log(metrics, step=self.completed_steps)
+            logger.info(f"Step {self.completed_steps}, Metrics: {metrics}")
 
     def _create_data_iterators(self):
         """Create data iterators."""
@@ -217,7 +225,9 @@ class VLAMTrainer(TrainerUtils):
         """Execute training loop."""
         self._log_training_config()
         self._create_data_iterators()
-        progress_bar = tqdm(range(self.config.trainer.max_train_steps), disable=not self.accelerator.is_local_main_process)
+        progress_bar = tqdm(
+            range(self.config.trainer.max_train_steps), disable=not self.accelerator.is_local_main_process
+        )
 
         while self.completed_steps < self.config.trainer.max_train_steps:
             batch_vlm = self._get_next_batch()
@@ -234,12 +244,16 @@ class VLAMTrainer(TrainerUtils):
 
             if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
                 self._save_checkpoint()
-                dist.barrier()  # Ensure all processes are synchronized
+                dist.barrier()
 
             if self.completed_steps >= self.config.trainer.max_train_steps:
                 break
 
         self._finalize_training()
+
+    def eval_action_model(self, step_metrics=None):
+        """No-op evaluation for VLM-only training."""
+        return step_metrics or {}
 
     def _log_training_config(self):
         """Record training config."""
@@ -247,7 +261,7 @@ class VLAMTrainer(TrainerUtils):
             per_device_bs = getattr(self.config.datasets.vlm_data, "per_device_batch_size", "N/A")
             logger.info("***** Training Configuration *****")
             logger.info(f"  Total optimization steps = {self.config.trainer.max_train_steps}")
-            logger.info(f" Per device batch size = {per_device_bs}")
+            logger.info(f"  Per device batch size = {per_device_bs}")
             logger.info(f"  Gradient accumulation steps = {self.config.trainer.gradient_accumulation_steps}")
             logger.info(f"  Total batch size = {self.total_batch_size}")
 
@@ -260,11 +274,14 @@ class VLAMTrainer(TrainerUtils):
                 vlm_output = self.model.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
+
             if self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
+
             self.optimizer.step()
             self.lr_scheduler.step()
             log_dict["vlm_loss"] = vlm_loss.item()
+
         return log_dict
 
     def _finalize_training(self):
@@ -284,7 +301,6 @@ class VLAMTrainer(TrainerUtils):
                 raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
-        # close W&B
         if self.accelerator.is_main_process:
             wandb.finish()
 
@@ -293,11 +309,10 @@ class VLAMTrainer(TrainerUtils):
 
 def main(cfg) -> None:
     logger.info("VLA Training :: Warming Up")
-    #  Wrap config to enable access tracking
+
     cfg = wrap_config(cfg)
     logger.info("✅ Configuration wrapped for access tracking")
 
-    # create output directory and save config
     output_dir = setup_directories(cfg=cfg)
     vlm = build_framework(cfg)
     vlm_train_dataloader = prepare_data(cfg=cfg, accelerator=accelerator, output_dir=output_dir)
@@ -322,7 +337,12 @@ def main(cfg) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     cfg = OmegaConf.load(args.config_yaml)
@@ -332,6 +352,7 @@ if __name__ == "__main__":
 
     if cfg.is_debug and dist.is_initialized() and dist.get_rank() == 0:
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("🔍 Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()
