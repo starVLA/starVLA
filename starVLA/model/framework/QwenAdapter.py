@@ -301,6 +301,8 @@ class Qwen_Adapter(baseframework):
             dict:
                 normalized_actions (np.ndarray): Shape [B, chunk_len, action_dim], predicted normalized actions.
         """
+        if type(examples) is not list:
+            examples = [examples]
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]

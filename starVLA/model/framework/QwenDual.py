@@ -145,6 +145,8 @@ class Qwen_Dual(baseframework):
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
+        if type(examples) is not list:
+            examples = [examples]
         batch_images, wrist_views, instructions, state = self.align_model_input(examples)
         last_hidden, state = self.get_action_condition(batch_images, instructions, wrist_views, state)
         # Step 4: Action Expert Forward
