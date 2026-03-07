@@ -57,10 +57,11 @@ class _QWen3_5_VL_Interface(nn.Module):
 
         qwenvl_config = config.framework.get("qwenvl", {})
         model_id = qwenvl_config.get("base_vlm", "Qwen/Qwen3.5-VL-4B-Instruct")
+        attn_implementation = qwenvl_config.get("attn_implementation", "sdpa")
 
         model = Qwen3_5ForConditionalGeneration.from_pretrained(
             model_id,
-            attn_implementation="flash_attention_2",
+            attn_implementation=attn_implementation,
             torch_dtype=torch.bfloat16,
         )
         processor = AutoProcessor.from_pretrained(model_id)
