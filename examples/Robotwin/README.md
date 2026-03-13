@@ -77,7 +77,7 @@ We have verified that this workflow runs successfully on **NVIDIA 4090** GPUs.
 <details open>
 <summary><b>RoboTwin 2.0 data-scaling settings </b></summary>
 
-### Training Dataset**
+### Training Dataset
 
 The model is trained using the official **RobotWin 2.0 dataset**.
 
@@ -140,6 +140,7 @@ The model is trained using the official **RobotWin 2.0 dataset**.
 | click_bell                | 0.2300     | 0.2700     |
 | **Average**               | **0.8818** | **0.8832** |
 
+*Note: All 50 tasks are trained within a single model, using 50 + 500 demonstrations per task (50×550 total demonstrations). Checkpoints can be downloaded at [Qwen3-VL-OFT-Robotwin2-All](https://huggingface.co/StarVLA/Qwen3-VL-OFT-RoboTwin2-All)*.
 
 
 </details>
