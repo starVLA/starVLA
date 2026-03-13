@@ -11,7 +11,7 @@ We have verified that this workflow runs successfully on **NVIDIA 4090** GPUs.
 # Results
 
 
-<details open>
+<details close>
 <summary><b>RoboTwin 2.0 Benchmark Results over 48 Tasks </b></summary>
 
 
@@ -72,6 +72,80 @@ We have verified that this workflow runs successfully on **NVIDIA 4090** GPUs.
 *Note: All 50 tasks are trained within a single model, using 50 demonstrations per task (50×50 total demonstrations). Checkpoints can be downloaded at [Qwen3-VL-OFT-Robotwin2](https://huggingface.co/StarVLA/Qwen3-VL-OFT-Robotwin2)*.
 
 </details>
+
+
+<details open>
+<summary><b>RoboTwin 2.0 data-scaling settings </b></summary>
+
+### Training Dataset**
+
+The model is trained using the official **RobotWin 2.0 dataset**.
+
+* Clean Demonstrations: 50 tasks × 50 trajectories per task
+* Randomized Demonstrations: 50 tasks × 500 trajectories per task
+
+### StarVLA-OFT
+
+| Task                      | Easy       | Hard       |
+| ------------------------- | ---------- | ---------- |
+| stack_blocks_two          | 1.0000     | 1.0000     |
+| place_cans_plasticbox     | 1.0000     | 0.9900     |
+| grab_roller               | 1.0000     | 1.0000     |
+| place_empty_cup           | 1.0000     | 1.0000     |
+| shake_bottle_horizontally | 1.0000     | 1.0000     |
+| lift_pot                  | 1.0000     | 1.0000     |
+| place_burger_fries        | 1.0000     | 1.0000     |
+| move_playingcard_away     | 1.0000     | 0.9800     |
+| adjust_bottle             | 1.0000     | 0.9900     |
+| shake_bottle              | 1.0000     | 1.0000     |
+| blocks_ranking_rgb        | 0.9900     | 0.9800     |
+| stack_bowls_two           | 0.9900     | 1.0000     |
+| place_container_plate     | 0.9900     | 0.9900     |
+| press_stapler             | 0.9900     | 0.9600     |
+| place_object_stand        | 0.9900     | 0.9800     |
+| open_laptop               | 0.9800     | 1.0000     |
+| handover_mic              | 0.9800     | 0.9600     |
+| move_pillbottle_pad       | 0.9800     | 1.0000     |
+| handover_block            | 0.9700     | 0.9300     |
+| place_shoe                | 0.9600     | 1.0000     |
+| stack_bowls_three         | 0.9500     | 0.9100     |
+| place_fan                 | 0.9400     | 0.9500     |
+| scan_object               | 0.9400     | 0.9100     |
+| stack_blocks_three        | 0.9400     | 0.8600     |
+| place_object_basket       | 0.9300     | 0.9400     |
+| beat_block_hammer         | 0.9300     | 0.9200     |
+| place_object_scale        | 0.9300     | 0.9300     |
+| place_dual_shoes          | 0.9100     | 0.8900     |
+| pick_dual_bottles         | 0.9100     | 0.9300     |
+| place_bread_basket        | 0.9100     | 0.7800     |
+| dump_bin_bigbin           | 0.9100     | 0.9400     |
+| move_can_pot              | 0.9100     | 0.9000     |
+| put_bottles_dustbin       | 0.9000     | 0.8500     |
+| place_a2b_left            | 0.9000     | 0.9500     |
+| place_bread_skillet       | 0.8900     | 0.8000     |
+| put_object_cabinet        | 0.8900     | 0.9100     |
+| place_a2b_right           | 0.8800     | 0.9500     |
+| rotate_qrcode             | 0.8800     | 0.9000     |
+| pick_diverse_bottles      | 0.8700     | 0.8600     |
+| place_mouse_pad           | 0.8700     | 0.9400     |
+| stamp_seal                | 0.8600     | 0.9000     |
+| place_phone_stand         | 0.8600     | 0.9500     |
+| blocks_ranking_size       | 0.7900     | 0.8000     |
+| place_can_basket          | 0.7500     | 0.7500     |
+| move_stapler_pad          | 0.7400     | 0.9000     |
+| turn_switch               | 0.6500     | 0.6200     |
+| click_alarmclock          | 0.5800     | 0.5100     |
+| hanging_mug               | 0.3400     | 0.2900     |
+| open_microwave            | 0.2800     | 0.3900     |
+| click_bell                | 0.2300     | 0.2700     |
+| **Average**               | **0.8818** | **0.8832** |
+
+
+
+</details>
+
+---
+
 
 
 # Evaluation
