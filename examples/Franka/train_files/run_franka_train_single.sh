@@ -1,25 +1,3 @@
-#!/bin/bash
-#SBATCH --job-name=tracevla_baseline           # create a short name for your job
-#SBATCH --nodes=1                # node count
-#SBATCH --gpus-per-node=8        # number of GPUs per node(only valid under large/normal partition)
-#SBATCH --cpus-per-task=224      # number of CPUs (28, 56, 112, 224 for 1, 2, 4, 8 GPUs)
-#SBATCH --partition=vonneumann   # partition(preempt/large/normal/cpu) where you submit
-#SBATCH --account=vonneumann1    # only require for multiple projects
-
-
-module purge  # clear environment modules inherited from submission
-module load slurm cuda12.2/toolkit/12.2.2 
-source activate /home/zwanggk/.conda/envs/starVLA
-
-cd '/project/vonneumann1/wzx/SMore/llavavla0'
-echo $(pwd)
-
-echo "========================================="
-echo "Job started at: $(date)"
-echo "Job ID: $SLURM_JOB_ID"
-echo "Running on node: $(hostname)"
-echo "========================================="
-
 export NCCL_SOCKET_IFNAME=bond0
 export NCCL_IB_HCA=mlx5_2,mlx5_3
 
@@ -49,7 +27,7 @@ cp $0 ${output_dir}/
 
 
 
-srun accelerate launch \
+accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes 8 \
   starVLA/training/train_starvla.py \
@@ -87,6 +65,3 @@ srun accelerate launch \
   #   --wandb_project your_project \
   #   --wandb_entity your_name
 ##### Multi-Server Multi-GPU training script #####
-
-# module load slurm
-# module load cuda12.2/toolkit/12.2.2

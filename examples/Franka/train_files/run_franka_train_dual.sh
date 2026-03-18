@@ -37,7 +37,7 @@ accelerate launch \
   --datasets.vla_data.per_device_batch_size 8 \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 100000 \
-  --trainer.save_interval 5000 \
+  --trainer.save_interval 10000 \
   --trainer.logging_frequency 100 \
   --trainer.eval_interval 1000 \
   --run_root_dir ${run_root_dir} \
@@ -65,6 +65,3 @@ accelerate launch \
   #   --wandb_project your_project \
   #   --wandb_entity your_name
 ##### Multi-Server Multi-GPU training script #####
-
-# module load slurm
-# module load cuda12.2/toolkit/12.2.2
