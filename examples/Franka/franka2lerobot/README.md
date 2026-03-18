@@ -172,10 +172,10 @@ The output directory will typically be:
 
 ```text
 OUT_PATH/
-└── <ROOT_PATH目录名>_lerobot/
+└── <ROOT_PATH>_lerobot/
 ```
 
-例如：
+example：
 
 ```text
 ROOT_PATH=/data/pick_and_place_franka_data
@@ -274,19 +274,8 @@ Regardless of whether you use our internal scripts, the final dataset should sat
 - The start and end indices of each episode must be correct.
 - If videos exist, their time ranges must align with the corresponding episodes.
 
-## 6. Minimal Checks
 
-Before training, it is recommended to verify at least the following:
-
-1. whether the number of episodes is correct
-2. whether the frame count of each episode is reasonable
-3. whether images can be read correctly
-4. whether the action dimension matches the training configuration
-5. whether the state dimension matches the training configuration
-6. whether task text exists
-7. whether videos align with episode boundaries
-
-## 7. Example Commands
+## 6. Example Commands
 
 If you already have corresponding scripts, you can run them in the following order:
 
@@ -299,7 +288,7 @@ python convert_dataset.py \
      --root /path/to/output_dir/<raw_dataset_name>_lerobot
 ```
 
-## 8. Output Directory Examples
+## 7. Output Directory Examples
 
 ### After Step 1 (v3.0)
 
@@ -336,4 +325,3 @@ your_dataset_lerobot/
 │   └── info.json
 └── ...
 ```
-
