@@ -90,7 +90,7 @@ Complete example code:
 
 ## Overall Architecture
 
-![](../assets/starVLA_PolicyServer.png)
+![](../../assets/starVLA_PolicyServer.png)
 
 **Core workflow:**
 1. The client reads multi-view camera images (`np.ndarray`, `uint8`, `(H, W, 3)`).
