@@ -1,25 +1,25 @@
 """
-StarVLA Policy Server 推理示例 — 混合真实代码 + 伪代码
+StarVLA Policy Server Inference Example — Real Code + Pseudocode
 
-本脚本展示如何连接 StarVLA policy server（通过 WebSocket），
-获取模型预测的动作，反归一化后控制机械臂执行。
+This script shows how to connect to a StarVLA policy server over WebSocket,
+receive model-predicted actions, unnormalize them, and execute them on a robot arm.
 
-⚠️ 注意：当前实现基于 Franka 机械臂，动作空间为 7 维:
-  [x, y, z, roll, pitch, yaw, gripper]
-对于其他机械臂，动作维度和含义可能不同，例如:
-  - 双臂机械臂可能是 14 维 (每臂 7 维)
-  - 关节空间控制可能是 N 个关节角 + gripper
-  - 夹爪维度的索引和语义也可能不同
-请根据你的机械臂实际情况调整 action_dim、夹爪索引和反归一化逻辑。
+⚠️ Note: the current implementation is based on a Franka arm with a 7D action space:
+    [x, y, z, roll, pitch, yaw, gripper]
+For other robot arms, the action dimensionality and semantics may differ, for example:
+    - a dual-arm system may use 14 dimensions (7 per arm)
+    - joint-space control may use N joint angles + gripper
+    - the gripper index and meaning may also be different
+Please adjust `action_dim`, gripper indices, and unnormalization logic to match your robot.
 
-真实代码部分（可直接运行）：
-  - WebSocket 客户端连接与通信
-  - 请求构造与响应解析
-  - 动作反归一化 (unnormalize_actions)
+Real code sections (directly reusable):
+    - WebSocket client connection and communication
+    - request construction and response parsing
+    - action unnormalization (`unnormalize_actions`)
 
-伪代码部分（需根据你的机械臂替换）：
-  - 相机图像获取
-  - 机械臂环境创建、reset、step
+Pseudocode sections (replace for your robot):
+    - camera image acquisition
+    - robot environment creation, `reset`, and `step`
 """
 
 import numpy as np
@@ -28,34 +28,34 @@ import time
 from typing import List, Dict
 
 # ============================================================
-# ✅ 真实代码：WebSocket 客户端
+# ✅ Real code: WebSocket client
 # ============================================================
-# WebsocketClientPolicy 使用 msgpack_numpy 序列化，通过 WebSocket 与 server 通信
-# 源码位于: starVLA/deployment/model_server/tools/websocket_policy_client.py
+# WebsocketClientPolicy uses msgpack_numpy serialization and communicates with the server over WebSocket.
+# Source: starVLA/deployment/model_server/tools/websocket_policy_client.py
 from websocketclient import WebsocketClientPolicy
 
 
 # ============================================================
-# ✅ 真实代码：动作反归一化
+# ✅ Real code: action unnormalization
 # ============================================================
 def unnormalize_actions(normalized_actions: np.ndarray, 
                         action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
     """
-    将模型输出的归一化动作 [-1, 1] 转换回真实动作空间。
+    Convert normalized model outputs in [-1, 1] back to the real action space.
 
     Args:
-        normalized_actions: 归一化动作, shape [T, action_dim], 值域 [-1, 1]
-        action_norm_stats: 归一化统计信息，包含:
-            - "min": np.ndarray, 各维度最小值
-            - "max": np.ndarray, 各维度最大值
-            - "mask": np.ndarray (bool), 哪些维度参与归一化
+        normalized_actions: normalized actions, shape [T, action_dim], range [-1, 1]
+        action_norm_stats: normalization statistics containing:
+            - "min": np.ndarray, per-dimension minimum values
+            - "max": np.ndarray, per-dimension maximum values
+            - "mask": np.ndarray (bool), which dimensions are normalized
 
     Returns:
-        actions: 反归一化后的动作, shape [T, action_dim]
+        actions: unnormalized actions, shape [T, action_dim]
 
-    公式:
+    Formula:
         action = 0.5 * (normalized + 1) * (max - min) + min
-        其中 gripper 维度先做二值化: < 0.5 → -1, >= 0.5 → 1
+        where the gripper dimension is first binarized: < 0.5 → -1, >= 0.5 → 1
     """
     mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
     action_high = np.array(action_norm_stats["max"])
@@ -63,13 +63,13 @@ def unnormalize_actions(normalized_actions: np.ndarray,
 
     normalized_actions = np.clip(normalized_actions, -1, 1)
 
-    # 夹爪维度 (index=6) 做二值化阈值处理
-    # ⚠️ 当前为 Franka 7D 动作空间，夹爪在 index=6
-    # 其他机械臂的夹爪索引和维数可能不同，请相应修改
+    # Apply binary thresholding to the gripper dimension (index=6).
+    # ⚠️ In the current Franka 7D action space, the gripper is at index=6.
+    # Other robots may use different action sizes and gripper indices.
     if normalized_actions.shape[-1] >= 7:
         normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, -1, 1)
 
-    # 线性反归一化（仅对 mask=True 的维度）
+    # Linear unnormalization, only for dimensions with mask=True.
     actions = np.where(
         mask,
         0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
@@ -79,22 +79,22 @@ def unnormalize_actions(normalized_actions: np.ndarray,
 
 
 # ============================================================
-# ✅ 真实代码：构造请求 & 解析响应
+# ✅ Real code: request construction and response parsing
 # ============================================================
 def build_request(images: List[np.ndarray], task_instruction: str) -> dict:
     """
-    构造发送给 StarVLA policy server 的请求。
+    Construct a request for the StarVLA policy server.
 
     Args:
-        images: 多视角相机图像列表, 每张 shape (H, W, 3), dtype uint8
-        task_instruction: 自然语言任务指令, 如 "Pick up the red cup"
+        images: multi-view camera images, each with shape (H, W, 3), dtype uint8
+        task_instruction: natural-language task instruction, e.g. "Pick up the red cup"
 
     Returns:
-        request_data: 符合 server 接口的 dict
+        request_data: dict matching the server API
     """
     request_data = {
         "examples": [{
-            "image": images,       # List[np.ndarray], server 端会转为 PIL Image
+            "image": images,       # List[np.ndarray], converted to PIL Images on the server side
             "lang": task_instruction,
         }]
     }
@@ -103,41 +103,41 @@ def build_request(images: List[np.ndarray], task_instruction: str) -> dict:
 
 def parse_response(result: dict) -> np.ndarray:
     """
-    解析 policy server 返回的结果，提取 action chunk。
+    Parse the policy server response and extract the action chunk.
 
     Args:
-        result: server 返回的 dict，格式:
+        result: dict returned by the server, formatted as:
             {"data": {"normalized_actions": np.ndarray}, "status": "ok"}
 
     Returns:
-        action_chunk: shape [T, action_dim], T 为模型预测的时间步数
+        action_chunk: shape [T, action_dim], where T is the predicted horizon
     """
     data = result.get("data", result)
 
-    # 尝试多种常见 key
+    # Try several common output keys.
     for key in ["normalized_actions", "actions", "action"]:
         if key in data:
             actions = data[key]
             if isinstance(actions, list):
                 actions = np.array(actions)
-            # 统一为 [T, action_dim]
+            # Normalize to [T, action_dim].
             if len(actions.shape) == 3:
-                actions = actions[0]       # [B, T, D] → [T, D]
+                actions = actions[0]       # [B, T, D] -> [T, D]
             elif len(actions.shape) == 1:
-                actions = actions.reshape(1, -1)  # [D] → [1, D]
+                actions = actions.reshape(1, -1)  # [D] -> [1, D]
             return actions
 
-    raise KeyError(f"无法从响应中提取动作，可用 keys: {list(data.keys())}")
+    raise KeyError(f"Could not extract actions from response. Available keys: {list(data.keys())}")
 
 
 # ============================================================
-# ✅ 真实代码：加载 action 归一化统计
+# ✅ Real code: load action normalization statistics
 # ============================================================
 def load_action_norm_stats(json_path: str, embodiment_key: str = "franka") -> Dict[str, np.ndarray]:
     """
-    从 dataset_statistics.json 加载归一化统计信息。
+    Load normalization statistics from `dataset_statistics.json`.
 
-    JSON 格式示例:
+    Example JSON format:
     {
         "franka": {
             "action": {
@@ -167,102 +167,102 @@ def load_action_norm_stats(json_path: str, embodiment_key: str = "franka") -> Di
 
 
 # ============================================================
-# === 伪代码：以下函数需要根据你的机械臂具体实现 ===
+# === Pseudocode: implement the following functions for your robot ===
 # ============================================================
 
 def capture_images_from_cameras() -> List[np.ndarray]:
-    """
-    [伪代码] 从相机获取多视角图像。
+        """
+        [Pseudocode] Capture multi-view images from cameras.
 
-    TODO: 根据你的相机硬件实现，例如:
-      - RealSense: 使用 pyrealsense2 SDK
-      - USB 摄像头: 使用 OpenCV VideoCapture
-      - 其他: 使用对应 SDK
+        TODO: implement this based on your camera hardware, for example:
+            - RealSense: use the pyrealsense2 SDK
+            - USB cameras: use OpenCV VideoCapture
+            - Other devices: use the corresponding SDK
 
-    Returns:
-        images: List[np.ndarray], 每张 shape (H, W, 3), dtype uint8, RGB 格式
-    """
-    # --- 示例伪代码 ---
+        Returns:
+                images: List[np.ndarray], each with shape (H, W, 3), dtype uint8, in RGB format
+        """
+        # --- Example pseudocode ---
     # import pyrealsense2 as rs
     # frames = pipeline.wait_for_frames()
     # color_frame = frames.get_color_frame()
     # image = np.asanyarray(color_frame.get_data())  # BGR
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # 转 RGB
+    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # convert to RGB
     # image = cv2.resize(image, (224, 224))
-    # return [image_wrist, image_base]  # 多视角
-    raise NotImplementedError("请实现相机图像获取")
+    # return [image_wrist, image_base]  # multi-view
+    raise NotImplementedError("Please implement camera image acquisition")
 
 
 class YourRobotEnv:
-    """
-    [伪代码] 机械臂环境接口。
+        """
+        [Pseudocode] Robot arm environment interface.
 
-    你需要实现以下方法，将 7D 动作统一发送给机械臂：
-      - reset(): 重置机械臂到初始位姿，返回初始观测
-      - step(action): 执行 7D 动作 [x,y,z,roll,pitch,yaw,gripper]
-      - get_obs(): 获取当前观测（含图像和状态）
+        You need to implement the following methods to send 7D actions to your robot:
+            - reset(): move the robot to its initial pose and return the initial observation
+            - step(action): execute a 7D action [x, y, z, roll, pitch, yaw, gripper]
+            - get_obs(): return the current observation (images + state)
 
-    action 说明 (Franka 7D 动作空间):
-      action[0:3] — 位置增量 (x, y, z)，笛卡尔坐标，单位: 米
-      action[3:6] — 姿态增量 (roll, pitch, yaw)，欧拉角，单位: 弧度
-      action[6]   — 夹爪控制 (-1: 关闭, 1: 打开)
+        Action definition (Franka 7D action space):
+            action[0:3] - position delta (x, y, z), Cartesian coordinates, in meters
+            action[3:6] - orientation delta (roll, pitch, yaw), Euler angles, in radians
+            action[6]   - gripper control (-1: close, 1: open)
 
-    ⚠️ 其他机械臂的动作维度和含义可能不同，请根据实际情况调整。
+        ⚠️ Other robots may use different action sizes and meanings. Adjust accordingly.
 
-    env.step() 需在内部同时处理:
-      1. 位姿控制: 将 action[0:6] 转换为目标位姿并发送给机械臂控制器
-      2. 夹爪控制: 根据 action[6] 的值控制夹爪开合
-    """
+        `env.step()` should internally handle both:
+            1. pose control: convert action[0:6] into a target pose and send it to the controller
+            2. gripper control: open/close the gripper based on action[6]
+        """
 
     def reset(self):
-        """重置机械臂到初始位姿"""
-        # TODO: 发送 reset 指令给机械臂
-        # TODO: 等待机械臂到达初始位姿
-        # TODO: 获取并返回初始观测
+        """Reset the robot to its initial pose."""
+        # TODO: send a reset command to the robot
+        # TODO: wait until the robot reaches the initial pose
+        # TODO: return the initial observation
         raise NotImplementedError
 
     def step(self, action: np.ndarray):
         """
-        执行一步动作（位姿 + 夹爪统一执行）。
+        Execute one action step (pose + gripper handled together).
 
         Args:
-            action: np.ndarray, shape (7,)
+            action: np.ndarray, shape (7,),
                 [x, y, z, roll, pitch, yaw, gripper]
 
         Returns:
-            obs: dict, 观测（含图像和状态）
+            obs: dict, observation (including images and state)
             reward: float
             done: bool
             truncated: bool
             info: dict
         """
-        # TODO: 实现示例:
+        # TODO: Example implementation:
         #
-        # 1. 解析动作
-        # pose_delta = action[0:6]   # 位姿增量
-        # gripper_cmd = action[6]    # 夹爪: -1=关, 1=开
+        # 1. Parse the action
+        # pose_delta = action[0:6]   # pose delta
+        # gripper_cmd = action[6]    # gripper: -1=close, 1=open
         #
-        # 2. 计算目标位姿
+        # 2. Compute the target pose
         # target_pose = current_pose + pose_delta * action_scale
         # target_pose = clip_to_safety_box(target_pose)
         #
-        # 3. 发送位姿命令
+        # 3. Send the pose command
         # robot.move_to(target_pose)
         #
-        # 4. 发送夹爪命令
+        # 4. Send the gripper command
         # if gripper_cmd >= 0.9:
         #     robot.open_gripper()
         # elif gripper_cmd <= -0.9:
         #     robot.close_gripper()
         #
-        # 5. 获取观测
+        # 5. Get the observation
         # obs = self.get_obs()
         # return obs, reward, done, truncated, info
         raise NotImplementedError
 
     def get_obs(self) -> dict:
-        """获取当前观测"""
-        # TODO: 返回包含图像和状态的 dict
+        """Get the current observation."""
+        # TODO: return a dict containing images and state
         # return {
         #     "images": capture_images_from_cameras(),
         #     "state": robot.get_state(),
@@ -271,10 +271,10 @@ class YourRobotEnv:
 
 
 # ============================================================
-# 主推理循环
+# Main inference loop
 # ============================================================
 def main():
-    # ------ 配置参数 ------
+    # ------ Configuration ------
     policy_host = "127.0.0.1"
     policy_port = 5694
     task_instruction = "Pick up the pink cube and place it into the black box."
@@ -282,20 +282,20 @@ def main():
     max_episodes = 10
     max_steps_per_episode = 500
 
-    # ------ ✅ 真实代码：加载归一化统计 ------
+    # ------ ✅ Real code: load normalization statistics ------
     action_norm_stats = load_action_norm_stats(action_stats_path, embodiment_key="franka")
     print(f"Action min: {action_norm_stats['min']}")
     print(f"Action max: {action_norm_stats['max']}")
 
-    # ------ ✅ 真实代码：连接 Policy Server ------
+    # ------ ✅ Real code: connect to the Policy Server ------
     client = WebsocketClientPolicy(host=policy_host, port=policy_port)
-    print(f"已连接 Policy Server: {policy_host}:{policy_port}")
+    print(f"Connected to Policy Server: {policy_host}:{policy_port}")
 
-    # ------ [伪代码] 创建机械臂环境 ------
-    env = YourRobotEnv()  # TODO: 替换为你的机械臂环境
+    # ------ [Pseudocode] Create the robot environment ------
+    env = YourRobotEnv()  # TODO: replace with your robot environment
     obs = env.reset()
 
-    # ------ 推理主循环 ------
+    # ------ Main inference loop ------
     for episode in range(max_episodes):
         obs = env.reset()
         print(f"\n--- Episode {episode + 1}/{max_episodes} ---")
@@ -305,25 +305,25 @@ def main():
 
         while step_count < max_steps_per_episode and not done:
 
-            # Step 1: [伪代码] 从观测中获取图像
+            # Step 1: [Pseudocode] Read images from the observation
             images = obs["images"]  # List[np.ndarray], (H, W, 3), uint8
 
-            # Step 2: ✅ 真实代码 — 构造请求并调用 policy server
+            # Step 2: ✅ Real code - build the request and call the policy server
             request = build_request(images, task_instruction)
             result = client.predict_action(request)
 
-            # Step 3: ✅ 真实代码 — 解析响应，获取归一化动作 chunk
+            # Step 3: ✅ Real code - parse the response and get the normalized action chunk
             normalized_action_chunk = parse_response(result)  # [T, 7]
 
-            # Step 4: ✅ 真实代码 — 反归一化
+            # Step 4: ✅ Real code - unnormalize the actions
             action_chunk = unnormalize_actions(normalized_action_chunk, action_norm_stats)
-            # action_chunk: [T, 7], 每行 = [x, y, z, roll, pitch, yaw, gripper]
+            # action_chunk: [T, 7], each row = [x, y, z, roll, pitch, yaw, gripper]
 
-            # Step 5: 逐步执行 action chunk
+            # Step 5: Execute the action chunk step by step
             for action in action_chunk:
-                # action 是 7D 向量: [x, y, z, roll, pitch, yaw, gripper]
-                # env.step() 内部统一处理位姿控制和夹爪控制
-                obs, reward, done, truncated, info = env.step(action)  # [伪代码]
+                # action is a 7D vector: [x, y, z, roll, pitch, yaw, gripper]
+                # env.step() should internally handle both pose and gripper control
+                obs, reward, done, truncated, info = env.step(action)  # [Pseudocode]
                 step_count += 1
 
                 if done or truncated:
@@ -332,11 +332,11 @@ def main():
             if done or truncated:
                 break
 
-        print(f"Episode {episode + 1} 完成, steps: {step_count}")
+        print(f"Episode {episode + 1} finished, steps: {step_count}")
 
-    # 关闭连接
+    # Close the connection
     client.close()
-    print("推理完成")
+    print("Inference complete")
 
 
 if __name__ == "__main__":

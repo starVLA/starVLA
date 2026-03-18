@@ -1,27 +1,27 @@
 """
-StarVLA Policy Server 双臂推理示例 — 混合真实代码 + 伪代码
+StarVLA Policy Server Dual-Arm Inference Example — Real Code + Pseudocode
 
-本脚本展示如何连接 StarVLA policy server（通过 WebSocket），
-获取模型预测的双臂动作，反归一化后控制双臂机械臂执行。
+This script shows how to connect to a StarVLA policy server over WebSocket,
+receive model-predicted dual-arm actions, unnormalize them, and execute them on a dual-arm robot.
 
-⚠️ 注意：当前实现基于 Franka 双臂机械臂，动作空间为 14 维:
-  [x_l, y_l, z_l, roll_l, pitch_l, yaw_l, gripper_l,
-   x_r, y_r, z_r, roll_r, pitch_r, yaw_r, gripper_r]
-  其中 action[0:7] 为左臂, action[7:14] 为右臂。
+⚠️ Note: the current implementation is based on a dual-arm Franka setup with a 14D action space:
+    [x_l, y_l, z_l, roll_l, pitch_l, yaw_l, gripper_l,
+     x_r, y_r, z_r, roll_r, pitch_r, yaw_r, gripper_r]
+    where action[0:7] corresponds to the left arm and action[7:14] to the right arm.
 
-对于其他双臂机械臂，动作维度、臂的排列顺序和夹爪索引可能不同，
-请根据你的机械臂实际情况调整 action_dim、夹爪索引和反归一化逻辑。
+For other dual-arm robots, the action dimensionality, arm ordering, and gripper indices may differ.
+Please adjust `action_dim`, gripper indices, and unnormalization logic to match your robot.
 
-对于单臂机械臂（7D），请参考 inference_single_example.py。
+For single-arm robots (7D), see `inference_single_example.py`.
 
-真实代码部分（可直接运行）：
-  - WebSocket 客户端连接与通信
-  - 请求构造与响应解析
-  - 动作反归一化 (unnormalize_actions)，支持单臂 7D 和双臂 14D
+Real code sections (directly reusable):
+    - WebSocket client connection and communication
+    - request construction and response parsing
+    - action unnormalization (`unnormalize_actions`), supporting 7D single-arm and 14D dual-arm actions
 
-伪代码部分（需根据你的机械臂替换）：
-  - 相机图像获取
-  - 双臂机械臂环境创建、reset、step
+Pseudocode sections (replace for your robot):
+    - camera image acquisition
+    - dual-arm robot environment creation, `reset`, and `step`
 """
 
 import numpy as np
@@ -30,37 +30,37 @@ import time
 from typing import List, Dict
 
 # ============================================================
-# ✅ 真实代码：WebSocket 客户端
+# ✅ Real code: WebSocket client
 # ============================================================
-# WebsocketClientPolicy 使用 msgpack_numpy 序列化，通过 WebSocket 与 server 通信
-# 源码位于: starVLA/deployment/model_server/tools/websocket_policy_client.py
+# WebsocketClientPolicy uses msgpack_numpy serialization and communicates with the server over WebSocket.
+# Source: starVLA/deployment/model_server/tools/websocket_policy_client.py
 from websocketclient import WebsocketClientPolicy
 
 
 # ============================================================
-# ✅ 真实代码：动作反归一化（支持单臂 7D 和双臂 14D）
+# ✅ Real code: action unnormalization (supports 7D single-arm and 14D dual-arm)
 # ============================================================
 def unnormalize_actions(normalized_actions: np.ndarray,
                         action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
     """
-    将模型输出的归一化动作 [-1, 1] 转换回真实动作空间。
-    支持单臂 (7D) 和双臂 (14D) 动作空间。
+    Convert normalized model outputs in [-1, 1] back to the real action space.
+    Supports both single-arm (7D) and dual-arm (14D) action spaces.
 
     Args:
-        normalized_actions: 归一化动作, shape [T, action_dim], 值域 [-1, 1]
-            - 单臂: action_dim=7,  夹爪在 index=6
-            - 双臂: action_dim=14, 夹爪在 index=6 (左臂) 和 index=13 (右臂)
-        action_norm_stats: 归一化统计信息，包含:
-            - "min": np.ndarray, 各维度最小值
-            - "max": np.ndarray, 各维度最大值
-            - "mask": np.ndarray (bool), 哪些维度参与归一化
+        normalized_actions: normalized actions, shape [T, action_dim], range [-1, 1]
+            - single-arm: action_dim=7, gripper at index=6
+            - dual-arm: action_dim=14, grippers at index=6 (left arm) and index=13 (right arm)
+        action_norm_stats: normalization statistics containing:
+            - "min": np.ndarray, per-dimension minimum values
+            - "max": np.ndarray, per-dimension maximum values
+            - "mask": np.ndarray (bool), which dimensions are normalized
 
     Returns:
-        actions: 反归一化后的动作, shape [T, action_dim]
+        actions: unnormalized actions, shape [T, action_dim]
 
-    公式:
+    Formula:
         action = 0.5 * (normalized + 1) * (max - min) + min
-        其中 gripper 维度先做二值化: < 0.5 → -1, >= 0.5 → 1
+        where the gripper dimensions are first binarized: < 0.5 → -1, >= 0.5 → 1
     """
     mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
     action_high = np.array(action_norm_stats["max"])
@@ -68,17 +68,17 @@ def unnormalize_actions(normalized_actions: np.ndarray,
 
     normalized_actions = np.clip(normalized_actions, -1, 1)
 
-    # 夹爪维度做二值化阈值处理
+    # Apply binary thresholding to the gripper dimensions.
     action_dim = normalized_actions.shape[-1]
     if action_dim == 14:
-        # 双臂: 左臂夹爪在 index=6, 右臂夹爪在 index=13
+        # Dual-arm: left gripper at index=6, right gripper at index=13.
         normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, -1, 1)
         normalized_actions[:, 13] = np.where(normalized_actions[:, 13] < 0.5, -1, 1)
     elif action_dim >= 7:
-        # 单臂: 夹爪在 index=6
+        # Single-arm: gripper at index=6.
         normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, -1, 1)
 
-    # 线性反归一化（仅对 mask=True 的维度）
+    # Linear unnormalization, only for dimensions with mask=True.
     actions = np.where(
         mask,
         0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
@@ -88,22 +88,22 @@ def unnormalize_actions(normalized_actions: np.ndarray,
 
 
 # ============================================================
-# ✅ 真实代码：构造请求 & 解析响应
+# ✅ Real code: request construction and response parsing
 # ============================================================
 def build_request(images: List[np.ndarray], task_instruction: str) -> dict:
     """
-    构造发送给 StarVLA policy server 的请求。
+    Construct a request for the StarVLA policy server.
 
     Args:
-        images: 多视角相机图像列表, 每张 shape (H, W, 3), dtype uint8
-        task_instruction: 自然语言任务指令
+        images: multi-view camera images, each with shape (H, W, 3), dtype uint8
+        task_instruction: natural-language task instruction
 
     Returns:
-        request_data: 符合 server 接口的 dict
+        request_data: dict matching the server API
     """
     request_data = {
         "examples": [{
-            "image": images,       # List[np.ndarray], server 端会转为 PIL Image
+            "image": images,       # List[np.ndarray], converted to PIL Images on the server side
             "lang": task_instruction,
         }]
     }
@@ -112,14 +112,14 @@ def build_request(images: List[np.ndarray], task_instruction: str) -> dict:
 
 def parse_response(result: dict) -> np.ndarray:
     """
-    解析 policy server 返回的结果，提取 action chunk。
+    Parse the policy server response and extract the action chunk.
 
     Args:
-        result: server 返回的 dict，格式:
+        result: dict returned by the server, formatted as:
             {"data": {"normalized_actions": np.ndarray}, "status": "ok"}
 
     Returns:
-        action_chunk: shape [T, action_dim], T 为模型预测的时间步数
+        action_chunk: shape [T, action_dim], where T is the predicted horizon
     """
     data = result.get("data", result)
 
@@ -128,30 +128,30 @@ def parse_response(result: dict) -> np.ndarray:
             actions = data[key]
             if isinstance(actions, list):
                 actions = np.array(actions)
-            # 统一为 [T, action_dim]
+            # Normalize to [T, action_dim].
             if len(actions.shape) == 3:
-                actions = actions[0]       # [B, T, D] → [T, D]
+                actions = actions[0]       # [B, T, D] -> [T, D]
             elif len(actions.shape) == 1:
-                actions = actions.reshape(1, -1)  # [D] → [1, D]
+                actions = actions.reshape(1, -1)  # [D] -> [1, D]
             return actions
 
-    raise KeyError(f"无法从响应中提取动作，可用 keys: {list(data.keys())}")
+    raise KeyError(f"Could not extract actions from response. Available keys: {list(data.keys())}")
 
 
 # ============================================================
-# ✅ 真实代码：加载 action 归一化统计
+# ✅ Real code: load action normalization statistics
 # ============================================================
 def load_action_norm_stats(json_path: str, embodiment_key: str = "new_embodiment") -> Dict[str, np.ndarray]:
     """
-    从 dataset_statistics.json 加载归一化统计信息。
+    Load normalization statistics from `dataset_statistics.json`.
 
-    双臂场景下 JSON 格式示例 (14D):
+    Example JSON format for a dual-arm 14D setup:
     {
         "new_embodiment": {
             "action": {
-                "min": [14 个最小值],
-                "max": [14 个最大值],
-                "mask": [true, true, ..., true]  // 14 个
+                "min": [14 minimum values],
+                "max": [14 maximum values],
+                "mask": [true, true, ..., true]  // 14 entries
             }
         }
     }
@@ -175,61 +175,61 @@ def load_action_norm_stats(json_path: str, embodiment_key: str = "new_embodiment
 
 
 # ============================================================
-# === 伪代码：以下函数需要根据你的双臂机械臂具体实现 ===
+# === Pseudocode: implement the following functions for your dual-arm robot ===
 # ============================================================
 
 def capture_images_from_cameras() -> List[np.ndarray]:
-    """
-    [伪代码] 从相机获取多视角图像。
+        """
+        [Pseudocode] Capture multi-view images from cameras.
 
-    双臂场景通常需要更多相机视角，例如:
-      - 左臂腕部相机、右臂腕部相机
-      - 全局基座相机
+        Dual-arm setups usually require more camera views, for example:
+            - a left wrist camera and a right wrist camera
+            - a global base camera
 
-    TODO: 根据你的相机硬件实现
+        TODO: implement this based on your camera hardware
 
-    Returns:
-        images: List[np.ndarray], 每张 shape (H, W, 3), dtype uint8, RGB 格式
-    """
-    # --- 示例伪代码 ---
+        Returns:
+                images: List[np.ndarray], each with shape (H, W, 3), dtype uint8, in RGB format
+        """
+        # --- Example pseudocode ---
     # return [image_left_wrist, image_right_wrist, image_base]
-    raise NotImplementedError("请实现相机图像获取")
+        raise NotImplementedError("Please implement camera image acquisition")
 
 
 class YourDualArmRobotEnv:
-    """
-    [伪代码] 双臂机械臂环境接口。
+        """
+        [Pseudocode] Dual-arm robot environment interface.
 
-    你需要实现以下方法，将 14D 动作统一发送给双臂机械臂：
-      - reset(): 重置双臂到初始位姿，返回初始观测
-      - step(action): 执行 14D 动作
-      - get_obs(): 获取当前观测（含图像和状态）
+        You need to implement the following methods to send 14D actions to a dual-arm robot:
+            - reset(): move both arms to their initial poses and return the initial observation
+            - step(action): execute a 14D action
+            - get_obs(): return the current observation (images + state)
 
-    双臂动作说明 (Franka 双臂 14D 动作空间):
-      action[0:3]  — 左臂位置增量 (x, y, z)
-      action[3:6]  — 左臂姿态增量 (roll, pitch, yaw)
-      action[6]    — 左臂夹爪控制 (-1: 关闭, 1: 打开)
-      action[7:10] — 右臂位置增量 (x, y, z)
-      action[10:13]— 右臂姿态增量 (roll, pitch, yaw)
-      action[13]   — 右臂夹爪控制 (-1: 关闭, 1: 打开)
+        Dual-arm action definition (Franka dual-arm 14D action space):
+            action[0:3]   - left-arm position delta (x, y, z)
+            action[3:6]   - left-arm orientation delta (roll, pitch, yaw)
+            action[6]     - left gripper control (-1: close, 1: open)
+            action[7:10]  - right-arm position delta (x, y, z)
+            action[10:13] - right-arm orientation delta (roll, pitch, yaw)
+            action[13]    - right gripper control (-1: close, 1: open)
 
-    ⚠️ 其他双臂机械臂的动作维度、臂排列和夹爪索引可能不同。
+        ⚠️ Other dual-arm robots may use different action sizes, arm ordering, and gripper indices.
 
-    env.step() 需在内部同时处理:
-      1. 左臂位姿控制 + 左臂夹爪控制
-      2. 右臂位姿控制 + 右臂夹爪控制
-    """
+        `env.step()` should internally handle both:
+            1. left-arm pose control + left gripper control
+            2. right-arm pose control + right gripper control
+        """
 
     def reset(self):
-        """重置双臂到初始位姿"""
-        # TODO: 发送 reset 指令给双臂
-        # TODO: 等待双臂到达初始位姿
-        # TODO: 获取并返回初始观测
+        """Reset both arms to their initial poses."""
+        # TODO: send a reset command for both arms
+        # TODO: wait until both arms reach their initial poses
+        # TODO: return the initial observation
         raise NotImplementedError
 
     def step(self, action: np.ndarray):
         """
-        执行一步动作（双臂位姿 + 夹爪统一执行）。
+        Execute one action step (dual-arm pose + grippers handled together).
 
         Args:
             action: np.ndarray, shape (14,)
@@ -237,50 +237,50 @@ class YourDualArmRobotEnv:
                  x_r, y_r, z_r, roll_r, pitch_r, yaw_r, gripper_r]
 
         Returns:
-            obs: dict, 观测（含图像和状态）
+            obs: dict, observation (including images and state)
             reward: float
             done: bool
             truncated: bool
             info: dict
         """
-        # TODO: 实现示例:
+        # TODO: Example implementation:
         #
-        # 1. 解析双臂动作
+        # 1. Parse the dual-arm action
         # left_pose_delta = action[0:6]
         # left_gripper_cmd = action[6]
         # right_pose_delta = action[7:13]
         # right_gripper_cmd = action[13]
         #
-        # 2. 左臂位姿控制
+        # 2. Left-arm pose control
         # left_target = left_current_pose + left_pose_delta * action_scale
         # left_target = clip_to_safety_box(left_target)
         # left_robot.move_to(left_target)
         #
-        # 3. 左臂夹爪控制
+        # 3. Left gripper control
         # if left_gripper_cmd >= 0.9:
         #     left_robot.open_gripper()
         # elif left_gripper_cmd <= -0.9:
         #     left_robot.close_gripper()
         #
-        # 4. 右臂位姿控制
+        # 4. Right-arm pose control
         # right_target = right_current_pose + right_pose_delta * action_scale
         # right_target = clip_to_safety_box(right_target)
         # right_robot.move_to(right_target)
         #
-        # 5. 右臂夹爪控制
+        # 5. Right gripper control
         # if right_gripper_cmd >= 0.9:
         #     right_robot.open_gripper()
         # elif right_gripper_cmd <= -0.9:
         #     right_robot.close_gripper()
         #
-        # 6. 获取观测
+        # 6. Get the observation
         # obs = self.get_obs()
         # return obs, reward, done, truncated, info
         raise NotImplementedError
 
     def get_obs(self) -> dict:
-        """获取当前观测"""
-        # TODO: 返回包含图像和状态的 dict
+        """Get the current observation."""
+        # TODO: return a dict containing images and state
         # return {
         #     "images": capture_images_from_cameras(),
         #     "state": {
@@ -293,10 +293,10 @@ class YourDualArmRobotEnv:
 
 
 # ============================================================
-# 主推理循环（双臂）
+# Main inference loop (dual-arm)
 # ============================================================
 def main():
-    # ------ 配置参数 ------
+    # ------ Configuration ------
     policy_host = "127.0.0.1"
     policy_port = 5694
     task_instruction = "Two robotic arms are working together to perform a handover task."
@@ -304,21 +304,21 @@ def main():
     max_episodes = 10
     max_steps_per_episode = 500
 
-    # ------ ✅ 真实代码：加载归一化统计（双臂 14D）------
+    # ------ ✅ Real code: load normalization statistics (dual-arm 14D) ------
     action_norm_stats = load_action_norm_stats(action_stats_path, embodiment_key="new_embodiment")
-    print(f"Action dim: {len(action_norm_stats['min'])}")  # 应为 14
+    print(f"Action dim: {len(action_norm_stats['min'])}")  # should be 14
     print(f"Action min: {action_norm_stats['min']}")
     print(f"Action max: {action_norm_stats['max']}")
 
-    # ------ ✅ 真实代码：连接 Policy Server ------
+    # ------ ✅ Real code: connect to the Policy Server ------
     client = WebsocketClientPolicy(host=policy_host, port=policy_port)
-    print(f"已连接 Policy Server: {policy_host}:{policy_port}")
+    print(f"Connected to Policy Server: {policy_host}:{policy_port}")
 
-    # ------ [伪代码] 创建双臂机械臂环境 ------
-    env = YourDualArmRobotEnv()  # TODO: 替换为你的双臂机械臂环境
+    # ------ [Pseudocode] Create the dual-arm robot environment ------
+    env = YourDualArmRobotEnv()  # TODO: replace with your dual-arm robot environment
     obs = env.reset()
 
-    # ------ 推理主循环 ------
+    # ------ Main inference loop ------
     for episode in range(max_episodes):
         obs = env.reset()
         print(f"\n--- Episode {episode + 1}/{max_episodes} ---")
@@ -328,27 +328,27 @@ def main():
 
         while step_count < max_steps_per_episode and not done:
 
-            # Step 1: [伪代码] 从观测中获取图像
+            # Step 1: [Pseudocode] Read images from the observation
             images = obs["images"]  # List[np.ndarray], (H, W, 3), uint8
 
-            # Step 2: ✅ 真实代码 — 构造请求并调用 policy server
+            # Step 2: ✅ Real code - build the request and call the policy server
             request = build_request(images, task_instruction)
             result = client.predict_action(request)
 
-            # Step 3: ✅ 真实代码 — 解析响应，获取归一化动作 chunk
+            # Step 3: ✅ Real code - parse the response and get the normalized action chunk
             normalized_action_chunk = parse_response(result)  # [T, 14]
 
-            # Step 4: ✅ 真实代码 — 反归一化
+            # Step 4: ✅ Real code - unnormalize the actions
             action_chunk = unnormalize_actions(normalized_action_chunk, action_norm_stats)
-            # action_chunk: [T, 14], 每行 = [左臂7D, 右臂7D]
+            # action_chunk: [T, 14], each row = [left-arm 7D, right-arm 7D]
 
-            # Step 5: 逐步执行 action chunk
+            # Step 5: Execute the action chunk step by step
             for action in action_chunk:
-                # action 是 14D 向量:
+                # action is a 14D vector:
                 # [x_l, y_l, z_l, roll_l, pitch_l, yaw_l, gripper_l,
                 #  x_r, y_r, z_r, roll_r, pitch_r, yaw_r, gripper_r]
-                # env.step() 内部统一处理双臂位姿控制和夹爪控制
-                obs, reward, done, truncated, info = env.step(action)  # [伪代码]
+                # env.step() should internally handle dual-arm pose and gripper control together
+                obs, reward, done, truncated, info = env.step(action)  # [Pseudocode]
                 step_count += 1
 
                 if done or truncated:
@@ -357,11 +357,11 @@ def main():
             if done or truncated:
                 break
 
-        print(f"Episode {episode + 1} 完成, steps: {step_count}")
+        print(f"Episode {episode + 1} finished, steps: {step_count}")
 
-    # 关闭连接
+    # Close the connection
     client.close()
-    print("推理完成")
+    print("Inference complete")
 
 
 if __name__ == "__main__":
