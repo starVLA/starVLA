@@ -34,7 +34,7 @@ Example configuration:
 vla_data:
   dataset_py: lerobot_datasets
   data_root_dir: playground/Datasets/franka_pick_and_place_lerobot
-  data_mix: smartmore_franka_eef_joints
+  data_mix: franka_eef_joints
 ```
 
 Configure the mixture in `starVLA/dataloader/gr00t_lerobot/mixtures.py` and add the new dataset mixture.
@@ -90,18 +90,7 @@ Complete example code:
 
 ## Overall Architecture
 
-```
-┌──────────────────┐         WebSocket (msgpack_numpy)         ┌─────────────────────┐
-│   Robot Client    │  ──────────────────────────────────────▶  │  StarVLA Policy     │
-│                  │                                           │  Server (GPU)       │
-│  1. Capture Images│  ◀──────────────────────────────────────  │                     │
-│  2. Send Img+Lang │     Normalized actions [B, T, action_dim] │  Model inference -> │
-│  3. Unnormalize   │                                           │  normalized_actions │
-│  4. env.step()   │                                           └─────────────────────┘
-│   Execute action  │
-│ (pose + gripper) │         action_dim: single=7, dual=14
-└──────────────────┘
-```
+![](../assets/starVLA_PolicyServer.png)
 
 **Core workflow:**
 1. The client reads multi-view camera images (`np.ndarray`, `uint8`, `(H, W, 3)`).
@@ -283,8 +272,8 @@ If you want to use the StarVLA policy server with a new robot arm, you need to i
 
 ### What You Need to Implement
 
-| 模块 | 说明 |
-|------|------|
+| Component             | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
 | **Image acquisition** | Read images from your cameras and output `List[np.ndarray]` in `(H, W, 3)`, `uint8`, RGB format. The number of views must match training. |
 | **`env.step(action)`** | Accept an action vector (for Franka: 7D `[x,y,z,roll,pitch,yaw,gripper]`) and handle both pose commands and gripper control internally. Adapt this to your robot's action space. |
 | **`env.reset()`** | Reset the robot to its initial pose and return the initial observation. |
@@ -292,8 +281,8 @@ If you want to use the StarVLA policy server with a new robot arm, you need to i
 
 ### What You Do Not Need to Change
 
-| 模块 | 说明 |
-|------|------|
+| Component             | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
 | **Policy Server** | Reuse it directly; just start it with `run_policy_server.sh`. |
 | **WebSocket communication** | Reuse `WebsocketClientPolicy` directly. |
 | **Unnormalization logic** | Reuse `unnormalize_actions()` directly, as long as you provide the matching statistics file. |
