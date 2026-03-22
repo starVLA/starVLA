@@ -983,6 +983,94 @@ class AgilexData50Config:
 
         return ComposedModalityTransform(transforms=transforms)
 
+###########################################################################################
+# VLA-Arena: mounted Franka Panda, 7-DOF delta-EEF actions (pos + rot + gripper).
+# Action format matches LIBERO (same robot, same controller), so we reuse the
+# Libero4in1DataConfig layout – only primary (agentview) image is required;
+# wrist image key is kept optional for forward compatibility.
+###########################################################################################
+
+class VLAArenaFrankaDataConfig:
+    """
+    Data config for VLA-Arena environments (robosuite, mounted Panda).
+
+    Action space  : 7-DOF delta EEF  (Δx, Δy, Δz, Δroll, Δpitch, Δyaw, gripper)
+    Observation   : primary agentview image (256×256 rendered, resized to 224×224)
+    State         : EEF pos (3) + EEF axis-angle (3) + gripper qpos (1) = 7
+    """
+
+    video_keys = [
+        "video.primary_image",   # agentview camera
+    ]
+    state_keys = [
+        "state.x",
+        "state.y",
+        "state.z",
+        "state.roll",
+        "state.pitch",
+        "state.yaw",
+        "state.gripper",
+    ]
+    action_keys = [
+        "action.x",
+        "action.y",
+        "action.z",
+        "action.roll",
+        "action.pitch",
+        "action.yaw",
+        "action.gripper",
+    ]
+
+    language_keys = ["annotation.human.action.task_description"]
+
+    observation_indices = [0]
+    action_indices = list(range(8))
+    state_indices = list(range(-16, 0))
+
+    def modality_config(self):
+        video_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.video_keys,
+        )
+        state_modality = ModalityConfig(
+            delta_indices=self.state_indices,
+            modality_keys=self.state_keys,
+        )
+        action_modality = ModalityConfig(
+            delta_indices=self.action_indices,
+            modality_keys=self.action_keys,
+        )
+        language_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.language_keys,
+        )
+        return {
+            "video": video_modality,
+            "state": state_modality,
+            "action": action_modality,
+            "language": language_modality,
+        }
+
+    def transform(self):
+        transforms = [
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={
+                    "action.x": "min_max",
+                    "action.y": "min_max",
+                    "action.z": "min_max",
+                    "action.roll": "min_max",
+                    "action.pitch": "min_max",
+                    "action.yaw": "min_max",
+                },
+            ),
+        ]
+        return ComposedModalityTransform(transforms=transforms)
+
+
+###########################################################################################
+
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "oxe_droid": OxeDroidDataConfig(),
@@ -994,7 +1082,8 @@ ROBOT_TYPE_CONFIG_MAP = {
     "robotwin": AgilexDataConfig(),
     "robotwin50": AgilexData50Config(),
     "fourier_gr1_arms_waist": FourierGr1ArmsWaistDataConfig(),
-    
+    "vla_arena_franka": VLAArenaFrankaDataConfig(),
+
     "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
 }
 
