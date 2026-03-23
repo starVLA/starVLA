@@ -185,16 +185,12 @@ class Qwen_GR00T(baseframework):
 
 if __name__ == "__main__":
     from omegaconf import OmegaConf
-    import debugpy
+    # debugpy is optional — only used when --debug flag is passed
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_yaml", type=str, default="./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
-    args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
     # cfg.framework.action_model.action_hidden_dim = 2048
