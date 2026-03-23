@@ -338,7 +338,9 @@ class VLAMTrainer(TrainerUtils):
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            self.lr_scheduler.step()
+            # Only step scheduler on actual optimizer updates (see train_starvla.py)
+            if self.accelerator.sync_gradients:
+                self.lr_scheduler.step()
 
             log_dict.update(
                 {
