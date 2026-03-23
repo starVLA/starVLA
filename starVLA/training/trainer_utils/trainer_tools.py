@@ -5,12 +5,12 @@ Utility classes defining a Metrics container and multiple Trackers to enable mod
 endpoints (e.g., JSONL local logs, Weights & Biases).
 """
 
-from typing import Tuple
-import re
 import json
+import re
+from typing import Tuple
+
 import numpy as np
 import torch
-
 from accelerate.logging import get_logger
 
 logger = get_logger(__name__)
@@ -123,8 +123,8 @@ def only_main_process(func):
     return wrapper
 
 
-from torchvision.ops import box_iou
 from PIL import Image
+from torchvision.ops import box_iou
 
 
 def resize_images(images, target_size=(224, 224)):
@@ -141,9 +141,6 @@ def resize_images(images, target_size=(224, 224)):
         return [resize_images(img, target_size) for img in images]
     else:
         raise ValueError("Unsupported image type or structure.")
-
-
-import torch.distributed as dist
 
 
 class TrainerUtils:
@@ -165,7 +162,7 @@ class TrainerUtils:
           - model:
         """
         frozen = []
-        print("#"*30)
+        print("#" * 30)
         print(freeze_modules)
         if freeze_modules and type(freeze_modules) == str:
             # split and remove whitespace
@@ -470,7 +467,8 @@ class TrainerUtils:
 
         # 获取所有符合命名规则，支持 .pt 和 .safetensors
         checkpoints = [
-            f for f in os.listdir(checkpoint_dir) 
+            f
+            for f in os.listdir(checkpoint_dir)
             if re.match(r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", f)
             and os.path.isfile(os.path.join(checkpoint_dir, f))  # 确保是文件
         ]
@@ -496,6 +494,7 @@ class TrainerUtils:
         latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
         return latest_checkpoint_path, completed_steps
+
 
 import os
 

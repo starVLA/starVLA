@@ -5,13 +5,14 @@ Implementations of various action heads, which serve as alternatives to VLM sequ
 """
 
 import math
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class VLA_Adapter_L1RegressionActionHead(nn.Module):
     """Simple MLP-based action head that generates continuous actions via L1 regression."""
+
     def __init__(
         self,
         full_config,
@@ -22,7 +23,7 @@ class VLA_Adapter_L1RegressionActionHead(nn.Module):
         input_dim = full_config.framework.qwenvl.vl_hidden_dim
         hidden_dim = full_config.framework.action_model.hidden_dim
         action_dim = full_config.framework.action_model.action_dim
-        
+
         self.action_query_num = full_config.framework.action_model.get("action_query_num", 64)
         use_pro_version = full_config.framework.action_model.use_pro_version
 
@@ -32,34 +33,25 @@ class VLA_Adapter_L1RegressionActionHead(nn.Module):
         self.num_actions_chunk = self.config.framework.action_model.get("num_actions_chunk", None)
         if self.num_actions_chunk is None:
             raise ValueError("num_actions_chunk must be specified in action_model config.")
-        
+
         # Learnable action chunk embeddings (like positional embeddings)
         # Applied during both training and inference
-        self.action_chunk_embeddings = nn.Parameter(
-            torch.zeros(self.num_actions_chunk, action_dim * hidden_dim)
-        )
+        self.action_chunk_embeddings = nn.Parameter(torch.zeros(self.num_actions_chunk, action_dim * hidden_dim))
         nn.init.normal_(self.action_chunk_embeddings, mean=0.0, std=0.02)
-        
-        self.model = MLPResNet(
-            num_blocks=24, 
-            input_dim=input_dim*action_dim, 
-            hidden_dim=hidden_dim, 
-            output_dim=action_dim,
-            use_pro_version=use_pro_version
-            )
- 
 
-    def predict_action(
-            self, 
-            actions_hidden_states, 
-            vision_hidden_len: int,
-            state_projected=None,
-            phase="Inference"
-            ):
+        self.model = MLPResNet(
+            num_blocks=24,
+            input_dim=input_dim * action_dim,
+            hidden_dim=hidden_dim,
+            output_dim=action_dim,
+            use_pro_version=use_pro_version,
+        )
+
+    def predict_action(self, actions_hidden_states, vision_hidden_len: int, state_projected=None, phase="Inference"):
         """
         Args:
             actions_hidden_states: [B, Layers, Total_Len, D]
-            
+
             根据 Qwen_Adapter 的逻辑，Total_Len = (Vision_Len + Action_Query_Num)。
             Language Tokens 已经在 Adapter 阶段被过滤掉了，所以这里不需要额外处理 Language。
         """
@@ -71,22 +63,21 @@ class VLA_Adapter_L1RegressionActionHead(nn.Module):
             proprio_features = state_projected.unsqueeze(dim=1)  # (bsz, 1, llm_dim)
         else:
             proprio_features = None
-        
+
         # Action Query Tokens (h_a)
-        action_query_states = actions_hidden_states[:, :, -self.action_query_num:, :]
-        
-        task_hidden_states = actions_hidden_states[:, :, :-self.action_query_num, :]
+        action_query_states = actions_hidden_states[:, :, -self.action_query_num :, :]
+
+        task_hidden_states = actions_hidden_states[:, :, : -self.action_query_num, :]
         assert vision_hidden_len == task_hidden_states.shape[2], "Vision hidden length mismatch"
 
         # 3. Action Chunk Queries Init
         cond_actions_hidden_states = torch.zeros(
             (batch_size, self.action_dim * self.num_actions_chunk, self.hidden_dim),
-            device=device, dtype=actions_hidden_states.dtype
-        ).detach()  
+            device=device,
+            dtype=actions_hidden_states.dtype,
+        ).detach()
 
-        rearranged_actions_hidden_states = cond_actions_hidden_states.reshape(
-            batch_size, self.num_actions_chunk, -1
-        ) 
+        rearranged_actions_hidden_states = cond_actions_hidden_states.reshape(batch_size, self.num_actions_chunk, -1)
 
         # Add learnable action chunk embeddings (applied during both training and inference)
         embeddings = self.action_chunk_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
@@ -96,26 +87,20 @@ class VLA_Adapter_L1RegressionActionHead(nn.Module):
         action = self.model(
             rearranged_actions_hidden_states,
             h_a=action_query_states,  # [B, Layers, query_num, D]
-            p=proprio_features,       # [B, 1, D]
-            h_t=task_hidden_states    # [B, Layers, vis_len, D]
-            )
-        
-        # Assert shape 
+            p=proprio_features,  # [B, 1, D]
+            h_t=task_hidden_states,  # [B, Layers, vis_len, D]
+        )
+
+        # Assert shape
         assert action.shape == (batch_size, self.num_actions_chunk, self.action_dim), "Action shape mismatch"
         return action
-    
+
 
 class MLPResNet(nn.Module):
     """MLP with residual connection blocks."""
-    def __init__(
-            self, 
-            num_blocks, 
-            input_dim, 
-            hidden_dim, 
-            output_dim,
-            use_pro_version=False
-            ):
-        
+
+    def __init__(self, num_blocks, input_dim, hidden_dim, output_dim, use_pro_version=False):
+
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(input_dim)
         self.fc1 = nn.Linear(input_dim, hidden_dim)
@@ -127,33 +112,32 @@ class MLPResNet(nn.Module):
                 self.mlp_resnet_blocks.append(MLPResNetBlock_Pro(dim=hidden_dim))
             else:
                 self.mlp_resnet_blocks.append(MLPResNetBlock(dim=hidden_dim))
-                
+
         self.layer_norm2 = nn.LayerNorm(hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
-
 
     def forward(self, x, h_a=None, h_t=None, p=None):
         # x: (batch_size, input_dim)
         x = self.layer_norm1(x)
-        x = self.fc1(x) 
+        x = self.fc1(x)
         x = self.relu(x)
-        
+
         for i, block in enumerate(self.mlp_resnet_blocks):
             idx = i + 1
-            
+
             cur_h_t = None
             if h_t is not None and h_t.shape[1] > idx:
-                cur_h_t = h_t[:, idx, :] 
+                cur_h_t = h_t[:, idx, :]
 
             cur_h_a = None
             if h_a is not None and h_a.shape[1] > idx:
                 cur_h_a = h_a[:, idx, :]
-            
+
             x = block(x, h_t=cur_h_t, h_a=cur_h_a, p=p)
-            
+
         x = self.layer_norm2(x)
         x = self.fc2(x)
-        return x   
+        return x
 
 
 def apply_rope(q, k, cos, sin):
@@ -189,6 +173,7 @@ class MLPResNetBlock(nn.Module):
     """
     Standard MLP ResNet Block.
     """
+
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -211,17 +196,20 @@ class MLPResNetBlock(nn.Module):
 
         conditions = []
         if h_a is not None:
-            if h_a.dim() == 2: h_a = h_a.unsqueeze(1)
+            if h_a.dim() == 2:
+                h_a = h_a.unsqueeze(1)
             conditions.append(h_a)
         if p is not None:
-            if p.dim() == 2: p = p.unsqueeze(1)
+            if p.dim() == 2:
+                p = p.unsqueeze(1)
             conditions.append(p)
-            
+
         h_cond = torch.cat(conditions, dim=1) if len(conditions) > 0 else None
 
         if h_t is not None:
-            if h_t.dim() == 2: h_t = h_t.unsqueeze(1)
-        
+            if h_t.dim() == 2:
+                h_t = h_t.unsqueeze(1)
+
         B, T, C = x.shape
         K_cond = h_cond.size(1) if h_cond is not None else 0
         K_task = h_t.size(1) if h_t is not None else 0
@@ -247,7 +235,7 @@ class MLPResNetBlock(nn.Module):
             v_task = self.v_proj(h_t)
             k_task = k_task.view(B, K_task, self.num_heads, self.head_dim).transpose(1, 2)
             v_task_reshaped = v_task.view(B, K_task, self.num_heads, self.head_dim).transpose(1, 2)
-            
+
             attn_scores_list.append(torch.matmul(q_1, k_task.transpose(-2, -1)))
 
         # Process Adapter (Action/Proprio)
@@ -267,9 +255,11 @@ class MLPResNetBlock(nn.Module):
 
         # Combine Values
         v_combined_list = [v_tokens]
-        if v_task_reshaped is not None: v_combined_list.append(v_task_reshaped)
-        if v_cond_reshaped is not None: v_combined_list.append(v_cond_reshaped)
-        
+        if v_task_reshaped is not None:
+            v_combined_list.append(v_task_reshaped)
+        if v_cond_reshaped is not None:
+            v_combined_list.append(v_cond_reshaped)
+
         v_combined = torch.cat(v_combined_list, dim=2)
 
         # Output Projection
@@ -285,6 +275,7 @@ class MLPResNetBlock_Pro(nn.Module):
     """
     MLP ResNet Block Pro with RoPE and dimension checks.
     """
+
     def __init__(self, dim, num_heads=8):
         super().__init__()
         self.dim = dim
@@ -295,7 +286,7 @@ class MLPResNetBlock_Pro(nn.Module):
             nn.LayerNorm(dim),
             nn.Linear(dim, dim),
             nn.ReLU(),
-            )
+        )
 
         self.q_proj = nn.Linear(dim, dim)
         self.k_self = nn.Linear(dim, dim)
@@ -318,15 +309,18 @@ class MLPResNetBlock_Pro(nn.Module):
         # 1. Prepare Conditions
         cond_list = []
         if h_a is not None:
-            if h_a.dim() == 2: h_a = h_a.unsqueeze(1)
+            if h_a.dim() == 2:
+                h_a = h_a.unsqueeze(1)
             cond_list.append(h_a)
         if p is not None:
-            if p.dim() == 2: p = p.unsqueeze(1)
+            if p.dim() == 2:
+                p = p.unsqueeze(1)
             cond_list.append(p)
         h_adapter = torch.cat(cond_list, dim=1) if cond_list else None
 
         if h_t is not None:
-            if h_t.dim() == 2: h_t = h_t.unsqueeze(1)
+            if h_t.dim() == 2:
+                h_t = h_t.unsqueeze(1)
 
         B, T, C = x.shape
         K_a = h_adapter.size(1) if h_adapter is not None else 0
@@ -339,7 +333,7 @@ class MLPResNetBlock_Pro(nn.Module):
         q_1 = self.q_proj(x)
         k_self = self.k_self(x)
         v_self = self.v_self(x)
-        
+
         q_1 = to_heads(q_1, T)
         k_self = to_heads(k_self, T)
         v_self = to_heads(v_self, T)
@@ -356,10 +350,10 @@ class MLPResNetBlock_Pro(nn.Module):
             k_adp = self.k_adapter(h_adapter)
             v_adp = self.v_adapter(h_adapter)
             k_adp, v_adp = to_heads(k_adp, K_a), to_heads(v_adp, K_a)
-            
+
             cos_a, sin_a = self.rope(seq_len=K_a, device=x.device, dtype=x.dtype)
             _, k_adp = apply_rope(k_adp, k_adp, cos_a, sin_a)
-            
+
             attn_scores.append(torch.matmul(q_1, k_adp.transpose(-2, -1)))
             v_list.append(v_adp)
 
@@ -378,10 +372,10 @@ class MLPResNetBlock_Pro(nn.Module):
         # Merge & Output
         attn_scores = torch.cat(attn_scores, dim=-1) / math.sqrt(self.head_dim)
         attn_weights = torch.softmax(attn_scores, dim=-1)
-        
+
         v_combined = torch.cat(v_list, dim=2)
         output = torch.matmul(attn_weights, v_combined)
-        
+
         output = output.transpose(1, 2).contiguous().view(B, T, C)
         output = self.o_proj(output)
 
@@ -390,6 +384,4 @@ class MLPResNetBlock_Pro(nn.Module):
 
 
 def get_action_model(config=None):
-    return VLA_Adapter_L1RegressionActionHead(
-        full_config=config
-    )
+    return VLA_Adapter_L1RegressionActionHead(full_config=config)

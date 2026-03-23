@@ -4,6 +4,7 @@ adaptive_ensemble.py
 """
 
 from collections import deque
+
 import numpy as np
 
 
@@ -27,17 +28,17 @@ class AdaptiveEnsembler:
             )
 
         # calculate cosine similarity between the current prediction and all previous predictions
-        ref = curr_act_preds[num_actions-1, :]
+        ref = curr_act_preds[num_actions - 1, :]
         previous_pred = curr_act_preds
-        dot_product = np.sum(previous_pred * ref, axis=1)  
-        norm_previous_pred = np.linalg.norm(previous_pred, axis=1)  
-        norm_ref = np.linalg.norm(ref)  
+        dot_product = np.sum(previous_pred * ref, axis=1)
+        norm_previous_pred = np.linalg.norm(previous_pred, axis=1)
+        norm_ref = np.linalg.norm(ref)
         cos_similarity = dot_product / (norm_previous_pred * norm_ref + 1e-7)
 
         # compute the weights for each prediction
         weights = np.exp(self.adaptive_ensemble_alpha * cos_similarity)
         weights = weights / weights.sum()
-  
+
         # compute the weighted average across all predictions for this timestep
         cur_action = np.sum(weights[:, None] * curr_act_preds, axis=0)
 

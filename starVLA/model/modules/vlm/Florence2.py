@@ -1,20 +1,14 @@
 # Copyright 2025 starVLA community. All rights reserved.
-# Licensed under the MIT License, Version 1.0 (the "License"); 
+# Licensed under the MIT License, Version 1.0 (the "License");
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
-import torch
-from typing import Optional, List
-from transformers.modeling_outputs import CausalLMOutputWithPast
-from typing import Dict, Optional, List
-from typing import List, Union, Dict, Optional
-
+from typing import Optional
 
 import torch
-from PIL import Image
-from transformers import AutoProcessor, AutoModelForCausalLM 
-
-
 from accelerate.logging import get_logger
+from PIL import Image
+from transformers import AutoModelForCausalLM, AutoProcessor
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 logger = get_logger(__name__)
 
@@ -27,9 +21,12 @@ logger = get_logger(__name__)
 # [151936, 153984]
 
 import torch.nn as nn
+
+
 def _construct_prompts(text):
 
     return text
+
 
 class _Florence_Interface(nn.Module):
     """
@@ -56,7 +53,9 @@ class _Florence_Interface(nn.Module):
 
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-        self.model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch_dtype, trust_remote_code=True, attn_implementation="eager" ) # 强制使用 eager 注意力
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch_dtype, trust_remote_code=True, attn_implementation="eager"
+        )  # 强制使用 eager 注意力
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
 
         self.processor._construct_prompts = _construct_prompts
@@ -64,7 +63,6 @@ class _Florence_Interface(nn.Module):
 
         # alin with qwen2.5
         self.model.config.hidden_size = self.model.config.projection_dim
-
 
         # del unused moduals to save memory
         if hasattr(self.model, "decoder"):
@@ -90,9 +88,9 @@ class _Florence_Interface(nn.Module):
     # ============================= Florence2 encoder =============================
     def forward_vlm(
         self,
-        input_ids: torch.LongTensor,        # [B, L]
-        pixel_values: torch.FloatTensor,    # [B, C, H, W] --> [B, H, W]
-        **kwargs
+        input_ids: torch.LongTensor,  # [B, L]
+        pixel_values: torch.FloatTensor,  # [B, C, H, W] --> [B, H, W]
+        **kwargs,
     ):
         """
         # copyright from X-VLA https://github.com/2toinf/X-VLA/blob/main/models/modeling_florence2.py
@@ -102,10 +100,10 @@ class _Florence_Interface(nn.Module):
           enc_out.hidden_states: [B, T_enc, D]
         """
         # get image features
-           
+
         param_dtype = next(self.model.parameters()).dtype
         pixel_values = pixel_values.to(self.model.device, dtype=param_dtype)
-        valid_feats = self.model._encode_image(pixel_values)      # [B, N, D]
+        valid_feats = self.model._encode_image(pixel_values)  # [B, N, D]
         B_multiview, N, D = valid_feats.shape
         # get text embeddings
         inputs_embeds = self.model.get_input_embeddings()(input_ids)  # [B, L, D]
@@ -118,11 +116,11 @@ class _Florence_Interface(nn.Module):
         # merge image features and text embeddings
         merged_embeds, attention_mask = self.model._merge_input_ids_with_image_features(
             image_features,  # first view: [B, N, D]
-            inputs_embeds,         # [B, L, D]
+            inputs_embeds,  # [B, L, D]
         )
-        
+
         # TODO should return text index and image index for later index masking
-        
+
         enc_out = self.model.language_model.model.encoder(
             attention_mask=attention_mask,
             inputs_embeds=merged_embeds,
@@ -130,7 +128,7 @@ class _Florence_Interface(nn.Module):
         enc_out.hidden_states = [enc_out.last_hidden_state]
         # last_hidden = qwenvl_outputs.hidden_states[-1]   # [B, L, H]
         return enc_out
-    
+
     def build_qwenvl_inputs(self, images, instructions, **kwargs):
         """
         Build model inputs from raw data (images + instructions).
@@ -145,27 +143,37 @@ class _Florence_Interface(nn.Module):
         for exameple_images in images:
             flatten_batch_images.extend(exameple_images)
         # images = [image[0] for image in  images]
-        task_prompt = "Locate the objects with category name in the image." #"Locate the objects with category name in the image."
+        task_prompt = "Locate the objects with category name in the image."  # "Locate the objects with category name in the image."
         for index in range(len(instructions)):
             instruction = instructions[index]
             instructions[index] = task_prompt + " " + instruction
-        
+
         # olny support single image for a text input from florence, your can modify here for multi-image support by merge each image features
-        inputs = self.processor(text=instructions, images=flatten_batch_images, return_tensors="pt", padding=True, truncation=True,)
+        inputs = self.processor(
+            text=instructions,
+            images=flatten_batch_images,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
         inputs["labels"] = inputs["input_ids"].clone()
 
         return inputs.to(self.model.device)
 
 
-
-
-
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
+
+    import debugpy
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -180,7 +188,6 @@ if __name__ == "__main__":
     qwen_vl.model.eval()
 
     import requests
-
     import torch
     from PIL import Image
 
@@ -197,7 +204,6 @@ if __name__ == "__main__":
             outputs = qwen_vl.forward_vlm(
                 input_ids=inputs["input_ids"],
                 pixel_values=inputs["pixel_values"],
-        )
+            )
     print(f"forward_vlm last_hidden_state shape: {outputs.last_hidden_state.shape}")
     print(f"forward_vlm hidden_states length: {len(outputs.hidden_states)}")
-

@@ -1,17 +1,18 @@
 # Copyright 2025 starVLA community. All rights reserved.
-# Licensed under the MIT License, Version 1.0 (the "License"); 
+# Licensed under the MIT License, Version 1.0 (the "License");
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
 import asyncio
 import logging
-import traceback
 import time
+import traceback
 
 import websockets.asyncio.server
 import websockets.frames
 
 # from openpi_client import base_policy as _base_policy
 from . import msgpack_numpy
+
 
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
@@ -26,7 +27,6 @@ class WebsocketPolicyServer:
         port: int = 10093,
         idle_timeout: int = -1,  # 新增参数，单位秒，-1表示永不关闭
         metadata: dict | None = None,
-        
     ) -> None:
         self._policy = policy  #
         self._host = host
@@ -95,8 +95,8 @@ class WebsocketPolicyServer:
         - Does NOT raise inside this function: all exceptions are caught and encoded in response.
         """
         req_id = msg.get("request_id", "default")
-        mtype = msg.get("type", "infer")          # default = infer
-        msg       # when no explicit payload, treat top-level as payload
+        mtype = msg.get("type", "infer")  # default = infer
+        msg  # when no explicit payload, treat top-level as payload
 
         # ping
         if mtype == "ping":
@@ -111,7 +111,7 @@ class WebsocketPolicyServer:
                     "ok": False,
                     "type": "inference_result",
                     "request_id": req_id,
-                    "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))}
+                    "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))},
                 }
             try:
 
@@ -119,7 +119,7 @@ class WebsocketPolicyServer:
             except Exception as e:
                 logging.exception("Policy inference error (request_id=%s)", req_id)
                 logging.exception(e)
-                
+
                 return {
                     "status": "error",
                     "ok": False,

@@ -1,24 +1,18 @@
-
 from __future__ import annotations
-from typing import Union, List, Dict, Optional, Tuple, Sequence
 
+from typing import Dict, List, Optional, Sequence, Tuple, Union
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from PIL import Image
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.modules.vlm import get_vlm_model
-from starVLA.training.trainer_utils.trainer_tools import resize_images
-from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.model.modules.action_model.spike_action_model_multitimestep import get_action_model, get_gruedit_model
 from starVLA.model.modules.projector.QFormer import get_layerwise_qformer
-from starVLA.model.modules.action_model.spike_action_model_multitimestep import (
-    get_action_model,
-    get_gruedit_model
-)
-
-
-
+from starVLA.model.modules.vlm import get_vlm_model
+from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
 @FRAMEWORK_REGISTRY.register("NeuroVLA")
@@ -46,16 +40,13 @@ class NeuroVLA(baseframework):
         self.layer_qformer = get_layerwise_qformer(config=self.config)
 
         # Action prediction model (input_dim=768, hidden_dim=1536, action_dim=7)
-        self.action_model = get_action_model(input_dim=768, hidden_dim=768*2, action_dim=7)
+        self.action_model = get_action_model(input_dim=768, hidden_dim=768 * 2, action_dim=7)
 
         # Edit model for refining actions based on robot states
         self.edit_model = get_gruedit_model(input_dim=768, hidden_dim=256, robot_state_dim=8)
 
         self.L1_loss = nn.L1Loss()
         self.norm_stats = norm_stats
-
-
-
 
     def forward(
         self,
@@ -131,7 +122,7 @@ class NeuroVLA(baseframework):
 
                 # Update states for next iteration
                 predicted_states = torch.zeros_like(states)
-                predicted_states[:, :predicted_actions.shape[1], :7] = predicted_actions
+                predicted_states[:, : predicted_actions.shape[1], :7] = predicted_actions
                 predicted_states[:, :, 7] = states[:, :, 7]  # Keep gripper state
                 states = predicted_states.clone()
                 inference_num += 1
@@ -143,7 +134,6 @@ class NeuroVLA(baseframework):
 
         return {"action_loss": action_loss}
 
-
     def predict_action(
         self,
         batch_images: Union[Image, List[Image]],
@@ -154,7 +144,7 @@ class NeuroVLA(baseframework):
         cfg_scale: float = 1.5,
         use_ddim: bool = False,
         num_ddim_steps: int = 5,
-        **kwargs: str
+        **kwargs: str,
     ) -> np.ndarray:
         """
         Predict action from images and instructions.
@@ -178,9 +168,7 @@ class NeuroVLA(baseframework):
         batch_images = resize_images(batch_images, target_size=(224, 224))
 
         # Build VLM inputs
-        inferface_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
-            images=batch_images, instructions=instructions
-        )
+        inferface_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
         qwen_inputs = inferface_inputs
 
         all_predicted_actions = []
@@ -210,9 +198,7 @@ class NeuroVLA(baseframework):
 
             # Convert states to tensor
             states = torch.tensor(
-                np.array(states, dtype=np.float32),
-                dtype=torch.float32,
-                device=action_latent_feature.device
+                np.array(states, dtype=np.float32), dtype=torch.float32, device=action_latent_feature.device
             )
 
             # Iterative action prediction (default: 2 iterations)
@@ -226,7 +212,7 @@ class NeuroVLA(baseframework):
 
                 # Update states for next iteration
                 predicted_states = torch.zeros_like(states)
-                predicted_states[:, :samples.shape[1], :7] = samples
+                predicted_states[:, : samples.shape[1], :7] = samples
                 predicted_states[:, :, 7] = states[:, :, 7]  # Keep gripper state
                 states = predicted_states.clone()
                 predict_num += 1
@@ -253,14 +239,15 @@ if __name__ == "__main__":
     3. Run inference to predict actions
     """
     import pickle
-    from omegaconf import OmegaConf
 
     # Set device
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Option 1: Load from pretrained checkpoint
     # model = NeuroVLA.from_pretrained("path/to/checkpoint.pt").to(device)
-    model = NeuroVLA.from_pretrained("/workspace/nature_submit/NeuroVLA/playground/Checkpoints/1104_neurovla_gru_xiaonao_goal_dualimage_spike_multistep_ac8_768*2_yibu/checkpoints/steps_10000_pytorch_model.pt").to(device)
+    model = NeuroVLA.from_pretrained(
+        "/workspace/nature_submit/NeuroVLA/playground/Checkpoints/1104_neurovla_gru_xiaonao_goal_dualimage_spike_multistep_ac8_768*2_yibu/checkpoints/steps_10000_pytorch_model.pt"
+    ).to(device)
     # Option 2: Build from config
     # config = OmegaConf.load("path/to/config.yaml")
     # model = NeuroVLA(config).to(device)
@@ -281,8 +268,7 @@ if __name__ == "__main__":
     #         "action": np.zeros((8, 7)),  # [T, 7] action sequence
     #     }
     # ]
-    import pickle
-    from omegaconf import OmegaConf
+
     with open("/workspace/samples_states.pkl", "rb") as f:
         samples = pickle.load(f)
     device = torch.device("cuda:0")
@@ -303,4 +289,3 @@ if __name__ == "__main__":
         print(f"Predicted actions shape: {normalized_actions.shape}")
 
     print("Test example ready. Uncomment the code above to run inference.")
-

@@ -1,5 +1,5 @@
 # Copyright 2025 CogACT. All rights reserved.
-# Modified by [Jinhui YE/ HKUST University] in [2025]. 
+# Modified by [Jinhui YE/ HKUST University] in [2025].
 # Modification: [add global config ].
 """
 Diffusion-based action prediction head (DiT variant).
@@ -9,12 +9,13 @@ Provides:
   - ActionModel: wraps diffusion process (training + optional DDIM sampling creation)
 """
 
-from starVLA.model.modules.action_model.DiT_modules.models import DiT
-from starVLA.model.modules.action_model import create_diffusion
-from .DiT_modules import gaussian_diffusion as gd
-
 import torch
 from torch import nn
+
+from starVLA.model.modules.action_model import create_diffusion
+from starVLA.model.modules.action_model.DiT_modules.models import DiT
+
+from .DiT_modules import gaussian_diffusion as gd
 
 
 # Create model sizes of ActionModels

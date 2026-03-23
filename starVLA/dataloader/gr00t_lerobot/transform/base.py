@@ -27,9 +27,7 @@ class ModalityTransform(BaseModel, ABC):
     """
 
     apply_to: list[str] = Field(..., description="The keys to apply the transform to.")
-    training: bool = Field(
-        default=True, description="Whether to apply the transform in training mode."
-    )
+    training: bool = Field(default=True, description="Whether to apply the transform in training mode.")
     _dataset_metadata: DatasetMetadata | None = PrivateAttr(default=None)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -94,12 +92,8 @@ class ComposedModalityTransform(ModalityTransform):
     """Compose multiple modality transforms."""
 
     transforms: list[ModalityTransform] = Field(..., description="The transforms to compose.")
-    apply_to: list[str] = Field(
-        default_factory=list, description="Will be ignored for composed transforms."
-    )
-    training: bool = Field(
-        default=True, description="Whether to apply the transform in training mode."
-    )
+    apply_to: list[str] = Field(default_factory=list, description="Will be ignored for composed transforms.")
+    training: bool = Field(default=True, description="Whether to apply the transform in training mode.")
 
     model_config = ConfigDict(arbitrary_types_allowed=True, from_attributes=True)
 

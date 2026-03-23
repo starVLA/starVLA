@@ -2,12 +2,8 @@
 # copy from simpler_env/simpler_env/evaluation/calc_task_stats.py
 
 import argparse
-import glob
-from pathlib import Path
 
 import numpy as np
-from scipy.stats import kruskal
-
 from simpler_env.utils.metrics import (
     construct_unordered_trial_results,
     get_dir_stats,
@@ -15,7 +11,6 @@ from simpler_env.utils.metrics import (
     pearson_correlation,
     print_all_kruskal_results,
 )
-
 
 
 def calc_pick_coke_can_stats(root_result_dir):
@@ -105,7 +100,7 @@ def calc_pick_coke_can_stats(root_result_dir):
                 if np.isnan(avg_sim_success):
                     print(f"WARNING: avg_sim_success is nan for {variant}")
                 coke_can_sim_variant_success[coke_can_orientation][ckpt_alias].append(avg_sim_success)
-            
+
             coke_can_sim_variant_success[coke_can_orientation][ckpt_alias] = np.mean(
                 coke_can_sim_variant_success[coke_can_orientation][ckpt_alias]
             )
@@ -177,7 +172,9 @@ def calc_pick_coke_can_stats(root_result_dir):
                 if np.isnan(avg_sim_success):
                     print(f"WARNING: avg_sim_success is nan for {variant}")
                 coke_can_sim_visual_matching_success[coke_can_orientation][ckpt_alias].append(avg_sim_success)
-            print(f"Orientation {coke_can_orientation}, ckpt {ckpt_alias} all robot arm visual matching success: {coke_can_sim_visual_matching_success[coke_can_orientation][ckpt_alias]}")
+            print(
+                f"Orientation {coke_can_orientation}, ckpt {ckpt_alias} all robot arm visual matching success: {coke_can_sim_visual_matching_success[coke_can_orientation][ckpt_alias]}"
+            )
             coke_can_sim_visual_matching_success[coke_can_orientation][ckpt_alias] = np.mean(
                 coke_can_sim_visual_matching_success[coke_can_orientation][ckpt_alias]
             )
@@ -352,10 +349,11 @@ def calc_move_near_stats(root_result_dir):
             if np.isnan(avg_sim_success):
                 print(f"WARNING: avg_sim_success is nan for {variant}")
             move_near_sim_visual_matching_success[ckpt_alias].append(avg_sim_success)
-            
-        print(f"Ckpt {ckpt_alias} all robot arm visual matching success: {move_near_sim_visual_matching_success[ckpt_alias]}")
-        move_near_sim_visual_matching_success[ckpt_alias] = np.mean(move_near_sim_visual_matching_success[ckpt_alias])
 
+        print(
+            f"Ckpt {ckpt_alias} all robot arm visual matching success: {move_near_sim_visual_matching_success[ckpt_alias]}"
+        )
+        move_near_sim_visual_matching_success[ckpt_alias] = np.mean(move_near_sim_visual_matching_success[ckpt_alias])
 
     print("sim visual matching success", move_near_sim_visual_matching_success)
     print("real success", move_near_real_success)
@@ -534,9 +532,15 @@ def calc_drawer_stats(root_result_dir):
             tmp_variant_avg_each_robot_arm = []
             for i in range(len(base_visual_matching_variants)):
                 tmp_variant_avg_each_robot_arm.append(
-                    np.mean(drawer_sim_visual_matching_success[drawer_task][ckpt_alias][i::len(drawer_task_map_dict[drawer_task])])
+                    np.mean(
+                        drawer_sim_visual_matching_success[drawer_task][ckpt_alias][
+                            i :: len(drawer_task_map_dict[drawer_task])
+                        ]
+                    )
                 )
-            print(f"Drawer task {drawer_task}, ckpt {ckpt_alias} all robot arm visual matching success: {tmp_variant_avg_each_robot_arm}")
+            print(
+                f"Drawer task {drawer_task}, ckpt {ckpt_alias} all robot arm visual matching success: {tmp_variant_avg_each_robot_arm}"
+            )
             drawer_sim_visual_matching_success[drawer_task][ckpt_alias] = np.mean(
                 drawer_sim_visual_matching_success[drawer_task][ckpt_alias]
             )
@@ -602,8 +606,8 @@ def calc_drawer_stats(root_result_dir):
     print("*" * 20)
     for _ in range(3):
         print()
-        
-        
+
+
 def calc_long_horizon_apple_in_drawer_stats(root_result_dir):
     print("***Drawer results***")
     # If you use a new checkpoint, please update the real evaluation results here
@@ -745,9 +749,15 @@ def calc_long_horizon_apple_in_drawer_stats(root_result_dir):
             tmp_variant_avg_each_robot_arm = []
             for i in range(len(base_visual_matching_variants)):
                 tmp_variant_avg_each_robot_arm.append(
-                    np.mean(drawer_sim_visual_matching_success[drawer_task][ckpt_alias][i::len(drawer_task_map_dict[drawer_task])])
+                    np.mean(
+                        drawer_sim_visual_matching_success[drawer_task][ckpt_alias][
+                            i :: len(drawer_task_map_dict[drawer_task])
+                        ]
+                    )
                 )
-            print(f"Drawer task {drawer_task}, ckpt {ckpt_alias} all robot arm visual matching success: {tmp_variant_avg_each_robot_arm}")
+            print(
+                f"Drawer task {drawer_task}, ckpt {ckpt_alias} all robot arm visual matching success: {tmp_variant_avg_each_robot_arm}"
+            )
             drawer_sim_visual_matching_success[drawer_task][ckpt_alias] = np.mean(
                 drawer_sim_visual_matching_success[drawer_task][ckpt_alias]
             )
@@ -838,7 +848,7 @@ def calc_bridge_put_on_env_stats(root_result_dir):
         },
         "put_carrot_on_plate": {
             "QWenACT": 0.0,
-            },
+        },
         "stack_green_block_on_yellow_block": {
             "QWenACT": 0.0,
         },
@@ -979,12 +989,14 @@ CKPT_MAPPING = {
     "octo-base": "octo-base",
     "octo-small": "octo-small",
     "octo-server": "octo-server",
-    "QWenACT": "steps_33333_pytorch_model.pt", 
+    "QWenACT": "steps_33333_pytorch_model.pt",
 }
 
 
 parser = argparse.ArgumentParser()
-model_path = "/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1_need/QwenGR00T/videos/steps_30000_pytorch_model.pt"
+model_path = (
+    "/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1_need/QwenGR00T/videos/steps_30000_pytorch_model.pt"
+)
 
 # 获得 文件名字
 model_name = model_path.split("/")[-1]

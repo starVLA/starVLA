@@ -1,5 +1,5 @@
 # Copyright 2025 InternVLA-M1. All rights reserved.
-# Modified by [Jinhui YE/ HKUST University] in [2025]. 
+# Modified by [Jinhui YE/ HKUST University] in [2025].
 # Modification: [add fake sample and predict_action to match with starVLA].
 """
 InternVLA M1 framework:
@@ -11,19 +11,16 @@ Vision-Language-Action diffusion model integrating:
 Primary goal: predict continuous future actions conditioned on multi-view images + instruction.
 """
 
-from typing import List
-from tqdm import tqdm
 from typing import List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from PIL import Image
 from qwen_vl_utils import process_vision_info
 
-
-from starVLA.training.trainer_utils import initialize_overwatch
 from starVLA.model.tools import FRAMEWORK_REGISTRY
-
+from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
 
@@ -31,10 +28,10 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.modules.vlm import get_vlm_model
-from starVLA.model.modules.projector.QFormer import get_layerwise_qformer
 from starVLA.model.modules.action_model.DiTActionHeader import get_action_model
 from starVLA.model.modules.dino_model.dino import get_dino_model
+from starVLA.model.modules.projector.QFormer import get_layerwise_qformer
+from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
@@ -176,7 +173,7 @@ class InternVLA_M1(baseframework):
         cfg_scale: float = 1.5,
         use_ddim: bool = True,
         num_ddim_steps: int = 5,
-        resize_image = [224, 224],
+        resize_image=[224, 224],
         **kwargs: str,
     ) -> np.ndarray:
         """
@@ -218,7 +215,7 @@ class InternVLA_M1(baseframework):
                 return_dict=True,
             )
 
-            B = len(batch_images) # dino don't have smart resize in processing
+            B = len(batch_images)  # dino don't have smart resize in processing
             image_tensors = self.dino_encoder.prepare_dino_input(batch_images)
             dino_features = self.dino_encoder(image_tensors)
 
@@ -291,11 +288,10 @@ class InternVLA_M1(baseframework):
             if using_cfg:
                 samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
             normalized_actions = samples.cpu().numpy()
-            
-            raw_actions = None
-     
-        return {"normalized_actions": normalized_actions}  # [B, T, action_dim]
 
+            raw_actions = None
+
+        return {"normalized_actions": normalized_actions}  # [B, T, action_dim]
 
     @torch.inference_mode()
     def chat_with_M1(
@@ -346,12 +342,20 @@ class InternVLA_M1(baseframework):
         )
         return outputs
 
+
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
+
+    import debugpy
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -364,31 +368,27 @@ if __name__ == "__main__":
     model = InternVLA_M1(cfg)
     print(model)
 
-
-    # fake sample 
+    # fake sample
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image, image],  # two views
         "lang": "This is a fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
-    batch  = [sample, sample]  # batch size 2
+    batch = [sample, sample]  # batch size 2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     forward_output = model(batch)
-    action_loss = forward_output['action_loss']
+    action_loss = forward_output["action_loss"]
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
     predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
-    normalized_actions = predict_output['normalized_actions']
+    normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
-
-
-
 
     # model_path = "./results/Checkpoints/1_need/0906_bestvla_retrain_sota2/checkpoints/steps_50000_pytorch_model.pt"
     # state_dict = torch.load(model_path, map_location="cpu")

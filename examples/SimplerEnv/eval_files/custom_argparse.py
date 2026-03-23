@@ -1,12 +1,11 @@
-# copy from SimplerEnv/simpler_env/evaluation/argparse.py 
+# copy from SimplerEnv/simpler_env/evaluation/argparse.py
 
 import argparse
 
 import numpy as np
 from sapien.core import Pose
-from transforms3d.euler import euler2quat
-
 from simpler_env.utils.io import DictAction
+from transforms3d.euler import euler2quat
 
 
 def parse_range_tuple(t):
@@ -118,7 +117,6 @@ def get_args():
     parser.add_argument("--async-freq", type=int, default=1)
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Octo init rng seed")
     parser.add_argument("--port", type=int, default=10093)
-
 
     args = parser.parse_args()
 

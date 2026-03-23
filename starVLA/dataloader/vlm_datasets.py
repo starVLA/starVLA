@@ -1,28 +1,24 @@
-import os
 import copy
-import json
-import random
-import logging
-import re
-import time
-import math
 import itertools
-import ast
-from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, List, Tuple
-from io import BytesIO
-import base64
+import json
+import os
+import random
+import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from types import SimpleNamespace
+from typing import Dict, List, Sequence
+
 import numpy as np
 import torch
-from torch.utils.data import Dataset
-from PIL import Image
-from decord import VideoReader
 import transformers
+from decord import VideoReader
 from omegaconf import OmegaConf
+from PIL import Image
+from torch.utils.data import Dataset
+
 from starVLA.dataloader.qwenvl_llavajson.qwen_data_config import data_list
-from starVLA.dataloader.qwenvl_llavajson.rope2d import get_rope_index_25, get_rope_index_2
+from starVLA.dataloader.qwenvl_llavajson.rope2d import get_rope_index_2, get_rope_index_25
 
 IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = 151655
@@ -597,13 +593,20 @@ def make_vlm_dataloader(cfg):
     }
 
 
-from transformers import AutoTokenizer, AutoProcessor
+from transformers import AutoProcessor
 
 if __name__ == "__main__":
-    import debugpy
     import argparse
+
+    import debugpy
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -611,7 +614,7 @@ if __name__ == "__main__":
     debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
-    
+
     data_args = cfg.datasets.vlm_data
     image_processor = AutoProcessor.from_pretrained(
         cfg.framework.qwenvl.base_vlm,
@@ -647,7 +650,6 @@ if __name__ == "__main__":
     batchs = iter(train_dataloader)
     batch_samples = next(batchs)
     # skip the first 99 batches, get the 100th batch
-    from itertools import islice
 
     # batch_samples = next(islice(batchs, 99, 100))
     count = 0

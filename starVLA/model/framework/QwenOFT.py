@@ -1,6 +1,6 @@
 # Copyright 2025 starVLA community. All rights reserved.
 # Licensed under the MIT License, Version 1.0 (the "License");
-# Implemented by [Jinhui YE / HKUST University] in [2025]. 
+# Implemented by [Jinhui YE / HKUST University] in [2025].
 
 """
 Qwen-OFT Framework
@@ -17,22 +17,20 @@ Key Points:
 Note: How to add special tokens to Qwen2.5:
   download our model checkpoint with special tokens added: https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action
   or /starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md （adpat a little code)
-  
+
 """
-from typing import List
-from tqdm import tqdm
+
 from typing import List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
 from PIL import Image
+from tqdm import tqdm
 
-
-
-from starVLA.training.trainer_utils import initialize_overwatch
-from starVLA.model.tools import FRAMEWORK_REGISTRY
 from deployment.model_server.tools.image_tools import to_pil_preserve
+from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
 
@@ -40,9 +38,10 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.modules.action_model.MLP_ActionHeader import get_action_model
+from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.training.trainer_utils.trainer_tools import resize_images
+
 
 @FRAMEWORK_REGISTRY.register("QwenOFT")
 class Qwenvl_OFT(baseframework):
@@ -81,8 +80,8 @@ class Qwenvl_OFT(baseframework):
         self.past_action_window_size = config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
         # self.hidden_dim = config.framework.action_model.action_hidden_dim
-        
-        self.action_token = "🔍" # TODO also can add spacail token to Qwen, but too complex
+
+        self.action_token = "🔍"  # TODO also can add spacail token to Qwen, but too complex
         self.action_token_id = self.qwen_vl_interface.processor.tokenizer("🔍", add_special_tokens=False)["input_ids"][0]
 
         # L1 损失
@@ -115,9 +114,11 @@ class Qwenvl_OFT(baseframework):
         batch_images = [example["image"] for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         actions = [example["action"] for example in examples]  # label [B， len, 7]
-        
+
         # step 0: add special action token to instruction
-        action_tokens = self.action_token* self.chunk_len #can't add " " between two tokens, otherwise will be tokenized to multiple tokens
+        action_tokens = (
+            self.action_token * self.chunk_len
+        )  # can't add " " between two tokens, otherwise will be tokenized to multiple tokens
         prompt_suffix = f" Please predict the next {self.chunk_len} robot actions: <action>{action_tokens}<action>."
         instructions = [instruction + prompt_suffix for instruction in instructions]
 
@@ -131,20 +132,22 @@ class Qwenvl_OFT(baseframework):
                 return_dict=True,
             )
             # last_hidden_state: [B, seq_len, H]
-            last_hidden = qwenvl_outputs.hidden_states[-1]   # [B, L, H]
+            last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             # 提取动作 token embedding 作为动作预测查询
             input_ids = qwen_inputs.get("input_ids", None)
-            action_queries = self._gather_action_token_embeddings(last_hidden, input_ids, action_token_id=self.action_token_id)  # [B, chunk_len, H]
+            action_queries = self._gather_action_token_embeddings(
+                last_hidden, input_ids, action_token_id=self.action_token_id
+            )  # [B, chunk_len, H]
             pred_actions = self.action_model.predict_action(action_queries)  # (B, chunk_len, action_dim)
 
             # 标签对齐：取最后 chunk_len 段
             actions = torch.tensor(
                 np.array(actions), device=pred_actions.device, dtype=pred_actions.dtype
             )  # [B, T_full, action_dim]
-            actions_target = actions[:, -(self.future_action_window_size+1):, :]  # (B, chunk_len, action_dim)
+            actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
 
             # 计算 L1 损失
             action_loss = self.l1_loss(pred_actions, actions_target)
@@ -173,13 +176,15 @@ class Qwenvl_OFT(baseframework):
             examples = [examples]
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-    
+
         train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
-    
+
         # step 0: add special action token to instruction
-        action_tokens = self.action_token* self.chunk_len #can't add " " between two tokens, otherwise will be tokenized to multiple tokens
+        action_tokens = (
+            self.action_token * self.chunk_len
+        )  # can't add " " between two tokens, otherwise will be tokenized to multiple tokens
         prompt_suffix = f" Please predict the next {self.chunk_len} robot actions: <action>{action_tokens}<action>."
         instructions = [instruction + prompt_suffix for instruction in instructions]
 
@@ -193,13 +198,15 @@ class Qwenvl_OFT(baseframework):
                 return_dict=True,
             )
             # last_hidden_state: [B, seq_len, H]
-            last_hidden = qwenvl_outputs.hidden_states[-1]   # [B, L, H]
+            last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             # 提取动作 token embedding 作为动作预测查询
             input_ids = qwen_inputs.get("input_ids", None)
-            action_queries = self._gather_action_token_embeddings(last_hidden, input_ids, action_token_id=self.action_token_id)  # [B, chunk_len, H]
+            action_queries = self._gather_action_token_embeddings(
+                last_hidden, input_ids, action_token_id=self.action_token_id
+            )  # [B, chunk_len, H]
             pred_actions = self.action_model.predict_action(action_queries)  # (B, chunk_len, action_dim)
 
         normalized_actions = pred_actions.detach().cpu().numpy()
@@ -207,9 +214,9 @@ class Qwenvl_OFT(baseframework):
 
     def _gather_action_token_embeddings(
         self,
-        last_hidden: torch.Tensor,   # [B, L, H]
-        input_ids: torch.Tensor,     # [B, L]
-        action_token_id=None,        # 可为 int 或 List[int]
+        last_hidden: torch.Tensor,  # [B, L, H]
+        input_ids: torch.Tensor,  # [B, L]
+        action_token_id=None,  # 可为 int 或 List[int]
     ) -> torch.Tensor:
         """
         向量化批量提取动作 token embedding:
@@ -234,7 +241,7 @@ class Qwenvl_OFT(baseframework):
             # torch.isin 需要 PyTorch >=1.10
             mask = torch.isin(input_ids, id_list)
         else:
-            mask = (input_ids == action_token_id)  # [B, L]
+            mask = input_ids == action_token_id  # [B, L]
 
         counts = mask.sum(dim=1)  # [B]
         if (counts < self.chunk_len).any():
@@ -245,26 +252,33 @@ class Qwenvl_OFT(baseframework):
 
         # 位置索引
         idx = torch.arange(L, device=device).unsqueeze(0).expand(B, L)  # [B, L]
-        masked_pos = torch.where(mask, idx, torch.full_like(idx, -1))   # 非动作位置置 -1
+        masked_pos = torch.where(mask, idx, torch.full_like(idx, -1))  # 非动作位置置 -1
 
         # 取最后 chunk_len 个（索引大的在序列靠后）
         # 注意: 已确保数量足够，不会出现 -1 被错误选中的问题
-        topk_pos = masked_pos.topk(k=self.chunk_len, dim=-1).values     # [B, chunk_len] 未排序
+        topk_pos = masked_pos.topk(k=self.chunk_len, dim=-1).values  # [B, chunk_len] 未排序
         # 时间顺序排序
-        selected_pos = topk_pos.sort(dim=-1).values                     # [B, chunk_len]
+        selected_pos = topk_pos.sort(dim=-1).values  # [B, chunk_len]
 
         # Gather
-        expanded_index = selected_pos.unsqueeze(-1).expand(-1, -1, H)   # [B, chunk_len, H]
+        expanded_index = selected_pos.unsqueeze(-1).expand(-1, -1, H)  # [B, chunk_len, H]
         action_queries = last_hidden.gather(dim=1, index=expanded_index)  # [B, chunk_len, H]
         return action_queries
 
 
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
+
+    import debugpy
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -275,45 +289,43 @@ if __name__ == "__main__":
     cfg.framework.action_model.action_hidden_dim = 2048
 
     cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
-    
 
     # try get model
     model = Qwenvl_OFT(cfg)
     print(model)
 
-    # fake sample 
+    # fake sample
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image], # two views
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image],  # two views
         "lang": "This is a fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
     sample2 = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image], # two views
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image],  # two views
         "lang": "For testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
-    batch  = [sample, sample2]  # batch size 2
+    batch = [sample, sample2]  # batch size 2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     forward_output = model(batch)
-    action_loss = forward_output['action_loss']
+    action_loss = forward_output["action_loss"]
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
     predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
-    normalized_actions = predict_output['normalized_actions']
+    normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
-
 
     # try forward model
     # can be fake sample， but here get from dataloader for simpler
-    from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
+    from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
 
     vla_dataset_cfg = cfg.datasets.vla_data
     dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)

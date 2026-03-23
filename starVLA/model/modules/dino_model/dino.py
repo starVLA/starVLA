@@ -8,17 +8,11 @@ Features:
   - Parallel per-view preprocessing using ThreadPoolExecutor
 """
 
-from collections import OrderedDict
 import os
-
 from concurrent.futures import ThreadPoolExecutor
-import torch
 
 import torch
-import torch.nn.functional as F
 from torch import nn
-from torchvision.models._utils import IntermediateLayerGetter
-from typing import Dict, List
 from torchvision import transforms
 
 
@@ -51,7 +45,7 @@ class DINOv2BackBone(nn.Module):
             import traceback
 
             traceback.print_exc()
-            print(f"Failed to load dinov2 from torch hub, loading from local")
+            print("Failed to load dinov2 from torch hub, loading from local")
             TORCH_HOME = os.environ.get("TORCH_HOME", "~/.cache/torch/")
             weights_path = os.path.expanduser(f"{TORCH_HOME}/hub/checkpoints/{backone_name}_pretrain.pth")
 

@@ -1,6 +1,8 @@
-from pydantic import BaseModel
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any, Dict
+
+from pydantic import BaseModel
+
 
 class ModalityConfig(BaseModel):
     """Configuration for a modality."""

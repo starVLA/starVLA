@@ -22,10 +22,10 @@ Pseudocode sections (replace for your robot):
     - robot environment creation, `reset`, and `step`
 """
 
-import numpy as np
 import json
-import time
-from typing import List, Dict
+from typing import Dict, List
+
+import numpy as np
 
 # ============================================================
 # ✅ Real code: WebSocket client
@@ -38,8 +38,7 @@ from websocketclient import WebsocketClientPolicy
 # ============================================================
 # ✅ Real code: action unnormalization
 # ============================================================
-def unnormalize_actions(normalized_actions: np.ndarray, 
-                        action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
+def unnormalize_actions(normalized_actions: np.ndarray, action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
     """
     Convert normalized model outputs in [-1, 1] back to the real action space.
 
@@ -93,10 +92,12 @@ def build_request(images: List[np.ndarray], task_instruction: str) -> dict:
         request_data: dict matching the server API
     """
     request_data = {
-        "examples": [{
-            "image": images,       # List[np.ndarray], converted to PIL Images on the server side
-            "lang": task_instruction,
-        }]
+        "examples": [
+            {
+                "image": images,  # List[np.ndarray], converted to PIL Images on the server side
+                "lang": task_instruction,
+            }
+        ]
     }
     return request_data
 
@@ -122,7 +123,7 @@ def parse_response(result: dict) -> np.ndarray:
                 actions = np.array(actions)
             # Normalize to [T, action_dim].
             if len(actions.shape) == 3:
-                actions = actions[0]       # [B, T, D] -> [T, D]
+                actions = actions[0]  # [B, T, D] -> [T, D]
             elif len(actions.shape) == 1:
                 actions = actions.reshape(1, -1)  # [D] -> [1, D]
             return actions
@@ -148,7 +149,7 @@ def load_action_norm_stats(json_path: str, embodiment_key: str = "franka") -> Di
         }
     }
     """
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         stats_data = json.load(f)
 
     if embodiment_key in stats_data:
@@ -170,19 +171,20 @@ def load_action_norm_stats(json_path: str, embodiment_key: str = "franka") -> Di
 # === Pseudocode: implement the following functions for your robot ===
 # ============================================================
 
+
 def capture_images_from_cameras() -> List[np.ndarray]:
-        """
-        [Pseudocode] Capture multi-view images from cameras.
+    """
+    [Pseudocode] Capture multi-view images from cameras.
 
-        TODO: implement this based on your camera hardware, for example:
-            - RealSense: use the pyrealsense2 SDK
-            - USB cameras: use OpenCV VideoCapture
-            - Other devices: use the corresponding SDK
+    TODO: implement this based on your camera hardware, for example:
+        - RealSense: use the pyrealsense2 SDK
+        - USB cameras: use OpenCV VideoCapture
+        - Other devices: use the corresponding SDK
 
-        Returns:
-                images: List[np.ndarray], each with shape (H, W, 3), dtype uint8, in RGB format
-        """
-        # --- Example pseudocode ---
+    Returns:
+        images: List[np.ndarray], each with shape (H, W, 3), dtype uint8, in RGB format
+    """
+    # --- Example pseudocode ---
     # import pyrealsense2 as rs
     # frames = pipeline.wait_for_frames()
     # color_frame = frames.get_color_frame()
@@ -194,25 +196,25 @@ def capture_images_from_cameras() -> List[np.ndarray]:
 
 
 class YourRobotEnv:
-        """
-        [Pseudocode] Robot arm environment interface.
+    """
+    [Pseudocode] Robot arm environment interface.
 
-        You need to implement the following methods to send 7D actions to your robot:
-            - reset(): move the robot to its initial pose and return the initial observation
-            - step(action): execute a 7D action [x, y, z, roll, pitch, yaw, gripper]
-            - get_obs(): return the current observation (images + state)
+    You need to implement the following methods to send 7D actions to your robot:
+        - reset(): move the robot to its initial pose and return the initial observation
+        - step(action): execute a 7D action [x, y, z, roll, pitch, yaw, gripper]
+        - get_obs(): return the current observation (images + state)
 
-        Action definition (Franka 7D action space):
-            action[0:3] - position delta (x, y, z), Cartesian coordinates, in meters
-            action[3:6] - orientation delta (roll, pitch, yaw), Euler angles, in radians
-            action[6]   - gripper control (-1: close, 1: open)
+    Action definition (Franka 7D action space):
+        action[0:3] - position delta (x, y, z), Cartesian coordinates, in meters
+        action[3:6] - orientation delta (roll, pitch, yaw), Euler angles, in radians
+        action[6]   - gripper control (-1: close, 1: open)
 
-        ⚠️ Other robots may use different action sizes and meanings. Adjust accordingly.
+    ⚠️ Other robots may use different action sizes and meanings. Adjust accordingly.
 
-        `env.step()` should internally handle both:
-            1. pose control: convert action[0:6] into a target pose and send it to the controller
-            2. gripper control: open/close the gripper based on action[6]
-        """
+    `env.step()` should internally handle both:
+        1. pose control: convert action[0:6] into a target pose and send it to the controller
+        2. gripper control: open/close the gripper based on action[6]
+    """
 
     def reset(self):
         """Reset the robot to its initial pose."""

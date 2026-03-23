@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.distributed as dist
 
 
 class CrossAttentionBlock(nn.Module):
@@ -145,7 +143,6 @@ class LayerwiseQFormer(nn.Module):
         return hidden_states_list
 
 
-import torch
 import torch.nn as nn
 
 

@@ -108,9 +108,7 @@ class BasicTransformerBlock(nn.Module):
             )
 
         if positional_embeddings == "sinusoidal":
-            self.pos_embed = SinusoidalPositionalEmbedding(
-                dim, max_seq_length=num_positional_embeddings
-            )
+            self.pos_embed = SinusoidalPositionalEmbedding(dim, max_seq_length=num_positional_embeddings)
         else:
             self.pos_embed = None
 
@@ -165,10 +163,10 @@ class BasicTransformerBlock(nn.Module):
         if self.pos_embed is not None:
             norm_hidden_states = self.pos_embed(norm_hidden_states)
 
-        attn_output = self.attn1( 
-            norm_hidden_states, 
+        attn_output = self.attn1(
+            norm_hidden_states,
             encoder_hidden_states=encoder_hidden_states,
-            attention_mask=encoder_attention_mask, #@JinhuiYE original attention_mask=attention_mask
+            attention_mask=encoder_attention_mask,  # @JinhuiYE original attention_mask=attention_mask
         )
         if self.final_dropout:
             attn_output = self.final_dropout(attn_output)
@@ -191,7 +189,7 @@ class DiT(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = True
 
     # register_to_config 的作用是创建类的时候会自动把传入的参数注册到 config 中，这样后续调用的时候可以通过 self.config.xxx 调用 还不是 self.xxx
-    @register_to_config # 去看一下这个的作用 --> 将传入的参数注册到配置中 TODO 改为我们的单例模式, 写一个 能够merge 的 @merge_pram_config
+    @register_to_config  # 去看一下这个的作用 --> 将传入的参数注册到配置中 TODO 改为我们的单例模式, 写一个 能够merge 的 @merge_pram_config
     def __init__(
         self,
         num_attention_heads: int = 8,
@@ -212,7 +210,7 @@ class DiT(ModelMixin, ConfigMixin):
         positional_embeddings: Optional[str] = "sinusoidal",
         interleave_self_attention=False,
         cross_attention_dim: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.attention_head_dim = attention_head_dim
@@ -221,9 +219,11 @@ class DiT(ModelMixin, ConfigMixin):
 
         # Timestep encoder
         #  self.config.compute_dtype 可能不存在，要提前处理
-        compute_dtype = getattr(self.config, 'compute_dtype', torch.float32)
-        self.timestep_encoder = TimestepEncoder( # TODO BUG, train 的时候 self.config.compute_dtype 不会报错， 但是 eval 的时候会
-            embedding_dim=self.inner_dim, compute_dtype=compute_dtype
+        compute_dtype = getattr(self.config, "compute_dtype", torch.float32)
+        self.timestep_encoder = (
+            TimestepEncoder(  # TODO BUG, train 的时候 self.config.compute_dtype 不会报错， 但是 eval 的时候会
+                embedding_dim=self.inner_dim, compute_dtype=compute_dtype
+            )
         )
 
         all_blocks = []
@@ -267,7 +267,7 @@ class DiT(ModelMixin, ConfigMixin):
         encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D)
         timestep: Optional[torch.LongTensor] = None,
         return_all_hidden_states: bool = False,
-        encoder_attention_mask=None
+        encoder_attention_mask=None,
     ):
         # Encode timesteps
         temb = self.timestep_encoder(timestep)

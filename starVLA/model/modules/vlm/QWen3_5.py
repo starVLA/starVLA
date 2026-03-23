@@ -1,17 +1,14 @@
 # Copyright 2025 starVLA community. All rights reserved.
-# Licensed under the MIT License, Version 1.0 (the "License"); 
+# Licensed under the MIT License, Version 1.0 (the "License");
 # Implemented by [Shijie LIAN/ Huazhong University of Science & Technology] in [2026].
 # Design and Merged by [Jinhui YE / HKUST University] in [2026].
 
+from typing import Optional
+
 import torch
-from torch.nn.utils.rnn import pad_sequence
-from typing import Dict, Optional, List
-
-from transformers.modeling_outputs import CausalLMOutputWithPast
-from transformers import AutoProcessor, BatchFeature
-
-from qwen_vl_utils import process_vision_info
 from accelerate.logging import get_logger
+from transformers import AutoProcessor
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 try:
     from transformers import Qwen3_5ForConditionalGeneration
@@ -28,8 +25,10 @@ VIDEO_TOKEN_INDEX = 248057
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_VIDEO_TOKEN = "<video>"
 
-_ACTION_TOKEN_MIN = 248077 # how can we know this range? check how you add fast tokens into VLM
-_ACTION_TOKEN_MAX = 248077 + 2047 # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
+_ACTION_TOKEN_MIN = 248077  # how can we know this range? check how you add fast tokens into VLM
+_ACTION_TOKEN_MAX = (
+    248077 + 2047
+)  # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
 
 
 import torch.nn as nn
@@ -140,19 +139,14 @@ class _QWen3_5_VL_Interface(nn.Module):
         # Preparation for inference
 
         batch_inputs = self.processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            padding=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt"
+            messages, tokenize=True, padding=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
 
         # if solutions, mask out the solution tokens in labels
-        if solutions is not None: #  here only for fast_tokenizer now. 
-            action_token_min = _ACTION_TOKEN_MIN # how can we know this range? --> we has other way for this, but is slower see qwenhelix branch
-            action_token_max = _ACTION_TOKEN_MAX # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
-            labels = batch_inputs['input_ids'].clone()
+        if solutions is not None:  #  here only for fast_tokenizer now.
+            action_token_min = _ACTION_TOKEN_MIN  # how can we know this range? --> we has other way for this, but is slower see qwenhelix branch
+            action_token_max = _ACTION_TOKEN_MAX  # here only for fast_tokenizer, see starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md
+            labels = batch_inputs["input_ids"].clone()
             # For each sequence in the batch, find the first occurrence of an action token.
             for i in range(labels.size(0)):
                 seq = labels[i]
@@ -170,21 +164,26 @@ class _QWen3_5_VL_Interface(nn.Module):
                         "No action token found in sequence; please check action-tokenized tokenizer in "
                         "starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md"
                     )
-            
-            labels[labels == self.processor.tokenizer.pad_token_id] = -100 ## mask out pad tokens as well
-            batch_inputs['labels'] = labels
+
+            labels[labels == self.processor.tokenizer.pad_token_id] = -100  ## mask out pad tokens as well
+            batch_inputs["labels"] = labels
 
         return batch_inputs.to(self.model.device)
 
 
-
-
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
+
+    import debugpy
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     debugpy.listen(("0.0.0.0", 10092))
@@ -192,7 +191,7 @@ if __name__ == "__main__":
     debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
-    
+
     cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3.5-VL-4B-Instruct"
     qwen_vl = _QWen3_5_VL_Interface(cfg)
     pass

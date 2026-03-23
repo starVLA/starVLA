@@ -47,10 +47,11 @@ class EmbodimentTag(Enum):
     Any new embodiment for finetuning.
     """
 
-    FRANKA = 'franka'
+    FRANKA = "franka"
     """
     The Franka Emika Panda robot.
     """
+
 
 # Embodiment tag string: to projector index in the Action Expert Module
 EMBODIMENT_TAG_MAPPING = {

@@ -3,8 +3,8 @@
 #     ADM:   https://github.com/openai/guided-diffusion/blob/main/guided_diffusion
 #     IDDPM: https://github.com/openai/improved-diffusion/blob/main/improved_diffusion/gaussian_diffusion.py
 
-import torch as th
 import numpy as np
+import torch as th
 
 
 def normal_kl(mean1, logvar1, mean2, logvar2):

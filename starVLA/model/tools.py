@@ -114,7 +114,6 @@ def print_freeze_status(self):
     print("=========================\n")
 
 
-
 class Registry:
     def __init__(self, name: str):
         self.name = name
@@ -122,17 +121,19 @@ class Registry:
 
     def register(self, key: str):
         """Decorator: register a builder function or class"""
+
         def decorator(framework_class):
             if key in self._registry:
                 # print(ImportWarning(f"{key} already registered to {self.name}"))
                 pass
             self._registry[key] = framework_class
             return framework_class
+
         return decorator
-    
+
     def __getitem__(self, key):
         return self._registry[key]
-    
+
     def list(self):
         """
         List currently registered keys; if with_values=True (not used here) return mapping {key: value_obj}.
@@ -140,23 +141,26 @@ class Registry:
         """
         return {k: v for k, v in self._registry.items()}
 
+
 FRAMEWORK_REGISTRY = Registry("frameworks")
 
 
-
-from starVLA.training.trainer_utils import initialize_overwatch
-import os
 import json
+import os
 from pathlib import Path
-from omegaconf import OmegaConf
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from omegaconf import OmegaConf
 from PIL import Image
 from torchvision import transforms as TF
 
+from starVLA.training.trainer_utils import initialize_overwatch
+
 # Initialize Overwatch =>> Wraps `logging.Logger`
 overwatch = initialize_overwatch(__name__)
+
 
 def read_mode_config(pretrained_checkpoint):
     """
@@ -200,16 +204,8 @@ def read_mode_config(pretrained_checkpoint):
     return global_cfg, norm_stats
 
 
-
 class CrossAttention(nn.Module):
-    def __init__(
-        self,
-        d_model: int,
-        d_hidden: int,
-        nhead: int = 8,
-        dropout: float = 0.0,
-        kv_dim: int = 2048
-    ):
+    def __init__(self, d_model: int, d_hidden: int, nhead: int = 8, dropout: float = 0.0, kv_dim: int = 2048):
         super().__init__()
         self.d_model = d_model
         self.d_hidden = d_hidden if d_hidden is not None else d_model
@@ -240,9 +236,9 @@ class CrossAttention(nn.Module):
         _, N_spatial, _ = spatial_feature.shape
 
         # Project to d_hidden
-        q = self.q_proj(image_feature)   # (B, N_img, d_hidden)
-        k = self.k_proj(spatial_feature)     # (B, N_vggt, d_hidden)
-        v = self.v_proj(spatial_feature)     # (B, N_vggt, d_hidden)
+        q = self.q_proj(image_feature)  # (B, N_img, d_hidden)
+        k = self.k_proj(spatial_feature)  # (B, N_vggt, d_hidden)
+        v = self.v_proj(spatial_feature)  # (B, N_vggt, d_hidden)
 
         # Reshape for multi-head: (B, N, d_hidden) -> (B, N, nhead, head_dim) -> (B, nhead, N, head_dim)
         q = q.view(B, N_img, self.nhead, self.head_dim).transpose(1, 2)  # (B, nhead, N_img, head_dim)
@@ -250,7 +246,7 @@ class CrossAttention(nn.Module):
         v = v.view(B, N_spatial, self.nhead, self.head_dim).transpose(1, 2)  # (B, nhead, N_vggt, head_dim)
 
         # Scaled Dot-Product Attention
-        scale = self.head_dim ** -0.5
+        scale = self.head_dim**-0.5
         attn_weights = torch.matmul(q, k.transpose(-2, -1)) * scale  # (B, nhead, N_img, N_vggt)
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_weights = self.dropout_attn(attn_weights)
@@ -272,7 +268,7 @@ class CrossAttention(nn.Module):
         return output
 
 
-def preprocess_images(image_list, target_size, mode='crop'): #  [B，[PLT]]
+def preprocess_images(image_list, target_size, mode="crop"):  #  [B，[PLT]]
     batch_images = []
     shapes = set()
     to_tensor = TF.ToTensor()

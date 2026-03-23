@@ -12,9 +12,10 @@
 # MAE: https://github.com/facebookresearch/mae/blob/main/models_mae.py
 # --------------------------------------------------------
 
+import math
+
 import torch
 import torch.nn as nn
-import math
 from timm.models.vision_transformer import Attention, Mlp
 
 

@@ -12,6 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import dataclasses
+import json
+import logging
+import os
 import time
 from dataclasses import dataclass, field
 from functools import partial
@@ -20,25 +24,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
-import tyro
-import dataclasses
-import json
-import logging
-import os
 
 # Required for robocasa environments
 import robocasa  # noqa: F401
 import robosuite  # noqa: F401
+import tyro
 from robocasa.utils.gym_utils import GrootRoboCasaEnv  # noqa: F401
-from examples.Robocasa_tabletop.eval_files.base_config import ModalityConfig
-from examples.Robocasa_tabletop.eval_files.base_config import BasePolicy
+
+from examples.Robocasa_tabletop.eval_files.base_config import BasePolicy, ModalityConfig
+from examples.Robocasa_tabletop.eval_files.model2robocasa_interface import PolicyWarper
 from examples.Robocasa_tabletop.eval_files.wrappers.multistep_wrapper import MultiStepWrapper
 from examples.Robocasa_tabletop.eval_files.wrappers.video_recording_wrapper import (
     VideoRecorder,
     VideoRecordingWrapper,
 )
-
-from examples.Robocasa_tabletop.eval_files.model2robocasa_interface import PolicyWarper
 
 
 @dataclass
@@ -46,8 +45,8 @@ class VideoConfig:
     """Configuration for video recording settings."""
 
     video_dir: Optional[str] = None
-    steps_per_render: int = 2 # 和10 是什么关系
-    fps: int = 10 # BUG 数据集中应该是 20？
+    steps_per_render: int = 2  # 和10 是什么关系
+    fps: int = 10  # BUG 数据集中应该是 20？
     codec: str = "h264"
     input_pix_fmt: str = "rgb24"
     crf: int = 22
@@ -88,10 +87,8 @@ class SimulationInferenceEnv:
         """Get action from the model based on observations."""
         # NOTE(YL)!
         # hot fix to change the video.ego_view_bg_crop_pad_res256_freq20 to video.ego_view
-        if "video.ego_view_bg_crop_pad_res256_freq20" in observations: # BUG @JinhuiYE here only one viwes
-            observations["video.ego_view"] = observations.pop(
-                "video.ego_view_bg_crop_pad_res256_freq20"
-            )
+        if "video.ego_view_bg_crop_pad_res256_freq20" in observations:  # BUG @JinhuiYE here only one viwes
+            observations["video.ego_view"] = observations.pop("video.ego_view_bg_crop_pad_res256_freq20")
         return self.model.step(observations)
 
     def get_modality_config(self) -> Dict[str, ModalityConfig]:
@@ -114,7 +111,7 @@ class SimulationInferenceEnv:
 
     def run_simulation(self, config: SimulationConfig, model: Optional[BasePolicy] = None) -> Tuple[str, List[bool]]:
         """Run the simulation for the specified number of episodes.
-        
+
         Args:
             config: Configuration for the simulation
             model: The model to use for inference. If None, uses the model from __init__
@@ -122,14 +119,12 @@ class SimulationInferenceEnv:
         # Use the provided model or fall back to the instance model
         if model is not None:
             self.model = model
-        
+
         if self.model is None:
             raise ValueError("No model provided. Please provide a model either in __init__ or run_simulation")
-        
+
         start_time = time.time()
-        print(
-            f"Running {config.n_episodes} episodes for {config.env_name} with {config.n_envs} environments"
-        )
+        print(f"Running {config.n_episodes} episodes for {config.env_name} with {config.n_envs} environments")
         # Set up the environment
         self.env = self.setup_environment(config)
         # Initialize tracking variables
@@ -166,9 +161,7 @@ class SimulationInferenceEnv:
         self.env.reset()
         self.env.close()
         self.env = None
-        print(
-            f"Collecting {config.n_episodes} episodes took {time.time() - start_time:.2f} seconds"
-        )
+        print(f"Collecting {config.n_episodes} episodes took {time.time() - start_time:.2f} seconds")
         assert (
             len(episode_successes) >= config.n_episodes
         ), f"Expected at least {config.n_episodes} episodes, got {len(episode_successes)}"
@@ -246,9 +239,7 @@ def run_evaluation(
         n_episodes=n_episodes,
         n_envs=n_envs,
         video=VideoConfig(video_dir=video_dir),
-        multistep=MultiStepConfig(
-            n_action_steps=n_action_steps, max_episode_steps=max_episode_steps
-        ),
+        multistep=MultiStepConfig(n_action_steps=n_action_steps, max_episode_steps=max_episode_steps),
     )
     # Create client and run simulation
     client = SimulationInferenceEnv(model=model)
@@ -263,26 +254,31 @@ def run_evaluation(
 class Args:
     host: str = "127.0.0.1"
     port: int = 5678
-    resize_size = [224,224]
+    resize_size = [224, 224]
 
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    env_name: str = "gr1_unified/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    env_name: str = (
+        "gr1_unified/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    )
     n_episodes: int = 50  # Number of steps to wait for objects to stabilize i n sim
     n_envs: int = 1  # Number of rollouts per task
-    max_episode_steps: int = 360 # 
+    max_episode_steps: int = 360  #
     n_action_steps: int = 3
 
     #################################################################################################################
     # Utils
     #################################################################################################################
-    video_out_path: str = "experiments/1029_qwenGR00T_fourier_gr1_unified_1000_PnPMilkToMicrowaveClose_gpus_woPretrain_wState/checkpoints/steps_20000_pytorch_model.pt.log/gr1_unified/logs/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env"  # Path to save videos
+    video_out_path: str = (
+        "experiments/1029_qwenGR00T_fourier_gr1_unified_1000_PnPMilkToMicrowaveClose_gpus_woPretrain_wState/checkpoints/steps_20000_pytorch_model.pt.log/gr1_unified/logs/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env"  # Path to save videos
+    )
 
     seed: int = 7  # Random Seed (for reproducibility)
 
-    pretrained_path: str = "results/Checkpoints/1029_qwenGR00T_fourier_gr1_unified_1000_PnPMilkToMicrowaveClose_gpus_woPretrain_wState/checkpoints/steps_20000_pytorch_model.pt"
-
+    pretrained_path: str = (
+        "results/Checkpoints/1029_qwenGR00T_fourier_gr1_unified_1000_PnPMilkToMicrowaveClose_gpus_woPretrain_wState/checkpoints/steps_20000_pytorch_model.pt"
+    )
 
 
 def eval_gr1_unified(args: Args) -> None:
@@ -291,7 +287,7 @@ def eval_gr1_unified(args: Args) -> None:
         start_debugpy_once()
 
     model = PolicyWarper(
-        policy_ckpt_path=args.pretrained_path, # to get unnormalization stats
+        policy_ckpt_path=args.pretrained_path,  # to get unnormalization stats
         host=args.host,
         port=args.port,
         image_size=args.resize_size,
@@ -307,14 +303,17 @@ def eval_gr1_unified(args: Args) -> None:
         max_episode_steps=args.max_episode_steps,
     )
 
+
 def start_debugpy_once():
     import debugpy
+
     if getattr(start_debugpy_once, "_started", False):
         return
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Waiting for VSCode attach on 0.0.0.0:10092 ...")
     debugpy.wait_for_client()
     start_debugpy_once._started = True
+
 
 if __name__ == "__main__":
     tyro.cli(eval_gr1_unified)

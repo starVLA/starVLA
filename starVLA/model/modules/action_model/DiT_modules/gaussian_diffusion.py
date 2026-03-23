@@ -4,11 +4,11 @@
 #     IDDPM: https://github.com/openai/improved-diffusion/blob/main/improved_diffusion/gaussian_diffusion.py
 
 
+import enum
 import math
 
 import numpy as np
 import torch as th
-import enum
 
 from .diffusion_utils import discretized_gaussian_log_likelihood, normal_kl
 
