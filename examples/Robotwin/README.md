@@ -174,6 +174,8 @@ bash examples/Robotwin/eval_files/run_policy_server.sh
 ```
 
 Edit your checkpoint path in `examples/Robotwin/eval_files/deploy_policy.yml` and `examples/Robotwin/eval_files/run_policy_server.sh`.
+If your checkpoint was trained with percentile normalization, set `normalization_mode: "q99"` in `examples/Robotwin/eval_files/deploy_policy.yml`.
+Available options are `min_max` and `q99`. The default is `min_max` to preserve the previous RoboTwin deployment behavior.
 
 ---
 

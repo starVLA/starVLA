@@ -30,13 +30,17 @@ class ModelClient:
         host="127.0.0.1",
         port=5694,
         action_mode: str = "abs",
+        normalization_mode: str = "min_max",
     ) -> None:
 
         self.client = WebsocketClientPolicy(host, port)
         self.policy_setup = policy_setup
         self.unnorm_key = unnorm_key
 
-        print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key}, action_mode: {action_mode} ***")
+        print(
+            f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key}, "
+            f"action_mode: {action_mode}, normalization_mode: {normalization_mode} ***"
+        )
         self.use_ddim = use_ddim
         self.num_ddim_steps = num_ddim_steps
         self.image_size = image_size
@@ -44,6 +48,7 @@ class ModelClient:
         self.action_ensemble = action_ensemble and (AdaptiveEnsembler is not None)
         self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
         self.action_ensemble_horizon = action_ensemble_horizon
+        self.normalization_mode = normalization_mode
 
         # Action mode: "abs", "delta", or "rel"
         self.action_mode = action_mode
@@ -128,7 +133,9 @@ class ModelClient:
             normalized_actions = normalized_actions[0]
             # Unnormalize to get delta/rel values
             raw_actions = self.unnormalize_actions(
-                normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats
+                normalized_actions=normalized_actions,
+                action_norm_stats=self.action_norm_stats,
+                normalization_mode=self.normalization_mode,
             )
 
             # Convert delta/rel to absolute actions
@@ -153,25 +160,42 @@ class ModelClient:
         return current_action
 
     @staticmethod
-    def normalize_state(state: dict[str, np.ndarray], state_norm_stats: Dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    def normalize_state(
+        state: dict[str, np.ndarray],
+        state_norm_stats: Dict[str, np.ndarray],
+        normalization_mode: str = "min_max",
+    ) -> dict[str, np.ndarray]:
         """
         Normalize the state
         """
-        mask = [True, True, True, True, True, True, True, True, True, True, True, True, False, False]
-        mask = np.array(mask, dtype=bool)
-        state_high, state_low = np.array(state_norm_stats["max"]), np.array(state_norm_stats["min"])
+        continuous_mask = [True, True, True, True, True, True, True, True, True, True, True, True, False, False]
+        continuous_mask = np.array(continuous_mask, dtype=bool)
+        state_high, state_low = ModelClient._get_normalization_bounds(
+            state_norm_stats, normalization_mode=normalization_mode
+        )
+        valid_mask = continuous_mask & (state_high != state_low)
         normalized_state = np.where(
-            mask,
+            valid_mask,
             (state - state_low) / (state_high - state_low) * 2 - 1,
             state,
         )
-        normalized_state = np.where(~mask, (normalized_state > 0.5).astype(normalized_state.dtype), normalized_state)
+        normalized_state = np.where(
+            ~continuous_mask,
+            (normalized_state > 0.5).astype(normalized_state.dtype),
+            normalized_state,
+        )
         return normalized_state
 
     @staticmethod
-    def unnormalize_actions(normalized_actions: np.ndarray, action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
-        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
-        action_high, action_low = np.array(action_norm_stats["max"]), np.array(action_norm_stats["min"])
+    def unnormalize_actions(
+        normalized_actions: np.ndarray,
+        action_norm_stats: Dict[str, np.ndarray],
+        normalization_mode: str = "min_max",
+    ) -> np.ndarray:
+        action_high, action_low = ModelClient._get_normalization_bounds(
+            action_norm_stats, normalization_mode=normalization_mode
+        )
+        mask = action_norm_stats.get("mask", np.ones_like(action_low, dtype=bool))
         normalized_actions = np.clip(normalized_actions, -1, 1)
 
         actions = np.where(
@@ -236,13 +260,18 @@ class ModelClient:
             # New format: directly use the corresponding mode stats
             mode_stats = stats[action_mode]
             return mode_stats.get("action", mode_stats)
-        elif "action" in stats:
+        if "action" in stats:
             # Old format: only supports abs mode
             if action_mode != "abs":
-                print(f"[WARNING] Statistics file only has abs mode, but {action_mode} was requested. Using abs stats.")
+                raise ValueError(
+                    f"Statistics key `{unnorm_key}` only provides `abs` action stats, "
+                    f"but action_mode=`{action_mode}` was requested."
+                )
             return stats["action"]
-        else:
-            raise ValueError(f"Invalid statistics file format for key: {unnorm_key}")
+        raise ValueError(
+            f"Invalid statistics file format for key `{unnorm_key}`. "
+            f"Available top-level keys: {sorted(stats.keys())}"
+        )
 
     @staticmethod
     def get_state_stats(unnorm_key: str, policy_ckpt_path) -> dict:
@@ -262,16 +291,42 @@ class ModelClient:
 
     @staticmethod
     def _check_unnorm_key(norm_stats, unnorm_key):
+        available_keys = sorted(norm_stats.keys())
         if unnorm_key is None:
-            if len(norm_stats) == 1:
-                unnorm_key = next(iter(norm_stats.keys()))
-            else:
-                unnorm_key = next(iter(norm_stats.keys()))
+            if len(available_keys) == 1:
+                return available_keys[0]
+            raise ValueError(
+                "`unnorm_key` must be provided when multiple normalization statistics are available. "
+                f"Available keys: {available_keys}"
+            )
 
         if unnorm_key not in norm_stats:
-            unnorm_key = next(iter(norm_stats.keys()))
+            raise KeyError(
+                f"Unknown `unnorm_key`: `{unnorm_key}`. Available keys: {available_keys}"
+            )
 
         return unnorm_key
+
+    @staticmethod
+    def _get_normalization_bounds(
+        norm_stats: Dict[str, np.ndarray],
+        normalization_mode: str = "min_max",
+    ) -> tuple[np.ndarray, np.ndarray]:
+        if normalization_mode == "q99":
+            if "q01" not in norm_stats or "q99" not in norm_stats:
+                raise KeyError(
+                    "Normalization mode `q99` requires statistics keys `q01` and `q99`."
+                )
+            return np.array(norm_stats["q99"]), np.array(norm_stats["q01"])
+        if normalization_mode == "min_max":
+            if "min" not in norm_stats or "max" not in norm_stats:
+                raise KeyError(
+                    "Normalization mode `min_max` requires statistics keys `min` and `max`."
+                )
+            return np.array(norm_stats["max"]), np.array(norm_stats["min"])
+        raise ValueError(
+            f"Unsupported normalization_mode: {normalization_mode}. Expected one of ['min_max', 'q99']."
+        )
 
 
 def get_model(usr_args):
@@ -280,6 +335,10 @@ def get_model(usr_args):
     port = usr_args.get("port", 5694)
     unnorm_key = usr_args.get("unnorm_key", None)
     action_mode = usr_args.get("action_mode", "abs")
+    normalization_mode = usr_args.get(
+        "action_normalization_mode",
+        usr_args.get("normalization_mode", "min_max"),
+    )
 
     if policy_ckpt_path is None:
         raise ValueError("policy_ckpt_path must be provided in config")
@@ -290,6 +349,7 @@ def get_model(usr_args):
         port=port,
         unnorm_key=unnorm_key,
         action_mode=action_mode,
+        normalization_mode=normalization_mode,
     )
 
 

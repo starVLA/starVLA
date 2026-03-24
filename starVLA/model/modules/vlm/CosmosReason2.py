@@ -28,9 +28,13 @@ PIXELS_PER_TOKEN = 32**2
 class _CosmosReason2_Interface(nn.Module):
     def __init__(self, config: Optional[dict] = None, **kwargs):
         super().__init__()
+        qwenvl_config = config.framework.get("qwenvl", {})
         model_name = "nvidia/Cosmos-Reason2-2B"
+        attn_implementation = qwenvl_config.get("attn_implementation", "sdpa")
         self.model = transformers.Qwen3VLForConditionalGeneration.from_pretrained(
-            model_name, dtype=torch.bfloat16, attn_implementation="sdpa"
+            model_name,
+            dtype=torch.bfloat16,
+            attn_implementation=attn_implementation
         )
         self.processor = transformers.Qwen3VLProcessor.from_pretrained(model_name)
         self.config = config
