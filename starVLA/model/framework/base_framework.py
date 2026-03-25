@@ -6,6 +6,8 @@ Base framework abstraction providing:
 Note: No device placement or optimizer concerns handled here (delegated to trainer).
 """
 
+import importlib
+import pkgutil
 from pathlib import Path
 from typing import Dict, List
 
@@ -13,12 +15,50 @@ import numpy as np
 import torch
 from transformers import PretrainedConfig, PreTrainedModel
 
-from starVLA.model.framework.__init__ import build_framework
 from starVLA.model.framework.share_tools import dict_to_namespace, read_mode_config
-from starVLA.model.tools import auto_get_trainable_modules
+from starVLA.model.tools import FRAMEWORK_REGISTRY, auto_get_trainable_modules
 from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
+_FRAMEWORKS_IMPORTED = False
+
+
+def _auto_import_framework_modules() -> None:
+    global _FRAMEWORKS_IMPORTED
+    if _FRAMEWORKS_IMPORTED:
+        return
+
+    framework_dir = Path(__file__).resolve().parent
+    for _, module_name, _ in pkgutil.iter_modules([str(framework_dir)]):
+        if module_name in {"__init__", "base_framework", "share_tools"}:
+            continue
+        importlib.import_module(f"starVLA.model.framework.{module_name}")
+
+    _FRAMEWORKS_IMPORTED = True
+
+
+def build_framework(cfg):
+    """
+    Build a framework model from config.
+    Args:
+        cfg: Config object containing `cfg.framework.name`.
+    Returns:
+        nn.Module: Instantiated framework model.
+    """
+    if not hasattr(cfg, "framework") or not hasattr(cfg.framework, "name"):
+        raise ValueError("Missing `cfg.framework.name`. The framework API now only accepts `framework.name`.")
+
+    _auto_import_framework_modules()
+
+    framework_id = cfg.framework.name
+    if framework_id not in FRAMEWORK_REGISTRY._registry:
+        available = sorted(FRAMEWORK_REGISTRY._registry.keys())
+        raise NotImplementedError(
+            f"Framework `{framework_id}` is not implemented. Available frameworks: {available}"
+        )
+
+    model_class = FRAMEWORK_REGISTRY[framework_id]
+    return model_class(cfg)
 
 
 # PreTrainedModel, AutoModel, PretrainedConfig,  are so good, find sometime to study them

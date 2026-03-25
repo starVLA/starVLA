@@ -416,7 +416,7 @@ Empty `reload_modules` means full load all model. However, starVLA does not save
       --num_processes=${TOTAL_GPUS} \
       starVLA/training/train_starvla.py \
       --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
-      --framework.framework_py QwenGR00T \
+      --framework.name QwenGR00T \
       --framework.qwenvl.base_vlm microsoft/Florence-2-large \
       --run_root_dir ${run_root_dir} \
       --run_id ${run_id} \

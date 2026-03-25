@@ -7,7 +7,7 @@ wandb_project: llavavla
 is_debug: false
 
 framework:
-  name: QwenFM
+  name: QwenPI
   qwenvl:
     base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
     attn_implementation: flash_attention_2

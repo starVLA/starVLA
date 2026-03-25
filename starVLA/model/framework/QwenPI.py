@@ -32,6 +32,7 @@ from starVLA.training.trainer_utils.trainer_tools import resize_images
 ####################################################
 
 
+@FRAMEWORK_REGISTRY.register("QwenFM")
 @FRAMEWORK_REGISTRY.register("QwenPI")
 class Qwen_PI(baseframework):
     """

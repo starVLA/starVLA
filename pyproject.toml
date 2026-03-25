@@ -47,23 +47,36 @@ sagemaker = [
 where = ["."]
 exclude = [
     "tests",         # test directory
+    "tests.*",
     "cache",         # cache directory
-    "playground",
+    "cache.*",
+    "playground",    # playground directory (contains symlinks to Datasets, Models)
+    "playground.*",
     "results",       # result directory
+    "results.*",
     "checkpoints",   # model checkpoint
+    "checkpoints.*",
     "scripts",       # script directory
+    "scripts.*",
     "eval",          # evaluation related directory
+    "eval.*",
+    "assets",        # assets directory
+    "assets.*",
+    "**bar**",           # bar directory
+    "bar.*",
+    "examples",      # examples directory
+    "examples.*",
+    "deployment",    # deployment directory
+    "deployment.*",
     ".vscode",       # VS Code configuration directory
     "*.egg-info",    # egg-info metadata directory
-    "**.log",         # log file
-    "*.tmp",         # temporary file
-    "*.bak",         # backup file
     "**__pycache__**",   # Python cache directory
     "*.pyc",         # compiled Python file
-    "*.pyo",          # optimized Python file
-    "**bar**",
-    "starVLA/config",
-
+    "*.pyo",         # optimized Python file
+    "starVLA.egg-info",
+    "starVLA.egg-info.*",
+    "starVLA.config",
+    "starVLA.config.*",
 ]
 
 [tool.setuptools.package-data]
