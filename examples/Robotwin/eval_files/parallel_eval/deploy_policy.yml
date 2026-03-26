@@ -1,0 +1,14 @@
+policy_name: starVLA
+task_name: null
+task_config: null
+ckpt_setting: null
+seed: null
+log_path: null
+instruction_type: unseen
+test_num: null
+
+host: "127.0.0.1"
+port: 5694
+policy_ckpt_path: "path_to_checkpoint"
+unnorm_key: "robotwin"
+action_mode: "abs"

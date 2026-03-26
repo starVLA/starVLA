@@ -245,3 +245,6 @@ turn_switch
 ```
 
 and all modes include `demo_clean` and `demo_randomized`.
+
+
+We provide a script at `./parallel_eval/eval_notebook.sh` for the parallel evaluation of RoboTwin 2.0. Please modify it to fit your environment.
