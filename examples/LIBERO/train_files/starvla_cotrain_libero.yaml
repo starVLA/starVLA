@@ -13,37 +13,6 @@ framework:
     base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct
     attn_implementation: flash_attention_2
     vl_hidden_dim: 2048
-  dino:
-    dino_backbone: dinov2_vits14
-  action_model:
-    action_model_type: DiT-B
-    action_hidden_dim: 1024     # TODO merge with hidden_size, in config v2
-    hidden_size: 1024     
-    add_pos_embed: True
-    max_seq_len: 1024
-    action_dim: 7
-    state_dim: 7
-    future_action_window_size: 7
-    action_horizon: 8 # need merge with future_action_window_size 
-    past_action_window_size: 0
-    repeated_diffusion_steps: 8
-    noise_beta_alpha: 1.5
-    noise_beta_beta: 1.0
-    noise_s: 0.999
-    num_timestep_buckets: 1000
-    num_inference_timesteps: 4
-    num_target_vision_tokens: 32
-    diffusion_model_cfg:    # DiT Transformers 的参数
-      cross_attention_dim: 2048 # VLM 的 dim
-      dropout: 0.2
-      final_dropout: true
-      interleave_self_attention: true
-      norm_type: "ada_norm"
-      num_layers: 16
-      output_dim: 1024
-      positional_embeddings: null
-
-  reduce_in_full_precision: true
 
 
 datasets:

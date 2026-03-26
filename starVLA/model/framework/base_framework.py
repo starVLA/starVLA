@@ -184,24 +184,3 @@ class baseframework(PreTrainedModel):
         FrameworkModel = FrameworkModel
         return FrameworkModel
 
-    # ------------------------------------------------------------------
-    # Delegated utility helpers (canonical implementations live in
-    # ``starVLA.model.tools.FrameworkTools``; these thin wrappers keep
-    # backward-compatible ``model.xxx()`` call-sites working).
-    # New code should prefer ``FrameworkTools.xxx()`` directly.
-    # ------------------------------------------------------------------
-    # TODO 后面在考虑重构到其他地方
-    # # re-export as static so old callers like  baseframework._check_unnorm_key(...)  still work
-    # _check_unnorm_key = staticmethod(FrameworkTools.check_unnorm_key)
-    # unnormalize_actions = staticmethod(FrameworkTools.unnormalize_actions)
-
-    # def get_action_stats(self, unnorm_key=None):
-    #     """Shortcut: calls ``FrameworkTools.get_action_stats(self.norm_stats, unnorm_key)``."""
-    #     return FrameworkTools.get_action_stats(self.norm_stats, unnorm_key)
-
-    # @property
-    # def trainable_module_keys(self) -> List[str]:
-    #     """Shortcut: calls ``FrameworkTools.get_trainable_module_keys(self)``."""
-    #     return FrameworkTools.get_trainable_module_keys(self)
-
-

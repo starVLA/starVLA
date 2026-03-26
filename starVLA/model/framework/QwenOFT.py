@@ -88,9 +88,6 @@ class QwenOFTDefaultConfig:
     #  Set to [H, W] to resize; None = keep original resolution
     obs_image_size: Optional[list] = None
 
-    # # === Training precision flag ===
-    # reduce_in_full_precision: bool = True
-
 
 @FRAMEWORK_REGISTRY.register("QwenOFT")
 class Qwenvl_OFT(baseframework):
