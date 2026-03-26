@@ -8,6 +8,7 @@ if str(_workspace_root) not in sys.path:
 import os
 
 CHECKPOINT_BASEDIR = os.getenv("CHECKPOINT_BASEDIR", None)
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -25,19 +26,78 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.AML_ActionHeader import FlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.tools import FRAMEWORK_REGISTRY, CrossAttention, preprocess_images
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for ABot_M0
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class ABot_M0DefaultConfig:
+    """ABot_M0 framework default parameters.
+
+    Qwen-VL + VGGT spatial geometry backbone + Action Manifold Learning
+    flow-matching head.  All fields can be overridden by the corresponding
+    key in the YAML ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "ABot_M0"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === Action head (AML Flow-matching) ===
+    action_model: dict = field(default_factory=lambda: {
+        "action_model_type": "DiT-B",
+        "action_hidden_dim": 1024,
+        "hidden_size": 1024,
+        "add_pos_embed": True,
+        "max_seq_len": 1024,
+        "action_dim": 14,
+        "state_dim": 14,
+        "future_action_window_size": 15,
+        "action_horizon": 16,
+        "past_action_window_size": 0,
+        "repeated_diffusion_steps": 4,
+        "num_inference_timesteps": 4,
+        "diffusion_model_cfg": {
+            "cross_attention_dim": 2048,
+            "dropout": 0.2,
+            "final_dropout": True,
+            "interleave_self_attention": True,
+            "norm_type": "ada_norm",
+            "num_layers": 16,
+            "output_dim": 1024,
+            "positional_embeddings": None,
+        },
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+
 @FRAMEWORK_REGISTRY.register("ABot_M0")
 class ABot_M0(baseframework):
     """
-    - Optional spatial geometry backbone: VGGT
-    - Action Expert for Action Manifold Learning
-    - Significantly outperforms GR00T when predicting a large action dimension (action_dim * action_chunk) in a single forward pass
-    - For the full paper, see: https://github.com/amap-cvlab/ABot-Manipulation
+    ABot-M0: Vision-Language-Action model with spatial geometry.
+
+    Components:
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - VGGT spatial geometry backbone for 3D scene understanding
+      - Action Manifold Learning flow-matching head for large action-dim prediction
+
+    Focus: Predict future continuous actions conditioned on images + instruction,
+    significantly outperforms GR00T on large action_dim * action_chunk.
     """
 
     def __init__(
@@ -53,17 +113,18 @@ class ABot_M0(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(ABot_M0DefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
-        # align dims --> we should put them to config or no?
+        # align cross_attention_dim to VLM hidden_size at runtime
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
             self.qwen_vl_interface.model.config.hidden_size
         )
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
         # optional, TODO: pip install -e path_to_vggt (https://github.com/facebookresearch/vggt)

@@ -20,6 +20,7 @@ Note: How to add special tokens to Qwen2.5:
 
 """
 
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -38,21 +39,68 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.MLP_ActionHeader import get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenOFT
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenOFTDefaultConfig:
+    """QwenOFT framework default parameters.
+
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.  Extra YAML keys not listed here are kept
+    as-is (Config-as-API flexibility).
+    """
+
+    # --- Registry identifier (must match @FRAMEWORK_REGISTRY.register) ---
+    name: str = "QwenOFT"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        # Path to base VLM checkpoint (local or HF hub id)
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === Action head (MLP regression over action special tokens) ===
+    action_model: dict = field(default_factory=lambda: {
+        # Action head architecture type
+        "action_model_type": "MLP",
+        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+        "action_dim": 7,
+        # Hidden dim for the action MLP (auto-set from VLM hidden_size at runtime)
+        "action_hidden_dim": 2560,
+        # How many future steps to predict
+        "future_action_window_size": 15,
+        # How many past steps included in action chunk (usually 0)
+        "past_action_window_size": 0,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    #  Set to [H, W] to resize; None = keep original resolution
+    obs_image_size: Optional[list] = None
+
+    # # === Training precision flag ===
+    # reduce_in_full_precision: bool = True
+
+
 @FRAMEWORK_REGISTRY.register("QwenOFT")
 class Qwenvl_OFT(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (OFT variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
-      - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
-      - DiT diffusion head for future action sequence modeling
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - Action special token injected into the VLM sequence
+      - MLP regression head over action token hidden states (L1 loss)
 
     Focus: Predict future continuous actions conditioned on images + instruction.
     """
@@ -70,14 +118,15 @@ class Qwenvl_OFT(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenOFTDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
-        # align dims --> we should put them to config or no?
-        config.framework.action_model.action_hidden_dim = self.qwen_vl_interface.model.config.hidden_size
+        # align action_hidden_dim to VLM hidden_size at runtime
+        self.config.framework.action_model.action_hidden_dim = self.qwen_vl_interface.model.config.hidden_size
         self.action_model = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
         # self.hidden_dim = config.framework.action_model.action_hidden_dim
 
@@ -161,7 +210,6 @@ class Qwenvl_OFT(baseframework):
         **kwargs: str,
     ) -> np.ndarray:
         """
-        推理：单次前向直接回归未来动作（无扩散采样）。
 
         Steps:
           1. Resize images to training resolution (if specified)

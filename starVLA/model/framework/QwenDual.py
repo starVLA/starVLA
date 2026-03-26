@@ -8,6 +8,7 @@ A lightweight implementation that Qwen2.5-vl + dinov2 + Flow-matching head to di
 Flow-matching header is copyright from GR00T N1.5
 """
 
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -26,22 +27,84 @@ IGNORE_INDEX = -100
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.GR00T_ActionHeader import FlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenDual
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenDualDefaultConfig:
+    """QwenDual framework default parameters.
+
+    Qwen-VL + DINOv2 + Flow-matching (DiT) action head.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "QwenDual"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === DINO encoder (multi-view spatial tokens) ===
+    dino: dict = field(default_factory=lambda: {
+        # DINO backbone variant: "dinov2_vits14" | "dinov2_vitb14" | ...
+        "dino_backbone": "dinov2_vits14",
+    })
+
+    # === Action head (Flow-matching / DiT diffusion) ===
+    action_model: dict = field(default_factory=lambda: {
+        "action_model_type": "DiT-B",
+        "action_hidden_dim": 1024,
+        "hidden_size": 1024,
+        "add_pos_embed": True,
+        "max_seq_len": 1024,
+        "action_dim": 7,
+        "state_dim": 7,
+        "future_action_window_size": 7,
+        "action_horizon": 8,
+        "past_action_window_size": 0,
+        "repeated_diffusion_steps": 8,
+        # Layer index to connect VLM hidden states to action head (-1 = last layer)
+        "connect_layer_index": -1,
+        # Inference denoising steps
+        "num_inference_timesteps": 4,
+        "diffusion_model_cfg": {
+            "cross_attention_dim": 2048,
+            "dropout": 0.2,
+            "final_dropout": True,
+            "interleave_self_attention": True,
+            "norm_type": "ada_norm",
+            "num_layers": 16,
+            "output_dim": 1024,
+            "positional_embeddings": None,
+        },
+    })
+
+    # === Observation image size (resize before encoding) ===
+    obs_image_size: Optional[list] = field(default_factory=lambda: [224, 224])
+
+
 @FRAMEWORK_REGISTRY.register("QwenDual")
 class Qwen_Dual(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (Dual variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
-      - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
-      - DiT diffusion head for future action sequence modeling
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - DINOv2 encoder for dense multi-view spatial tokens
+      - Flow-matching (DiT) diffusion head for continuous action sequence modeling
 
     Focus: Predict future continuous actions conditioned on images + instruction.
     """
@@ -59,14 +122,15 @@ class Qwen_Dual(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenDualDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
-        # align dims --> we should put them to config or no?
+        # align cross_attention_dim to VLM hidden_size at runtime
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
             self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)  # 修复后续引用
+        self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
         self.dino_encoder = get_dino_model(
             backone_name=getattr(self.config.framework.dino, "dino_backbone", "dinov2_vits14")
@@ -75,8 +139,8 @@ class Qwen_Dual(baseframework):
             in_features=self.dino_encoder.num_channels, out_features=self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
     def forward(

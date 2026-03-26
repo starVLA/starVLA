@@ -16,6 +16,7 @@ _workspace_root = Path(__file__).parent.parent.parent.parent
 if str(_workspace_root) not in sys.path:
     sys.path.insert(0, str(_workspace_root))
 
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -32,22 +33,107 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.GR00T_ActionHeader import FlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenGR00T
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenGR00TDefaultConfig:
+    """QwenGR00T framework default parameters.
+
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.  Extra YAML keys not listed here are kept
+    as-is (Config-as-API flexibility).
+    """
+
+    # --- Registry identifier ---
+    name: str = "QwenGR00T"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        # Path to base VLM checkpoint (local or HF hub id)
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+        "attn_implementation": "flash_attention_2",
+        # VLM hidden dimension (used for cross-attention alignment)
+        "vl_hidden_dim": 2048,
+    })
+
+    # # === DINO encoder (optional multi-view spatial tokens) === Dino is not used in this QwenGR00T version, we can add it later when we want to use it
+    # dino: dict = field(default_factory=lambda: {
+    #     # DINO backbone variant: "dinov2_vits14" | "dinov2_vitb14" | ...
+    #     "dino_backbone": "dinov2_vits14",
+    # })
+
+    # === Action head (Flow-matching / DiT diffusion) ===
+    action_model: dict = field(default_factory=lambda: {
+        # DiT model size: "DiT-B" | "DiT-L" | "DiT-XL"
+        "action_model_type": "DiT-B",
+        # Hidden dim for action model (auto-aligned at runtime)
+        "action_hidden_dim": 1024,
+        "hidden_size": 1024,
+        # Whether to add positional embeddings in the action head
+        "add_pos_embed": True,
+        "max_seq_len": 1024,
+        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+        "action_dim": 7,
+        # State dimension (proprioception input)
+        "state_dim": 7,
+        # How many future steps to predict
+        "future_action_window_size": 7,
+        # Alias for future_action_window_size + 1 (to be unified)
+        "action_horizon": 8,
+        # How many past steps included in action chunk
+        "past_action_window_size": 0,
+        # Repeat factor for flow-matching loss (more noise samples per batch)
+        "repeated_diffusion_steps": 8,
+        # Beta distribution params for noise schedule
+        "noise_beta_alpha": 1.5,
+        "noise_beta_beta": 1.0,
+        "noise_s": 0.999,
+        "num_timestep_buckets": 1000,
+        # Inference denoising steps
+        "num_inference_timesteps": 4,
+        # Number of vision tokens fed to action head
+        "num_target_vision_tokens": 32,
+        # === DiT Transformer sub-config ===
+        "diffusion_model_cfg": {
+            # Cross-attention dim (aligned to VLM hidden_size at runtime)
+            "cross_attention_dim": 2048,
+            "dropout": 0.2,
+            "final_dropout": True,
+            "interleave_self_attention": True,
+            "norm_type": "ada_norm",
+            "num_layers": 16,
+            "output_dim": 1024,
+            "positional_embeddings": None,
+        },
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+    # # === Training precision flag === 这个是不需要的，没有用的参数
+    # reduce_in_full_precision: bool = True
+
+
+
 @FRAMEWORK_REGISTRY.register("QwenGR00T")
 class Qwen_GR00T(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (GR00T variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
-      - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
-      - DiT diffusion head for future action sequence modeling
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - Flow-matching (DiT) diffusion head for continuous action sequence modeling
 
     Focus: Predict future continuous actions conditioned on images + instruction.
     """
@@ -65,17 +151,18 @@ class Qwen_GR00T(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenGR00TDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         # align dims --> we should put them to config or no?
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
             self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)  # 修复后续引用
+        self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
     def forward(

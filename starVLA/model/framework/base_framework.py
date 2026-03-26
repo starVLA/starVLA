@@ -37,7 +37,7 @@ def _auto_import_framework_modules() -> None:
     _FRAMEWORKS_IMPORTED = True
 
 
-def build_framework(cfg):
+def build_framework(cfg): # 这格式构建不同模型等唯一入口
     """
     Build a framework model from config.
     Args:

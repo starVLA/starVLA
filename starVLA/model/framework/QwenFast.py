@@ -17,6 +17,7 @@ Note: How to add special tokens to Qwen2.5:
   download our model checkpoint with special tokens added: https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action
 """
 
+from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
 import numpy as np
@@ -34,20 +35,61 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.fast_ActionHeader import get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenFast
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenFastDefaultConfig:
+    """QwenFast framework default parameters.
+
+    Autoregressive discrete action prediction via FAST tokenizer.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "QwenFast"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL with action special tokens) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        # Path to base VLM checkpoint (must include FAST action tokens)
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === Action head (FAST tokenizer — discrete next-token prediction) ===
+    action_model: dict = field(default_factory=lambda: {
+        # Action head architecture type
+        "action_model_type": "FAST",
+        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+        "action_dim": 7,
+        # How many future steps to predict
+        "future_action_window_size": 15,
+        # How many past steps included in action chunk (usually 0)
+        "past_action_window_size": 0,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
 
 
 @FRAMEWORK_REGISTRY.register("QwenFast")
 class Qwenvl_Fast(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (FAST variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
-      - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
-      - DiT diffusion head for future action sequence modeling
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - FAST tokenizer for discretized / symbolized continuous action encoding
+      - Autoregressive next-token prediction over action tokens
 
     Focus: Predict future continuous actions conditioned on images + instruction.
     """
@@ -65,12 +107,13 @@ class Qwenvl_Fast(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenFastDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.action_model = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
         # self.hidden_dim = config.framework.action_model.action_hidden_dim
 

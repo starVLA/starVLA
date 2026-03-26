@@ -11,6 +11,7 @@ Vision-Language-Action diffusion model integrating:
 Primary goal: predict continuous future actions conditioned on multi-view images + instruction.
 """
 
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -28,6 +29,7 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.DiTActionHeader import get_action_model
 from starVLA.model.modules.dino_model.dino import get_dino_model
 from starVLA.model.modules.projector.QFormer import get_layerwise_qformer
@@ -35,15 +37,64 @@ from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for InternVLA-M1
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class InternVLA_M1DefaultConfig:
+    """InternVLA-M1 framework default parameters.
+
+    VLM + Layer-wise QFormer + DINO + DiT diffusion head.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "InternVLA-M1"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === DINO encoder (multi-view spatial tokens) ===
+    dino: dict = field(default_factory=lambda: {
+        "dino_backbone": "dinov2_vits14",
+    })
+
+    # === Layer-wise QFormer (multi-layer feature aggregation) ===
+    layer_qformer: dict = field(default_factory=lambda: {
+        # Start layer index for QFormer (inclusive)
+        "qformer_start_layer": 20,
+        # End layer index for QFormer (exclusive)
+        "qformer_end_layer": 36,
+    })
+
+    # === Action head (DiT diffusion) ===
+    action_model: dict = field(default_factory=lambda: {
+        "action_model_type": "DiT-B",
+        "action_dim": 7,
+        "future_action_window_size": 15,
+        "past_action_window_size": 0,
+        "repeated_diffusion_steps": 4,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+
 @FRAMEWORK_REGISTRY.register("InternVLA-M1")
 class InternVLA_M1(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (M1 variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
       - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
+      - DINOv2 encoder for dense multi-view spatial tokens
       - DiT diffusion head for future action sequence modeling
 
     Focus: Predict future continuous actions conditioned on images + instruction.
@@ -62,7 +113,8 @@ class InternVLA_M1(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(InternVLA_M1DefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.layer_qformer = get_layerwise_qformer(config=self.config)
         self.action_model = get_action_model(config=self.config)
@@ -73,8 +125,8 @@ class InternVLA_M1(baseframework):
             in_features=self.dino_encoder.num_channels, out_features=self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
 
     def forward(
         self,

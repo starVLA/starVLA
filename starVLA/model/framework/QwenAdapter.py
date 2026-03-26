@@ -8,6 +8,7 @@ A lightweight implementation that Qwen-VL + Adapter Action head to directly pred
 Action head is copyright from VLA-Adapter,
 """
 
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -24,6 +25,7 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.VLA_AdapterHeader import VLA_Adapter_L1RegressionActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.modules.vlm.QWen3 import IMAGE_TOKEN_INDEX
@@ -68,13 +70,67 @@ class ProprioProjector(nn.Module):
 
 
 # Only support for Qwen2.5 now @ PR 60
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenAdapter
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenAdapterDefaultConfig:
+    """QwenAdapter framework default parameters.
+
+    VLA-Adapter style action prediction: injects learnable action query
+    tokens into VLM sequence and uses an adapter head for L1 regression.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "QwenAdapter"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        # Path to base VLM checkpoint (local or HF hub id)
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+        "attn_implementation": "flash_attention_2",
+        # VLM hidden dimension (auto-set at runtime)
+        "vl_hidden_dim": 2048,
+    })
+
+    # === Action head (VLA-Adapter L1 regression) ===
+    action_model: dict = field(default_factory=lambda: {
+        # Action head architecture type
+        "action_model_type": "VLA_Adapter",
+        # Current phase: "Training" | "Inference"
+        "phase": "Training",
+        # Number of learnable action query tokens injected into VLM
+        "action_query_num": 64,
+        # Output number of action chunks
+        "num_actions_chunk": 16,
+        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+        "action_dim": 7,
+        # Whether to use proprioceptive state input
+        "use_proprio": False,
+        # State dimension (proprioception input, used when use_proprio=True)
+        "state_dim": 14,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+
 @FRAMEWORK_REGISTRY.register("QwenAdapter")
 class Qwen_Adapter(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (Adapter variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - Learnable action query tokens injected into VLM sequence
+      - VLA-Adapter head for L1 regression over extracted action hidden states
 
     Focus: Predict future continuous actions conditioned on images + instruction.
     """
@@ -92,7 +148,8 @@ class Qwen_Adapter(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenAdapterDefaultConfig, config)
         self.phase = self.config.framework.action_model.get("phase", "Training")
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.config.framework.qwenvl.vl_hidden_dim = self.qwen_vl_interface.model.config.hidden_size

@@ -20,6 +20,7 @@ _workspace_root = Path(__file__).parent.parent.parent.parent
 if str(_workspace_root) not in sys.path:
     sys.path.insert(0, str(_workspace_root))
 
+from dataclasses import dataclass, field
 from typing import List, Optional, Set
 
 import numpy as np
@@ -45,10 +46,88 @@ IM_START_TOKEN_INDEX = 151644  # <|im_start|>
 IM_END_TOKEN_INDEX = 151645  # <|im_end|>
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.GR00T_ActionHeader import FlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils.trainer_tools import resize_images
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for LangForce
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class LangForceDefaultConfig:
+    """LangForce framework default parameters.
+
+    Dual-branch VLA with Bayesian decomposition:
+      - Prior branch (V + A + L) and posterior branch (V + L + A)
+      - LLR regularizer with optional hard-token/gate mechanisms
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "LangForce"
+
+    # === VLM backbone (Qwen3-VL with latent action query tokens) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        "attn_implementation": "flash_attention_2",
+        # Number of latent action query tokens injected
+        "num_latent_action_query": 32,
+    })
+
+    # === Action head (Flow-matching / DiT diffusion) ===
+    action_model: dict = field(default_factory=lambda: {
+        "action_model_type": "DiT-B",
+        "action_hidden_dim": 1024,
+        "hidden_size": 1024,
+        "add_pos_embed": True,
+        "max_seq_len": 1024,
+        "action_dim": 7,
+        "state_dim": 7,
+        "future_action_window_size": 7,
+        "action_horizon": 8,
+        "past_action_window_size": 0,
+        "repeated_diffusion_steps": 4,
+        "num_inference_timesteps": 4,
+        "diffusion_model_cfg": {
+            "cross_attention_dim": 2048,
+            "dropout": 0.2,
+            "final_dropout": True,
+            "interleave_self_attention": True,
+            "norm_type": "ada_norm",
+            "num_layers": 16,
+            "output_dim": 1024,
+            "positional_embeddings": None,
+        },
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+    # === LangForce-specific loss / regularizer weights ===
+    # KL weight: maximize LLR via -kl_weight * kl_loss
+    kl_weight: float = 0.1
+    # Weight for prior branch flow-matching loss
+    prior_loss_weight: float = 0.3
+    # Whether to assert language span token-level match between prior/post
+    assert_lang_span_match: bool = True
+    # Whether to detach prior condition (prevent vision-only drift)
+    detach_prior_cond: bool = True
+    # Hard-token LLR: use top-k hardest tokens under posterior
+    use_hard_token_llr: bool = False
+    hard_token_k: int = 16
+    # Shortcut gate: down-weight LLR when log p(L|V) is already low
+    use_kl_gate: bool = False
+    kl_gate_momentum: float = 0.99
+    kl_gate_temp: float = 0.5
+    kl_gate_tau_scale: float = 0.7
+    kl_gate_min: float = 0.0
+    kl_gate_max: float = 1.0
 
 
 @FRAMEWORK_REGISTRY.register("LangForce")
@@ -78,10 +157,11 @@ class LangForce(baseframework):
         **kwargs,
     ) -> None:
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(LangForceDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
 
-        # align dims --> should go into config ideally
+        # align cross_attention_dim to VLM hidden_size at runtime
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
             self.qwen_vl_interface.model.config.hidden_size
         )
@@ -92,8 +172,8 @@ class LangForce(baseframework):
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
         # ===== Loss weights =====
