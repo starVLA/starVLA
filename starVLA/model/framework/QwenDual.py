@@ -117,7 +117,9 @@ class Qwen_Dual(baseframework):
 
             # repeate for efficient training
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
             last_hidden_repeated = last_hidden.repeat(repeated_diffusion_steps, 1, 1)
@@ -167,7 +169,7 @@ class Qwen_Dual(baseframework):
         instructions = [example["lang"] for example in examples]  # [B, str]
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", [224, 224])
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", [224, 224])
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         if train_obs_image_size and wrist_views is not None:
@@ -212,7 +214,6 @@ class Qwen_Dual(baseframework):
 if __name__ == "__main__":
     import argparse
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -224,9 +225,13 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
 
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
@@ -236,7 +241,8 @@ if __name__ == "__main__":
     # cfg.datasets.vla_data.include_state = True
 
     cfg.framework.action_model.action_hidden_dim = 2048
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
+    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
+    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct"
 
     model: Qwen_Dual = Qwen_Dual(cfg)
     print(model)
@@ -270,35 +276,21 @@ if __name__ == "__main__":
 
     # # Advance: try forward model with dataloader
     # # can be fake sample， but here get from dataloader for simpler
-    from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
-
-    vla_dataset_cfg = cfg.datasets.vla_data
-    # vla_dataset_cfg.include_state = True
-    # vla_dataset_cfg.data_mix = "BEHAVIOR_challenge"
-    # vla_dataset_cfg.data_mix = "BEHAVIOR_rgp_dual_history"
-    vla_dataset_cfg.task_id = 40
-    vla_dataset_cfg.video_backend = "torchvision_av"
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
-    from torch.utils.data import DataLoader
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,  # For Debug
-        collate_fn=collate_fn,
-    )
-    #
-    count = 0
-    for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        batch
-        count += 1
-        if count > 1:
-            break
-
-    # try get model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    model(batch)
-
-    action = model.predict_action(examples=[sample])  # , state=[batch[0]["state"]]
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # vla_dataset_cfg.task_id = 40
+    # vla_dataset_cfg.video_backend = "torchvision_av"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # from torch.utils.data import DataLoader
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # count = 0
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     batch
+    #     count += 1
+    #     if count > 1:
+    #         break
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = model.to(device)
+    # model(batch)
+    # action = model.predict_action(examples=[sample])
+    print("Finished")

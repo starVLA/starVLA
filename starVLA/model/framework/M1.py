@@ -150,7 +150,9 @@ class InternVLA_M1(baseframework):
 
             # tips: Repeat 'actions' 'repeated_diffusion_steps' times, resulting in [repeated_diffusion_steps*B, T, D]
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
             actions_repeated = actions_future.repeat(repeated_diffusion_steps, 1, 1)
             action_condition = action_condition.repeat(
@@ -168,14 +170,12 @@ class InternVLA_M1(baseframework):
     @torch.inference_mode()
     def predict_action(
         self,
-        batch_images: List[List[Image.Image]],  # B * List of PIL Image as [view1, view2]
-        instructions: List[str],
+        examples: List[dict],
         cfg_scale: float = 1.5,
         use_ddim: bool = True,
         num_ddim_steps: int = 5,
-        resize_image=[224, 224],
         **kwargs: str,
-    ) -> np.ndarray:
+    ) -> dict:
         """
         Inference: generate future normalized action sequence via diffusion sampling.
 
@@ -188,8 +188,7 @@ class InternVLA_M1(baseframework):
           6. Return normalized action trajectory
 
         Args:
-            batch_images: List of samples; each sample is List[PIL.Image] (multi-view).
-            instructions: List[str] natural language task instructions.
+            examples: List[dict], each dict has "image" (PIL.Image or list) and "lang" (str).
             cfg_scale: >1 enables classifier-free guidance (scales conditional vs unconditional).
             use_ddim: Whether to use DDIM deterministic sampling.
             num_ddim_steps: Number of DDIM steps if enabled.
@@ -199,8 +198,13 @@ class InternVLA_M1(baseframework):
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
-        # align obs and lang # is policy's duty to make sure the image size?
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        if not isinstance(examples, list):
+            examples = [examples]
+        batch_images = [example["image"] if isinstance(example["image"], list) else [example["image"]] for example in examples]
+        instructions = [example["lang"] for example in examples]
+
+        # align obs and lang
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         instructions = [instruction.lower() for instruction in instructions]
@@ -346,7 +350,6 @@ class InternVLA_M1(baseframework):
 if __name__ == "__main__":
     import argparse
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -358,9 +361,13 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
 
     cfg = OmegaConf.load(args.config_yaml)
 
@@ -386,7 +393,7 @@ if __name__ == "__main__":
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
-    predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
+    predict_output = model.predict_action(examples=[batch[0]])
     normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
 
@@ -419,3 +426,4 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # model = model.to(device)
     # model(batch)
+    print("Finished")

@@ -64,10 +64,6 @@ exclude = [
     "assets.*",
     "**bar**",           # bar directory
     "bar.*",
-    "examples",      # examples directory
-    "examples.*",
-    "deployment",    # deployment directory
-    "deployment.*",
     ".vscode",       # VS Code configuration directory
     "*.egg-info",    # egg-info metadata directory
     "**__pycache__**",   # Python cache directory

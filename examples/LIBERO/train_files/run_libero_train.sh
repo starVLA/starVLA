@@ -74,7 +74,7 @@ mkdir -p ${output_dir}
 cp $0 ${output_dir}/
 
 num_processes=${NUM_PROCESSES:-$(nvidia-smi -L | wc -l)}
-per_device_batch_size=${PER_DEVICE_BATCH_SIZE:-16}
+per_device_batch_size=${PER_DEVICE_BATCH_SIZE:-8}
 attn_implementation=${ATTN_IMPLEMENTATION:-sdpa}
 accelerate_config_file=${ACCELERATE_CONFIG_FILE:-starVLA/config/deepseeds/deepspeed_zero2.yaml}
 

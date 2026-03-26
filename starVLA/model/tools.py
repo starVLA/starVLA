@@ -149,6 +149,7 @@ import json
 import os
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -163,45 +164,112 @@ overwatch = initialize_overwatch(__name__)
 
 
 def read_mode_config(pretrained_checkpoint):
+    """Re-export from share_tools — canonical version lives in starVLA.model.framework.share_tools."""
+    from starVLA.model.framework.share_tools import read_mode_config as _read_mode_config
+
+    return _read_mode_config(pretrained_checkpoint)
+
+
+class FrameworkTools:
+    """Model-agnostic utility helpers for action (un)normalization and trainable-module discovery.
+
+    These are pure functions / static methods that do NOT depend on any model state.
+    ``baseframework`` holds a class-level reference so that legacy call-sites like
+    ``model.unnormalize_actions(...)`` keep working, but new code should prefer::
+
+        from starVLA.model.tools import FrameworkTools
+        actions = FrameworkTools.unnormalize_actions(norm_actions, stats)
     """
-    Same as read_model_config (legacy duplicate kept for backward compatibility).
 
-    Args:
-        pretrained_checkpoint: Path to a .pt checkpoint file.
+    @staticmethod
+    def check_unnorm_key(norm_stats: dict, unnorm_key: str | None) -> str:
+        """Infer or validate the dataset stats key used for un-normalization.
 
-    Returns:
-        tuple:
-            vla_cfg (dict)
-            norm_stats (dict)
-    """
-    if os.path.isfile(pretrained_checkpoint):
-        overwatch.info(f"Loading from local checkpoint path `{(checkpoint_pt := Path(pretrained_checkpoint))}`")
+        Args:
+            norm_stats: ``{dataset_key: stats_block}`` mapping.
+            unnorm_key: Explicit key, or ``None`` to auto-resolve (only when single dataset).
 
-        # [Validate] Checkpoint Path should look like `.../<RUN_ID>/checkpoints/<CHECKPOINT_PATH>.pt`
-        assert checkpoint_pt.suffix == ".pt"
-        run_dir = checkpoint_pt.parents[1]
+        Returns:
+            Resolved dataset key.
 
-        # Get paths for `config.json`, `dataset_statistics.json` and pretrained checkpoint
-        config_yaml, dataset_statistics_json = run_dir / "config.yaml", run_dir / "dataset_statistics.json"
-        assert config_yaml.exists(), f"Missing `config.yaml` for `{run_dir}`"
-        assert dataset_statistics_json.exists(), f"Missing `dataset_statistics.json` for `{run_dir}`"
+        Raises:
+            AssertionError: If ambiguous (multiple datasets without key) or key not found.
+        """
+        if unnorm_key is None:
+            assert len(norm_stats) == 1, (
+                f"Your model was trained on more than one dataset, "
+                f"please pass a `unnorm_key` from the following options to choose the statistics "
+                f"used for un-normalizing actions: {norm_stats.keys()}"
+            )
+            unnorm_key = next(iter(norm_stats.keys()))
 
-        # Otherwise =>> try looking for a match on `model_id_or_path` on the HF Hub (`model_id_or_path`)
-        # Load VLA Config (and corresponding base VLM `ModelConfig`) from `config.json`
-        try:
-            ocfg = OmegaConf.load(str(config_yaml))
-            global_cfg = OmegaConf.to_container(ocfg, resolve=True)
-        except Exception as e:
-            overwatch.error(f"❌ Failed to load YAML config `{config_yaml}`: {e}")
-            raise
+        assert unnorm_key in norm_stats, (
+            f"The `unnorm_key` you chose is not in the set of available dataset statistics, "
+            f"please choose from: {norm_stats.keys()}"
+        )
+        return unnorm_key
 
-        # Load Dataset Statistics for Action Denormalization
-        with open(dataset_statistics_json, "r") as f:
-            norm_stats = json.load(f)
-    else:
-        overwatch.error(f"❌ Pretrained checkpoint `{pretrained_checkpoint}` does not exist.")
-        raise FileNotFoundError(f"Pretrained checkpoint `{pretrained_checkpoint}` does not exist.")
-    return global_cfg, norm_stats
+    @staticmethod
+    def get_action_stats(norm_stats: dict, unnorm_key: str | None = None) -> dict:
+        """Retrieve raw action normalization statistics for a dataset.
+
+        Args:
+            norm_stats: Full norm-stats dict (loaded from ``dataset_statistics.json``).
+            unnorm_key: Optional dataset key; auto-resolved when single dataset.
+
+        Returns:
+            Stats sub-dict (e.g. ``{"q01": ..., "q99": ..., "mask": ...}``).
+        """
+        unnorm_key = FrameworkTools.check_unnorm_key(norm_stats, unnorm_key)
+        return norm_stats[unnorm_key]["action"]
+
+    @staticmethod
+    def unnormalize_actions(
+        normalized_actions: np.ndarray,
+        action_norm_stats: dict,
+        gripper_channel_idx: int = 6,
+    ) -> np.ndarray:
+        """Map normalized actions back to original value range.
+
+        Steps:
+            1. Clamp to [-1, 1]
+            2. Threshold gripper channel to binary {0, 1}
+            3. Linear rescale masked dims: ``original = 0.5*(norm+1)*(q99-q01) + q01``
+
+        Args:
+            normalized_actions: ``[T, action_dim]`` array.
+            action_norm_stats: Dict with ``q01``, ``q99``, optional ``mask``.
+            gripper_channel_idx: Which channel is the binary gripper (default 6 for 7-DoF).
+
+        Returns:
+            Unnormalized actions (same shape).
+        """
+        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
+        action_high, action_low = np.array(action_norm_stats["q99"]), np.array(action_norm_stats["q01"])
+        normalized_actions = np.clip(normalized_actions, -1, 1)
+        if 0 <= gripper_channel_idx < normalized_actions.shape[-1]:
+            normalized_actions[:, gripper_channel_idx] = np.where(
+                normalized_actions[:, gripper_channel_idx] < 0.5, 0, 1
+            )
+        actions = np.where(
+            mask,
+            0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
+            normalized_actions,
+        )
+        return actions
+
+    @staticmethod
+    def get_trainable_module_keys(model, max_depth: int = 1) -> list:
+        """Enumerate trainable sub-module names up to *max_depth*.
+
+        Args:
+            model: ``nn.Module`` instance.
+            max_depth: How deep to traverse the module tree.
+
+        Returns:
+            List of module-path strings considered trainable.
+        """
+        return auto_get_trainable_modules(model, max_depth=max_depth)
 
 
 class CrossAttention(nn.Module):

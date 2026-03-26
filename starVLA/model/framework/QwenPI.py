@@ -120,7 +120,9 @@ class Qwen_PI(baseframework):
             actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
 
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
             repeated_diffusion_steps = 2  # NO repeat for big action FM
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
@@ -164,7 +166,7 @@ class Qwen_PI(baseframework):
 
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -198,7 +200,6 @@ class Qwen_PI(baseframework):
 if __name__ == "__main__":
     import argparse
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -210,9 +211,13 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
 
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
@@ -278,3 +283,4 @@ if __name__ == "__main__":
 
     # model(batch)
     # action = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]], state=[batch[0]["state"]])
+    print("Finished")

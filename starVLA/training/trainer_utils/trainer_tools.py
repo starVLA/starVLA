@@ -185,7 +185,7 @@ class TrainerUtils:
                     continue
 
         # accelerator.wait_for_everyone()  # synchronize when distributed training
-        if dist.get_rank == 0:
+        if dist.get_rank() == 0:
             print(f"🔒 Frozen modules with re pattern: {frozen}")
         return model
 

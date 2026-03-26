@@ -482,7 +482,9 @@ class LangForce(baseframework):
             actions_target = actions_t[:, -(self.future_action_window_size + 1) :, :]  # [B, chunk_len, action_dim]
 
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
 
             state_tensor = None
@@ -546,7 +548,7 @@ class LangForce(baseframework):
         instructions_posteriori = [ex["lang"] + self.latent_action_query for ex in examples]
         state = [ex["state"] for ex in examples] if "state" in examples[0] else None
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -581,7 +583,6 @@ class LangForce(baseframework):
 if __name__ == "__main__":
     import argparse
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -590,11 +591,15 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
 
-    args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
+    # args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
     cfg = OmegaConf.load(args.config_yaml)
 
     model: LangForce = LangForce(cfg)
@@ -622,24 +627,14 @@ if __name__ == "__main__":
     pred = model.predict_action([sample])
     print("Pred shape:", pred["normalized_actions"].shape)
 
-    # optional dataloader test
-    vla_dataset_cfg = cfg.datasets.vla_data
-    from torch.utils.data import DataLoader
-
-    from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
-
-    cfg.datasets.vla_data.include_state = "False"
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,
-        collate_fn=collate_fn,
-    )
-
-    for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        model(batch)
-        break
-
+    # # optional dataloader test (requires data)
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # from torch.utils.data import DataLoader
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # cfg.datasets.vla_data.include_state = "False"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     model(batch)
+    #     break
     print("Finished")

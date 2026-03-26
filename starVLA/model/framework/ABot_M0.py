@@ -119,7 +119,9 @@ class ABot_M0(baseframework):
             actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
 
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
 
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
@@ -167,7 +169,7 @@ class ABot_M0(baseframework):
 
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -261,29 +263,17 @@ if __name__ == "__main__":
 
     # # Advance: try forward model with dataloader
     # # can be fake sample， but here get from dataloader for simpler
-    vla_dataset_cfg = cfg.datasets.vla_data
-    from torch.utils.data import DataLoader
-
-    from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
-
-    cfg.datasets.vla_data.include_state = "False"
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,  # For Debug
-        collate_fn=collate_fn,
-    )
-    #
-    for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        batch
-        break
-
-    # try get model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    model(batch)
-
-    action = model.predict_action(examples=batch)
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # from torch.utils.data import DataLoader
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # cfg.datasets.vla_data.include_state = "False"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     batch
+    #     break
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = model.to(device)
+    # model(batch)
+    # action = model.predict_action(examples=batch)
     print("Finished")

@@ -10,7 +10,7 @@ is_debug: false
 framework:
   name: QwenGR00T
   qwenvl:
-    base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct-Action
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct
     attn_implementation: flash_attention_2
     vl_hidden_dim: 2048
   dino:
@@ -62,7 +62,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
-    data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
+    data_root_dir: playground/Datasets/LIBERO
     data_mix: libero_all # libero_goal
     action_type: delta_qpos
     sequential_step_sampling: False

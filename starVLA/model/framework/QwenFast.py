@@ -229,7 +229,6 @@ class Qwenvl_Fast(baseframework):
 if __name__ == "__main__":
     import argparse
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -241,9 +240,14 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
+
     args.config_yaml = "./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action"
@@ -283,26 +287,17 @@ if __name__ == "__main__":
 
     # # test with dataloader
     # # can be fake sample， but here get from dataloader for simpler
-    from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
-
-    vla_dataset_cfg = cfg.datasets.vla_data
-    vla_dataset_cfg.video_backend = "torchvision_av"
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
-    from torch.utils.data import DataLoader
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,  # For Debug
-        collate_fn=collate_fn,
-    )
-
-    for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        batch
-        break
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    model(batch)
-    pass
-    action = model.predict_action(batch[0])
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # vla_dataset_cfg.video_backend = "torchvision_av"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # from torch.utils.data import DataLoader
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     batch
+    #     break
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = model.to(device)
+    # model(batch)
+    # action = model.predict_action(batch[0])
+    print("Finished")

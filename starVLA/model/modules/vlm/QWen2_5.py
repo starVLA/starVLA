@@ -80,6 +80,14 @@ class _QWen_VL_Interface(nn.Module):
         model_id = qwenvl_config.get("base_vlm", "Qwen/Qwen2.5-VL-3B-Instruct")
         attn_implementation = qwenvl_config.get("attn_implementation", "sdpa")
 
+        # Fallback to sdpa if flash_attention_2 is requested but flash_attn is not installed
+        if attn_implementation == "flash_attention_2":
+            try:
+                import flash_attn  # noqa: F401
+            except ImportError:
+                print("[WARNING] flash_attn not installed, falling back to sdpa")
+                attn_implementation = "sdpa"
+
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             model_id,
             attn_implementation=attn_implementation,

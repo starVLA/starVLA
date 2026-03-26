@@ -177,7 +177,7 @@ class Qwenvl_OFT(baseframework):
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -269,26 +269,29 @@ class Qwenvl_OFT(baseframework):
 if __name__ == "__main__":
     import argparse
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    # try:
+    #     import debugpy
+    #     debugpy.listen(("0.0.0.0", 10092))
+    #     print("Rank 0 waiting for debugger attach on port 10092...")
+    #     debugpy.wait_for_client()
+    # except (ImportError, RuntimeError):
+    #     pass
 
     cfg = OmegaConf.load(args.config_yaml)
-    cfg.framework.action_model.action_hidden_dim = 2048
+    cfg.framework.action_model.action_hidden_dim = 2560
 
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
+    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct"
 
     # try get model
     model = Qwenvl_OFT(cfg)
@@ -319,33 +322,26 @@ if __name__ == "__main__":
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
-    predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
+    predict_output = model.predict_action(examples=[batch[0]])
     normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
 
-    # try forward model
-    # can be fake sample， but here get from dataloader for simpler
+    # # try forward model with dataloader (requires data)
     from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
-
     vla_dataset_cfg = cfg.datasets.vla_data
     dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
     from torch.utils.data import DataLoader
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,  # For Debug
-        collate_fn=collate_fn,
-    )
-    # zhe
+    train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
     for batch in tqdm(train_dataloader, desc="Processing Batches"):
         batch
         break
-
-    # try get model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     model(batch)
-    pass
     action = model.predict_action(batch)
+
+    print(f"Unnormalized Action: {action['normalized_actions']}")
+
+    print("Finished")
+
+
