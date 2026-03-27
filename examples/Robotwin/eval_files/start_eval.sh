@@ -261,6 +261,7 @@ launch_task_in_slot() {
     local task_name="$2"
     local gpu_id="${SLOT_GPUS[$slot_idx]}"
     local port="${SLOT_PORTS[$slot_idx]}"
+    local launched_pid=""
     local task_safe="${task_name//\//_}"
     local slot_label="slot${slot_idx}_gpu${gpu_id}_port${port}"
     local server_log="${LOG_DIR}/${task_safe}_${TASK_CONFIG}_${slot_label}_server.log"
@@ -307,7 +308,8 @@ launch_task_in_slot() {
             > "${eval_log}" 2>&1
     ) &
 
-    ACTIVE_PIDS[$slot_idx]=$!
+    launched_pid=$!
+    ACTIVE_PIDS[$slot_idx]="${launched_pid}"
     ACTIVE_TASKS[$slot_idx]="${task_name}"
     ACTIVE_SERVER_LOGS[$slot_idx]="${server_log}"
     ACTIVE_EVAL_LOGS[$slot_idx]="${eval_log}"
@@ -392,9 +394,9 @@ while (( completed_tasks < TOTAL_TASKS )); do
             if wait "${current_pid}"; then
                 echo "[INFO] Finished task=${ACTIVE_TASKS[$slot_idx]} slot=${slot_idx}"
             else
-                status=$?
+                exit_code=$?
                 FAILED_TASKS+=("${ACTIVE_TASKS[$slot_idx]}")
-                echo "[ERROR] Task ${ACTIVE_TASKS[$slot_idx]} failed with status ${status}. See ${ACTIVE_EVAL_LOGS[$slot_idx]} and ${ACTIVE_SERVER_LOGS[$slot_idx]}" >&2
+                echo "[ERROR] Task ${ACTIVE_TASKS[$slot_idx]} failed with status ${exit_code}. See ${ACTIVE_EVAL_LOGS[$slot_idx]} and ${ACTIVE_SERVER_LOGS[$slot_idx]}" >&2
             fi
             ACTIVE_PIDS[$slot_idx]=""
             ACTIVE_TASKS[$slot_idx]=""
