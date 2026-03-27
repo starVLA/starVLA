@@ -1,11 +1,9 @@
-#!/usr/bin/env zsh
-emulate -L zsh
+#!/usr/bin/env bash
 set -euo pipefail
-setopt pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-typeset -ga ROBOTWIN_ALL_TASKS=(
+ROBOTWIN_ALL_TASKS=(
     adjust_bottle
     beat_block_hammer
     blocks_ranking_rgb
@@ -58,23 +56,52 @@ typeset -ga ROBOTWIN_ALL_TASKS=(
     turn_switch
 )
 
-typeset -ga used_ports=()
-typeset -ga SLOT_GPUS=()
-typeset -ga SLOT_PORTS=()
-typeset -ga ACTIVE_PIDS=()
-typeset -ga ACTIVE_TASKS=()
-typeset -ga ACTIVE_SERVER_LOGS=()
-typeset -ga ACTIVE_EVAL_LOGS=()
-typeset -ga FAILED_TASKS=()
+used_ports=()
+SLOT_GPUS=()
+SLOT_PORTS=()
+ACTIVE_PIDS=()
+ACTIVE_TASKS=()
+ACTIVE_SERVER_LOGS=()
+ACTIVE_EVAL_LOGS=()
+FAILED_TASKS=()
+
+join_arr() {
+    local sep="$1"; shift
+    local out=""
+    for item in "$@"; do
+        out="${out:+${out}${sep}}${item}"
+    done
+    printf '%s' "${out}"
+}
+
+kill_descendants() {
+    local target_pid="$1"
+    local sig="${2:-TERM}"
+    local child_pids
+    child_pids="$(ps -o pid= --ppid "${target_pid}" 2>/dev/null)" || true
+    local cpid
+    for cpid in ${child_pids}; do
+        kill_descendants "${cpid}" "${sig}"
+    done
+    kill -"${sig}" "${target_pid}" 2>/dev/null || true
+}
 
 cleanup_active_jobs() {
-    local pid=""
-    for pid in "${ACTIVE_PIDS[@]}"; do
+    trap '' INT TERM EXIT
+    echo "[INFO] Cleaning up all child processes..."
+    local pid
+    for pid in "${ACTIVE_PIDS[@]+"${ACTIVE_PIDS[@]}"}"; do
         if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
-            kill "${pid}" 2>/dev/null || true
+            kill_descendants "${pid}" TERM
         fi
     done
-    for pid in "${ACTIVE_PIDS[@]}"; do
+    sleep 2
+    for pid in "${ACTIVE_PIDS[@]+"${ACTIVE_PIDS[@]}"}"; do
+        if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+            kill_descendants "${pid}" KILL
+        fi
+    done
+    for pid in "${ACTIVE_PIDS[@]+"${ACTIVE_PIDS[@]}"}"; do
         if [[ -n "${pid}" ]]; then
             wait "${pid}" 2>/dev/null || true
         fi
@@ -86,27 +113,37 @@ trap cleanup_active_jobs EXIT INT TERM
 usage() {
     cat >&2 <<'EOF'
 Usage:
-  zsh start_eval.sh <demo_clean|demo_randomized> <task ... | task_file> <policy_name> <ckpt_path>
+  bash start_eval.sh -m <mode> -n <policy_name> -c <ckpt_path> [options] <tasks...>
+
+Required flags:
+  -m, --mode              Eval mode: demo_clean or demo_randomized
+  -n, --name              Policy name (used for log directory naming)
+  -c, --ckpt              Path to the checkpoint file
+
+Tasks (positional):
+  Remaining arguments after flags are treated as task names, the keyword
+  `all` (all RoboTwin 2.0 tasks), or a single task-list file (one per line).
+
+Optional flags:
+  -s, --seed              Eval seed (default: 0, env: ROBOTWIN_SEED)
+  -j, --jobs-per-gpu      Concurrent jobs per GPU (default: 1, env: ROBOTWIN_JOBS_PER_GPU)
+  -p, --base-port         First port to allocate (default: 5694, env: ROBOTWIN_BASE_PORT)
+      --server-timeout    Seconds to wait for server (default: 600, env: ROBOTWIN_SERVER_TIMEOUT)
+      --install-deps      Run pip install bootstrap steps once
+  -h, --help              Show this help message
 
 Examples:
-  zsh start_eval.sh demo_randomized adjust_bottle my_eval /path/to/ckpt.pt
-  zsh start_eval.sh demo_clean adjust_bottle open_laptop my_eval /path/to/ckpt.pt
-  zsh start_eval.sh demo_randomized task_list.txt my_eval /path/to/ckpt.pt
+  bash start_eval.sh -m demo_clean -n test1 -c /path/to/ckpt.pt adjust_bottle
+  bash start_eval.sh -m demo_randomized -n test1 -c /path/to/ckpt.pt all
+  bash start_eval.sh --mode demo_clean --name my_run --ckpt /path/to/ckpt.pt task_list.txt
+  bash start_eval.sh -m demo_clean -n test1 -c /path/to/ckpt.pt -j 2 adjust_bottle open_laptop
 
-Notes:
-  - The last two arguments are always treated as <policy_name> and <ckpt_path>.
-  - When a single task argument is an existing file, tasks are read one-per-line.
-  - Use `all` as a task argument to evaluate all RoboTwin 2.0 tasks.
-
-Optional environment variables:
-  ROBOTWIN_PATH              Path to the RoboTwin repository.
-  ROBOTWIN_STARVLA_ENV       Conda env name for the policy server. Default: starvla
-  ROBOTWIN_ENV               Conda env name for RoboTwin eval. Default: robotwin
-  ROBOTWIN_BASE_PORT         First port to allocate. Default: 5694
-  ROBOTWIN_JOBS_PER_GPU      Concurrent jobs per visible GPU. Default: 1
-  ROBOTWIN_SERVER_TIMEOUT    Seconds to wait for the policy server. Default: 600
-  ROBOTWIN_SEED              Eval seed. Default: 0
-  ROBOTWIN_AUTO_INSTALL_DEPS Set to 1 to run pip install bootstrap steps once.
+Environment variables (lower priority than flags):
+  ROBOTWIN_PATH              Path to the RoboTwin repository
+  ROBOTWIN_STARVLA_ENV       Conda env name for the policy server (default: starvla)
+  ROBOTWIN_ENV               Conda env name for RoboTwin eval (default: robotwin)
+  STARVLA_PYTHON             Explicit python path for starvla (skips conda env lookup)
+  ROBOTWIN_PYTHON            Explicit python path for robotwin (skips conda env lookup)
 EOF
 }
 
@@ -114,7 +151,7 @@ trim() {
     local value="$1"
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
-    print -r -- "${value}"
+    printf '%s\n' "${value}"
 }
 
 port_in_use() {
@@ -133,7 +170,7 @@ port_in_use() {
 port_reserved() {
     local port="$1"
     local reserved_port
-    for reserved_port in "${used_ports[@]}"; do
+    for reserved_port in "${used_ports[@]+"${used_ports[@]}"}"; do
         if [[ "${reserved_port}" == "${port}" ]]; then
             return 0
         fi
@@ -147,7 +184,7 @@ find_available_port() {
         port=$((port + 1))
     done
     used_ports+=("${port}")
-    print -r -- "${port}"
+    printf '%s\n' "${port}"
 }
 
 wait_for_server() {
@@ -172,7 +209,7 @@ detect_cuda_devices() {
     local device=""
 
     if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
-        devices=("${(@s:,:)CUDA_VISIBLE_DEVICES}")
+        IFS=',' read -ra devices <<< "${CUDA_VISIBLE_DEVICES}"
     elif command -v nvidia-smi >/dev/null 2>&1; then
         gpu_count="$(nvidia-smi --list-gpus 2>/dev/null | wc -l | tr -d ' ')"
         if [[ -n "${gpu_count}" && "${gpu_count}" != "0" ]]; then
@@ -182,7 +219,7 @@ detect_cuda_devices() {
         fi
     fi
 
-    for device in "${devices[@]}"; do
+    for device in "${devices[@]+"${devices[@]}"}"; do
         device="$(trim "${device}")"
         if [[ -n "${device}" ]]; then
             cleaned+=("${device}")
@@ -193,7 +230,7 @@ detect_cuda_devices() {
         cleaned=(0)
     fi
 
-    print -l -- "${cleaned[@]}"
+    printf '%s\n' "${cleaned[@]}"
 }
 
 resolve_tasks() {
@@ -204,20 +241,20 @@ resolve_tasks() {
     local task=""
     local line=""
 
-    if (( ${#raw_inputs[@]} == 1 )) && [[ -f "${raw_inputs[1]}" ]]; then
+    if (( ${#raw_inputs[@]} == 1 )) && [[ -f "${raw_inputs[0]}" ]]; then
         while IFS= read -r line || [[ -n "${line}" ]]; do
             line="$(trim "${line%%#*}")"
             if [[ -n "${line}" ]]; then
                 resolved+=("${line}")
             fi
-        done < "${raw_inputs[1]}"
+        done < "${raw_inputs[0]}"
     else
         for input in "${raw_inputs[@]}"; do
             if [[ "${input}" == "all" ]]; then
                 resolved+=("${ROBOTWIN_ALL_TASKS[@]}")
                 continue
             fi
-            split_inputs=("${(@s:,:)input}")
+            IFS=',' read -ra split_inputs <<< "${input}"
             for task in "${split_inputs[@]}"; do
                 task="$(trim "${task}")"
                 if [[ -n "${task}" ]]; then
@@ -232,7 +269,55 @@ resolve_tasks() {
         return 1
     fi
 
-    print -l -- "${resolved[@]}"
+    printf '%s\n' "${resolved[@]}"
+}
+
+find_conda_python() {
+    local env_name="$1"
+    local -a search_dirs=()
+
+    if [[ -n "${CONDA_EXE:-}" ]]; then
+        search_dirs+=("$(dirname "$(dirname "${CONDA_EXE}")")/envs")
+    fi
+    if [[ -n "${CONDA_PREFIX:-}" ]]; then
+        search_dirs+=("$(dirname "${CONDA_PREFIX}")")
+    fi
+    search_dirs+=(
+        "${HOME}/miniconda3/envs"
+        "${HOME}/anaconda3/envs"
+        "${HOME}/miniforge3/envs"
+        "${HOME}/mambaforge/envs"
+        "/opt/conda/envs"
+    )
+
+    local base
+    for base in "${search_dirs[@]}"; do
+        if [[ -x "${base}/${env_name}/bin/python" ]]; then
+            printf '%s\n' "${base}/${env_name}/bin/python"
+            return 0
+        fi
+    done
+
+    echo "[ERROR] Cannot find Python for conda env '${env_name}'." >&2
+    echo "  Searched: ${search_dirs[*]}" >&2
+    echo "  Set STARVLA_PYTHON / ROBOTWIN_PYTHON to the full python path instead." >&2
+    return 1
+}
+
+resolve_python() {
+    local explicit_path="$1"
+    local env_name="$2"
+
+    if [[ -n "${explicit_path}" ]]; then
+        if [[ ! -x "${explicit_path}" ]]; then
+            echo "[ERROR] Specified python not executable: ${explicit_path}" >&2
+            return 1
+        fi
+        printf '%s\n' "${explicit_path}"
+        return 0
+    fi
+
+    find_conda_python "${env_name}"
 }
 
 prepare_runtime_dependencies() {
@@ -240,20 +325,9 @@ prepare_runtime_dependencies() {
         return 0
     fi
 
-    echo "[INFO] Installing runtime dependencies into ${ROBOTWIN_STARVLA_ENV:-starvla} and ${ROBOTWIN_ENV:-robotwin}"
-    source_shell_rc
-    conda activate "${ROBOTWIN_STARVLA_ENV:-starvla}"
-    pip install snntorch
-    conda activate "${ROBOTWIN_ENV:-robotwin}"
-    pip install -r "${SCRIPT_DIR}/requirements.txt"
-}
-
-source_shell_rc() {
-    set +u
-    if [[ -f ~/.zshrc ]]; then
-        source ~/.zshrc
-    fi
-    set -u
+    echo "[INFO] Installing runtime dependencies..."
+    "${STARVLA_PYTHON}" -m pip install snntorch
+    "${ROBOTWIN_PYTHON}" -m pip install -r "${SCRIPT_DIR}/requirements.txt"
 }
 
 launch_task_in_slot() {
@@ -270,10 +344,9 @@ launch_task_in_slot() {
     echo "[INFO] Launching task=${task_name} mode=${TASK_CONFIG} gpu=${gpu_id} port=${port}"
 
     (
-        emulate -L zsh
         set -euo pipefail
 
-        local server_pid=""
+        server_pid=""
         cleanup_server() {
             if [[ -n "${server_pid}" ]] && kill -0 "${server_pid}" 2>/dev/null; then
                 kill "${server_pid}" 2>/dev/null || true
@@ -283,9 +356,9 @@ launch_task_in_slot() {
         trap cleanup_server EXIT INT TERM
 
         export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+        export STARVLA_PYTHON="${STARVLA_PYTHON}"
+        export ROBOTWIN_PYTHON="${ROBOTWIN_PYTHON}"
 
-        source_shell_rc
-        conda activate "${ROBOTWIN_STARVLA_ENV:-starvla}"
         bash "${SCRIPT_DIR}/run_policy_server.sh" "${CKPT_PATH}" "${gpu_id}" "${port}" > "${server_log}" 2>&1 &
         server_pid=$!
 
@@ -294,8 +367,6 @@ launch_task_in_slot() {
             exit 1
         fi
 
-        source_shell_rc
-        conda activate "${ROBOTWIN_ENV:-robotwin}"
         cd "${SCRIPT_DIR}"
         bash "${SCRIPT_DIR}/eval.sh" \
             "${task_name}" \
@@ -305,7 +376,7 @@ launch_task_in_slot() {
             "${gpu_id}" \
             "${CKPT_PATH}" \
             "${port}" \
-            > "${eval_log}" 2>&1
+            > >(tee "${eval_log}" | grep --line-buffered "Success rate" | sed -u "s/^/[RESULT] ${task_name}: /") 2>&1
     ) &
 
     launched_pid=$!
@@ -315,42 +386,78 @@ launch_task_in_slot() {
     ACTIVE_EVAL_LOGS[$slot_idx]="${eval_log}"
 }
 
-if (( $# < 4 )); then
+# --- Argument parsing ---
+
+TASK_CONFIG=""
+POLICY_NAME=""
+CKPT_PATH=""
+opt_seed=""
+opt_jobs=""
+opt_port=""
+opt_timeout=""
+opt_install=false
+
+while (( $# > 0 )); do
+    case "$1" in
+        -m|--mode)          TASK_CONFIG="$2"; shift 2 ;;
+        -n|--name)          POLICY_NAME="$2"; shift 2 ;;
+        -c|--ckpt)          CKPT_PATH="$2"; shift 2 ;;
+        -s|--seed)          opt_seed="$2"; shift 2 ;;
+        -j|--jobs-per-gpu)  opt_jobs="$2"; shift 2 ;;
+        -p|--base-port)     opt_port="$2"; shift 2 ;;
+        --server-timeout)   opt_timeout="$2"; shift 2 ;;
+        --install-deps)     opt_install=true; shift ;;
+        -h|--help)          usage; exit 0 ;;
+        -*)                 echo "Unknown option: $1" >&2; usage; exit 1 ;;
+        *)                  break ;;
+    esac
+done
+
+if [[ -z "${TASK_CONFIG}" || -z "${POLICY_NAME}" || -z "${CKPT_PATH}" ]]; then
+    echo "Missing required flags: -m/--mode, -n/--name, -c/--ckpt" >&2
     usage
     exit 1
 fi
-
-TASK_CONFIG="$1"
-shift
 
 if [[ "${TASK_CONFIG}" != "demo_clean" && "${TASK_CONFIG}" != "demo_randomized" ]]; then
-    echo "Unsupported task config: ${TASK_CONFIG}" >&2
+    echo "Unsupported mode: ${TASK_CONFIG} (expected demo_clean or demo_randomized)" >&2
     exit 1
 fi
-
-if (( $# < 3 )); then
-    usage
-    exit 1
-fi
-
-argc=$#
-POLICY_NAME="${argv[$((argc - 1))]}"
-CKPT_PATH="${argv[$argc]}"
-TASK_INPUTS=("${argv[1,$((argc - 2))]}")
 
 if [[ ! -f "${CKPT_PATH}" ]]; then
     echo "Checkpoint path does not exist: ${CKPT_PATH}" >&2
     exit 1
 fi
 
-TASKS=("${(@f)$(resolve_tasks "${TASK_INPUTS[@]}")}")
-CUDA_DEVICES=("${(@f)$(detect_cuda_devices)}")
+if (( $# == 0 )); then
+    echo "No tasks specified." >&2
+    usage
+    exit 1
+fi
+
+ROBOTWIN_SEED="${opt_seed:-${ROBOTWIN_SEED:-0}}"
+ROBOTWIN_JOBS_PER_GPU="${opt_jobs:-${ROBOTWIN_JOBS_PER_GPU:-1}}"
+ROBOTWIN_BASE_PORT="${opt_port:-${ROBOTWIN_BASE_PORT:-5694}}"
+ROBOTWIN_SERVER_TIMEOUT="${opt_timeout:-${ROBOTWIN_SERVER_TIMEOUT:-600}}"
+if ${opt_install}; then
+    ROBOTWIN_AUTO_INSTALL_DEPS=1
+fi
+
+STARVLA_PYTHON="$(resolve_python "${STARVLA_PYTHON:-}" "${ROBOTWIN_STARVLA_ENV:-starvla}")"
+ROBOTWIN_PYTHON="$(resolve_python "${ROBOTWIN_PYTHON:-}" "${ROBOTWIN_ENV:-robotwin}")"
+export STARVLA_PYTHON ROBOTWIN_PYTHON
+
+echo "[INFO] starvla python: ${STARVLA_PYTHON}"
+echo "[INFO] robotwin python: ${ROBOTWIN_PYTHON}"
+
+mapfile -t TASKS < <(resolve_tasks "$@")
+mapfile -t CUDA_DEVICES < <(detect_cuda_devices)
 
 NUM_GPUS=${#CUDA_DEVICES[@]}
-JOBS_PER_GPU="${ROBOTWIN_JOBS_PER_GPU:-1}"
+JOBS_PER_GPU="${ROBOTWIN_JOBS_PER_GPU}"
 TOTAL_SLOTS=$((NUM_GPUS * JOBS_PER_GPU))
 TOTAL_TASKS=${#TASKS[@]}
-BASE_PORT="${ROBOTWIN_BASE_PORT:-5694}"
+BASE_PORT="${ROBOTWIN_BASE_PORT}"
 
 if (( TOTAL_SLOTS <= 0 )); then
     echo "No available execution slots were detected." >&2
@@ -375,28 +482,27 @@ for gpu_id in "${CUDA_DEVICES[@]}"; do
     done
 done
 
-echo "[INFO] task_config=${TASK_CONFIG}"
-echo "[INFO] policy_name=${POLICY_NAME}"
-echo "[INFO] ckpt_path=${CKPT_PATH}"
-echo "[INFO] log_dir=${LOG_DIR}"
-echo "[INFO] cuda_devices=${(j:,:)CUDA_DEVICES}"
-echo "[INFO] jobs_per_gpu=${JOBS_PER_GPU}"
-echo "[INFO] total_tasks=${TOTAL_TASKS}"
-echo "[INFO] total_slots=${TOTAL_SLOTS}"
+echo "[INFO] mode=${TASK_CONFIG}  name=${POLICY_NAME}  seed=${ROBOTWIN_SEED}"
+echo "[INFO] ckpt=${CKPT_PATH}"
+echo "[INFO] logs=${LOG_DIR}"
+echo "[INFO] gpus=$(join_arr ',' "${CUDA_DEVICES[@]}")  jobs_per_gpu=${JOBS_PER_GPU}  slots=${TOTAL_SLOTS}"
+echo "[INFO] tasks (${TOTAL_TASKS}): $(join_arr ', ' "${TASKS[@]}")"
 
-typeset -i next_task_idx=1
-typeset -i completed_tasks=0
+next_task_idx=0
+completed_tasks=0
 
 while (( completed_tasks < TOTAL_TASKS )); do
-    for (( slot_idx = 1; slot_idx <= TOTAL_SLOTS; ++slot_idx )); do
+    for (( slot_idx = 0; slot_idx < TOTAL_SLOTS; ++slot_idx )); do
         current_pid="${ACTIVE_PIDS[$slot_idx]:-}"
         if [[ -n "${current_pid}" ]] && ! kill -0 "${current_pid}" 2>/dev/null; then
+            finished_task="${ACTIVE_TASKS[$slot_idx]}"
+            finished_eval_log="${ACTIVE_EVAL_LOGS[$slot_idx]}"
             if wait "${current_pid}"; then
-                echo "[INFO] Finished task=${ACTIVE_TASKS[$slot_idx]} slot=${slot_idx}"
+                echo "[INFO] Finished task=${finished_task} slot=${slot_idx}"
             else
                 exit_code=$?
-                FAILED_TASKS+=("${ACTIVE_TASKS[$slot_idx]}")
-                echo "[ERROR] Task ${ACTIVE_TASKS[$slot_idx]} failed with status ${exit_code}. See ${ACTIVE_EVAL_LOGS[$slot_idx]} and ${ACTIVE_SERVER_LOGS[$slot_idx]}" >&2
+                FAILED_TASKS+=("${finished_task}")
+                echo "[ERROR] Task ${finished_task} failed with status ${exit_code}. See ${finished_eval_log} and ${ACTIVE_SERVER_LOGS[$slot_idx]}" >&2
             fi
             ACTIVE_PIDS[$slot_idx]=""
             ACTIVE_TASKS[$slot_idx]=""
@@ -405,7 +511,7 @@ while (( completed_tasks < TOTAL_TASKS )); do
             completed_tasks=$((completed_tasks + 1))
         fi
 
-        if [[ -z "${ACTIVE_PIDS[$slot_idx]:-}" ]] && (( next_task_idx <= TOTAL_TASKS )); then
+        if [[ -z "${ACTIVE_PIDS[$slot_idx]:-}" ]] && (( next_task_idx < TOTAL_TASKS )); then
             launch_task_in_slot "${slot_idx}" "${TASKS[$next_task_idx]}"
             next_task_idx=$((next_task_idx + 1))
         fi
@@ -417,7 +523,7 @@ while (( completed_tasks < TOTAL_TASKS )); do
 done
 
 if (( ${#FAILED_TASKS[@]} > 0 )); then
-    echo "[ERROR] RoboTwin evaluation finished with failures: ${(j:, :)FAILED_TASKS}" >&2
+    echo "[ERROR] RoboTwin evaluation finished with failures: $(join_arr ', ' "${FAILED_TASKS[@]}")" >&2
     echo "[ERROR] Logs are under ${LOG_DIR}" >&2
     exit 1
 fi

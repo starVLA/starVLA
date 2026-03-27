@@ -227,90 +227,182 @@ Optional:
 
 ## 🚀 2. Evaluation Workflow
 
-### Recommended: single entrypoint for clean / randomized eval
+### Recommended: `start_eval.sh` (unified entrypoint)
 
-Use the unified zsh launcher. It starts the policy server, waits for readiness, runs RoboTwin eval, and cleans up the server automatically.
+`start_eval.sh` is the main launcher. It starts the policy server, waits for readiness, runs the RoboTwin eval, streams per-episode success rates to the terminal, and cleans up all processes on exit (including Ctrl+C).
 
-Randomized evaluation:
-
-```bash
-cd examples/Robotwin/eval_files
-zsh start_eval.sh demo_randomized adjust_bottle my_eval /path/to/checkpoint.pt
+```
+bash start_eval.sh -m <mode> -n <policy_name> -c <ckpt_path> [options] <tasks...>
 ```
 
-Clean evaluation:
+#### Required flags
+
+| Flag | Description |
+|------|-------------|
+| `-m`, `--mode` | Eval mode: `demo_clean` or `demo_randomized` |
+| `-n`, `--name` | Policy name (used for log directory naming, forwarded to RoboTwin as `ckpt_setting`) |
+| `-c`, `--ckpt` | Path to the StarVLA checkpoint file |
+
+#### Tasks (positional arguments)
+
+All remaining arguments after flags are treated as tasks. You can specify:
+
+- One or more task names: `adjust_bottle open_laptop lift_pot`
+- The keyword `all` to evaluate all 48 RoboTwin 2.0 tasks
+- A task-list file (one task per line): `task_list.txt`
+
+#### Optional flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-s`, `--seed` | `0` | Eval seed (also via `ROBOTWIN_SEED`) |
+| `-j`, `--jobs-per-gpu` | `1` | Concurrent jobs per visible GPU (also via `ROBOTWIN_JOBS_PER_GPU`) |
+| `-p`, `--base-port` | `5694` | First port to allocate (also via `ROBOTWIN_BASE_PORT`) |
+| `--server-timeout` | `600` | Seconds to wait for the policy server to start (also via `ROBOTWIN_SERVER_TIMEOUT`) |
+| `--install-deps` | off | Run pip install bootstrap steps once (also via `ROBOTWIN_AUTO_INSTALL_DEPS=1`) |
+| `-h`, `--help` | | Show help message |
+
+Flags take priority over environment variables when both are set.
+
+#### Examples
+
+Single task, clean mode:
 
 ```bash
-cd examples/Robotwin/eval_files
-zsh start_eval.sh demo_clean adjust_bottle my_eval /path/to/checkpoint.pt
+bash examples/Robotwin/eval_files/start_eval.sh \
+    -m demo_clean -n test1 \
+    -c /path/to/checkpoint.pt \
+    adjust_bottle
 ```
 
-The calling convention matches your current workflow:
+Multiple tasks:
 
 ```bash
-zsh start_eval.sh demo_randomized ${task} ${policy_name} ${ckpt_path}
+bash examples/Robotwin/eval_files/start_eval.sh \
+    -m demo_randomized -n my_run \
+    -c /path/to/checkpoint.pt \
+    adjust_bottle open_laptop lift_pot place_shoe
 ```
 
-Here:
+All 48 tasks with custom seed and 2 jobs per GPU:
 
-- `${task}` can be a single RoboTwin task, `all`, a comma-separated list, or a task file with one task per line.
-- `${policy_name}` is forwarded to RoboTwin as `ckpt_setting`.
-- `${ckpt_path}` is the StarVLA checkpoint used by the policy server.
+```bash
+bash examples/Robotwin/eval_files/start_eval.sh \
+    -m demo_clean -n full_eval -s 42 -j 2 \
+    -c /path/to/checkpoint.pt \
+    all
+```
 
-### Multi-task / multi-GPU scheduling
+Tasks from a file:
 
-The launcher auto-detects the visible GPUs and, by default, runs one `policy server + RoboTwin eval` pair per GPU. Ports are allocated automatically starting from `ROBOTWIN_BASE_PORT` (default: `5694`).
+```bash
+bash examples/Robotwin/eval_files/start_eval.sh \
+    -m demo_clean -n my_run \
+    -c /path/to/checkpoint.pt \
+    task_list.txt
+```
 
-Single-machine 8-GPU example:
+### Multi-GPU scheduling
+
+The launcher auto-detects visible GPUs (via `CUDA_VISIBLE_DEVICES` or `nvidia-smi`) and runs one policy-server + eval pair per GPU by default. Ports are allocated automatically starting from `--base-port`.
+
+8-GPU example:
 
 ```bash
 export ROBOTWIN_PATH=/path/to/RoboTwin
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-cd examples/Robotwin/eval_files
-zsh start_eval.sh demo_randomized adjust_bottle open_laptop place_shoe turn_switch my_eval /path/to/checkpoint.pt
+
+bash examples/Robotwin/eval_files/start_eval.sh \
+    -m demo_randomized -n full_eval \
+    -c /path/to/checkpoint.pt \
+    all
 ```
 
-Task file example:
+This schedules all 48 tasks across 8 GPUs, running up to 8 tasks in parallel. When a task finishes on a GPU, the next pending task is dispatched to that slot.
 
-```bash
-export ROBOTWIN_PATH=/path/to/RoboTwin
-cd examples/Robotwin/eval_files
-zsh start_eval.sh demo_clean task_list.txt my_eval /path/to/checkpoint.pt
+### Runtime output
+
+During evaluation, per-episode success rates are streamed to stdout in real time:
+
+```
+[RESULT] adjust_bottle: Success rate: 1/1 => 100.0%, current seed: 100001
+[RESULT] adjust_bottle: Success rate: 2/2 => 100.0%, current seed: 100002
+[RESULT] adjust_bottle: Success rate: 3/3 => 100.0%, current seed: 100005
 ```
 
-Useful runtime knobs:
+Full eval output (including per-step logs) is always saved to log files.
 
-- `ROBOTWIN_BASE_PORT`: first port used by the scheduler.
-- `ROBOTWIN_JOBS_PER_GPU`: concurrent jobs per visible GPU. Default is `1`.
-- `ROBOTWIN_SERVER_TIMEOUT`: how long to wait for a policy server to become ready. Default is `600`.
-- `ROBOTWIN_SEED`: eval seed. Default is `0`.
+### Process cleanup
 
-Logs are written under:
+Pressing Ctrl+C (or sending SIGINT/SIGTERM) triggers a recursive cleanup that kills the entire process tree — including all policy servers and RoboTwin eval subprocesses. A SIGTERM is sent first, followed by SIGKILL after 2 seconds for any remaining processes.
 
-```txt
-<checkpoint_dir>/robotwin_eval_logs/
+### Logs
+
+Logs are written under the checkpoint directory by default:
+
 ```
+<ckpt_dir>/robotwin_eval_logs/<name>_<mode>_<ckpt_stem>_<timestamp>/
+    <task>_<mode>_slot<N>_gpu<G>_port<P>_server.log
+    <task>_<mode>_slot<N>_gpu<G>_port<P>_eval.log
+```
+
+Override the log root with `ROBOTWIN_LOG_ROOT`.
+
+### Environment variables
+
+These environment variables are read when the corresponding flag is not set:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ROBOTWIN_PATH` | — | Path to the local RoboTwin repository (required) |
+| `ROBOTWIN_STARVLA_ENV` | `starvla` | Conda env name for the policy server (used to auto-detect Python) |
+| `ROBOTWIN_ENV` | `robotwin` | Conda env name for RoboTwin eval (used to auto-detect Python) |
+| `STARVLA_PYTHON` | auto | Explicit path to the starvla Python binary (skips conda env lookup) |
+| `ROBOTWIN_PYTHON` | auto | Explicit path to the robotwin Python binary (skips conda env lookup) |
+| `ROBOTWIN_SEED` | `0` | Eval seed (overridden by `-s`) |
+| `ROBOTWIN_JOBS_PER_GPU` | `1` | Concurrent jobs per GPU (overridden by `-j`) |
+| `ROBOTWIN_BASE_PORT` | `5694` | First port to allocate (overridden by `-p`) |
+| `ROBOTWIN_SERVER_TIMEOUT` | `600` | Server startup timeout in seconds (overridden by `--server-timeout`) |
+| `ROBOTWIN_AUTO_INSTALL_DEPS` | `0` | Set to `1` to bootstrap pip deps (overridden by `--install-deps`) |
+| `ROBOTWIN_LOG_ROOT` | auto | Override the log output directory |
+
+The launcher does **not** use `conda activate`. Instead, it locates the Python binary directly from the conda env directory. It searches `CONDA_EXE`, `CONDA_PREFIX`, `~/miniconda3/envs/`, `~/anaconda3/envs/`, etc. If auto-detection fails, set `STARVLA_PYTHON` and `ROBOTWIN_PYTHON` explicitly.
+
+### `deploy_policy.yml` configuration
+
+`examples/Robotwin/eval_files/deploy_policy.yml` is treated as a template. The following fields are read from it at runtime:
+
+| Field | Description |
+|-------|-------------|
+| `normalization_mode` | Normalization mode: `min_max` or `q99` |
+| `unnorm_key` | Unnormalization key for the embodiment |
+| `action_mode` | Action mode (e.g. `abs`) |
+
+`host` and `port` are overridden at runtime by the launcher. If your checkpoint was trained with percentile normalization, set `normalization_mode: "q99"`.
 
 ### Low-level manual mode
+
+If you prefer to manage the policy server and eval processes yourself:
+
+1. Start the policy server (in the `starvla` conda env):
 
 ```bash
 bash examples/Robotwin/eval_files/run_policy_server.sh /path/to/checkpoint.pt [gpu_id] [port]
 ```
 
-Then in the `robotwin` environment:
+2. Run evaluation (in the `robotwin` conda env):
 
 ```bash
 conda activate robotwin
 cd examples/Robotwin/eval_files
-bash eval.sh task_name demo_clean my_eval 0 0 /path/to/checkpoint.pt [port]
+bash eval.sh <task_name> <task_config> <ckpt_setting> <seed> <gpu_id> <ckpt_path> [port] [host]
 ```
 
-`examples/Robotwin/eval_files/deploy_policy.yml` is now treated as a template:
+Example:
 
-- `normalization_mode`, `unnorm_key`, and `action_mode` are read from it.
-- `host` and `port` are overridden at runtime by the launcher or by the optional `port` argument above.
-
-If your checkpoint was trained with percentile normalization, set `normalization_mode: "q99"` in `examples/Robotwin/eval_files/deploy_policy.yml`. Available options are `min_max` and `q99`.
+```bash
+bash eval.sh adjust_bottle demo_clean my_eval 0 0 /path/to/checkpoint.pt 5694
+```
 
 ### RoboTwin 2.0 task list
 
