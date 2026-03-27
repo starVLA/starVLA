@@ -1,4 +1,4 @@
-policy_name: starVLA
+policy_name: model2robotwin_interface
 task_name: null
 task_config: null
 ckpt_setting: null

@@ -40,7 +40,7 @@ if ! "${patch_check_cmd[@]}"; then
     exit 1
 fi
 
-policy_name="${ROBOTWIN_POLICY_NAME:-starVLA}"
+policy_name="${ROBOTWIN_POLICY_NAME:-model2robotwin_interface}"
 task_name="$1"
 task_config="$2"
 ckpt_setting="${3:-starvla_demo}"
