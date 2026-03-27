@@ -163,7 +163,7 @@ port_in_use() {
     elif command -v netstat >/dev/null 2>&1; then
         netstat -tuln 2>/dev/null | grep -q ":${port}[[:space:]]"
     else
-        return 1
+        "${STARVLA_PYTHON:-python}" -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('127.0.0.1',${port})); s.close()" 2>/dev/null
     fi
 }
 
@@ -185,6 +185,20 @@ find_available_port() {
     done
     used_ports+=("${port}")
     printf '%s\n' "${port}"
+}
+
+check_port_detection() {
+    if command -v ss >/dev/null 2>&1 \
+        || command -v lsof >/dev/null 2>&1 \
+        || command -v netstat >/dev/null 2>&1; then
+        return 0
+    fi
+    if "${STARVLA_PYTHON:-python}" -c "import socket" 2>/dev/null; then
+        echo "[INFO] No ss/lsof/netstat found, using Python for port detection."
+        return 0
+    fi
+    echo "[ERROR] No port detection method available (need ss, lsof, netstat, or Python)." >&2
+    return 1
 }
 
 wait_for_server() {
@@ -463,6 +477,8 @@ if (( TOTAL_SLOTS <= 0 )); then
     echo "No available execution slots were detected." >&2
     exit 1
 fi
+
+check_port_detection
 
 prepare_runtime_dependencies
 
