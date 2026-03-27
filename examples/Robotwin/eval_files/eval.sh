@@ -20,8 +20,22 @@ if [[ ! -f "${robotwin_eval_script}" ]]; then
     echo "RoboTwin eval entry does not exist: ${robotwin_eval_script}" >&2
     exit 1
 fi
-if ! rg -q "policy_ckpt_path" "${robotwin_eval_script}"; then
+
+patch_check_tool=""
+if command -v rg >/dev/null 2>&1; then
+    patch_check_tool="rg"
+    patch_check_cmd=(rg -q "policy_ckpt_path" "${robotwin_eval_script}")
+elif command -v grep >/dev/null 2>&1; then
+    patch_check_tool="grep"
+    patch_check_cmd=(grep -q "policy_ckpt_path" "${robotwin_eval_script}")
+else
+    echo "Neither rg nor grep is available, so the RoboTwin patch check cannot run." >&2
+    exit 1
+fi
+
+if ! "${patch_check_cmd[@]}"; then
     echo "Your third-party RoboTwin checkout is missing the required policy_ckpt_path patch: ${robotwin_eval_script}" >&2
+    echo "Patch check used: ${patch_check_tool}" >&2
     echo "Apply the documented patch in your own RoboTwin repo; see examples/Robotwin/README.md." >&2
     exit 1
 fi
