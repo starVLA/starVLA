@@ -67,7 +67,7 @@ LE_ROBOT_INFO_FILENAME = "meta/info.json"
 LE_ROBOT_STATS_FILENAME = "meta/stats_gr00t.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 LE_ROBOT_STEPS_FILENAME = "meta/steps.pkl"
-LE_ROBOT_STATS_FORMAT_VERSION = 2
+LE_ROBOT_STATS_FORMAT_VERSION = 3
 EPSILON = 5e-4
 
 #  LeRobot v3.0 dataset file names 
