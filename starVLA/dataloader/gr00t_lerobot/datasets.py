@@ -55,6 +55,10 @@ from typing import Tuple, List
 import pickle
 import gc
 
+import pyarrow.parquet as pq
+
+from starVLA.dataloader.gr00t_lerobot.streaming_stats import StreamingStatsAccumulator
+
 # LeRobot v2.0 dataset file names 
 LE_ROBOT_MODALITY_FILENAME = "meta/modality.json"
 LE_ROBOT_EPISODE_FILENAME = "meta/episodes.jsonl"
@@ -72,46 +76,42 @@ LE_ROBOT3_EPISODE_FILENAME = "meta/episodes/*/*.parquet"
 
 
 def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
-    """Calculate the dataset statistics of all columns for a list of parquet files."""
-    # Dataset statistics
-    all_low_dim_data_list = []
-    # Collect all the data
-    # parquet_paths = parquet_paths[:3]
+    """Calculate per-column normalization statistics using streaming computation.
+
+    Uses Welford's online algorithm for mean/std, running min/max, and
+    t-digest for q01/q99 quantile estimation. Memory is bounded to one
+    parquet row-group at a time regardless of total dataset size.
+    """
+    accumulators: dict[str, StreamingStatsAccumulator] = {}
+
     for parquet_path in tqdm(
         sorted(list(parquet_paths)),
-        desc="Collecting all parquet files...",
+        desc="Computing dataset statistics...",
     ):
-        # Load the parquet file
-        parquet_data = pd.read_parquet(parquet_path)
-        parquet_data = parquet_data
-        all_low_dim_data_list.append(parquet_data)
-    
-    all_low_dim_data = pd.concat(all_low_dim_data_list, axis=0)
-    # Compute dataset statistics
-    dataset_statistics = {}
-    for le_modality in tqdm(all_low_dim_data.columns, desc="Processing modalities"):
-        print(le_modality)
-        if "task_info" in le_modality:
-            continue
-        print(f"Computing statistics for {le_modality}...")
-        # 检查数据是否为空或无效
-        try:
-            np_data = np.vstack(
-                [np.asarray(x, dtype=np.float32) for x in all_low_dim_data[le_modality]]
-            )
-        except Exception as e:
-            print(f"Warning: Failed to process modality {le_modality} due to error: {e}")
-            continue  
+        pf = pq.ParquetFile(str(parquet_path))
+        for batch in pf.iter_batches():
+            if batch.num_rows == 0:
+                continue
+            for col_name in batch.schema.names:
+                if "task_info" in col_name:
+                    continue
+                col = batch.column(col_name)
+                try:
+                    pylist = col.to_pylist()
+                    # Skip scalar (metadata) columns — only process list/array columns
+                    first = next((x for x in pylist if x is not None), None)
+                    if first is None or not isinstance(first, (list, np.ndarray)):
+                        continue
+                    values = np.vstack(
+                        [np.asarray(x, dtype=np.float32) for x in pylist]
+                    )
+                except Exception:
+                    continue
+                if col_name not in accumulators:
+                    accumulators[col_name] = StreamingStatsAccumulator()
+                accumulators[col_name].update(values)
 
-        dataset_statistics[le_modality] = {
-            "mean": np.mean(np_data, axis=0).tolist(),
-            "std": np.std(np_data, axis=0).tolist(),
-            "min": np.min(np_data, axis=0).tolist(),
-            "max": np.max(np_data, axis=0).tolist(),
-            "q01": np.quantile(np_data, 0.01, axis=0).tolist(),
-            "q99": np.quantile(np_data, 0.99, axis=0).tolist(),
-        }
-    return dataset_statistics
+    return {name: acc.finalize() for name, acc in accumulators.items() if acc._count > 0}
 
 
 def _normalize_action_mode(mode: str) -> str:
