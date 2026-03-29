@@ -63,6 +63,8 @@ class StreamingStatsAccumulator:
             batch = batch.reshape(-1, 1)
         batch = batch.astype(np.float64)
         n_rows, n_dims = batch.shape
+        if n_rows == 0:
+            return
 
         if self._mean is not None and n_dims != len(self._mean):
             raise ValueError(
