@@ -404,8 +404,8 @@ def calculate_delta_action_statistics(
                 raise ValueError(f"Invalid padding strategy: {padding_strategy}")
         return output
 
-    accum: dict[str, list[np.ndarray]] = {col: [] for col in action_col_slices.keys()}
-    for parquet_path in tqdm(sorted(list(parquet_paths)), desc="Collecting delta action stats"):
+    accumulators: dict[str, StreamingStatsAccumulator] = {}
+    for parquet_path in tqdm(sorted(list(parquet_paths)), desc="Computing delta action stats"):
         data = pd.read_parquet(parquet_path)
         trajectory_length = len(data)
         for action_col, slice_list in action_col_slices.items():
@@ -436,21 +436,14 @@ def calculate_delta_action_statistics(
                     out[0] = action_part_chunk[0] - state_chunk[0]
                     action_chunk_full[:, a_slice[0] : a_slice[1]] = out
 
-                accum[action_col].append(action_chunk_full)
+                if action_col not in accumulators:
+                    accumulators[action_col] = StreamingStatsAccumulator()
+                accumulators[action_col].update(action_chunk_full)
 
     delta_stats = copy.deepcopy(base_stats)
-    for action_col, series_list in accum.items():
-        if not series_list:
-            continue
-        all_values = np.concatenate(series_list, axis=0).astype(np.float32)
-        delta_stats[action_col] = {
-            "mean": np.mean(all_values, axis=0).tolist(),
-            "std": np.std(all_values, axis=0).tolist(),
-            "min": np.min(all_values, axis=0).tolist(),
-            "max": np.max(all_values, axis=0).tolist(),
-            "q01": np.quantile(all_values, 0.01, axis=0).tolist(),
-            "q99": np.quantile(all_values, 0.99, axis=0).tolist(),
-        }
+    for action_col, acc in accumulators.items():
+        if acc._count > 0:
+            delta_stats[action_col] = acc.finalize()
     return delta_stats
 
 
