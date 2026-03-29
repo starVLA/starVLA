@@ -71,6 +71,23 @@ LE_ROBOT3_TASKS_FILENAME = "meta/tasks.parquet"
 LE_ROBOT3_EPISODE_FILENAME = "meta/episodes/*/*.parquet"
 
 
+def detect_lerobot_version(dataset_path: Path) -> str | None:
+    """Auto-detect LeRobot dataset version from file structure.
+
+    Checks for version-specific marker files:
+    - v3.0: meta/tasks.parquet (checked first as the newer format)
+    - v2.0: meta/episodes.jsonl
+
+    Returns:
+        "v3.0", "v2.0", or None if version cannot be determined.
+    """
+    if (Path(dataset_path) / LE_ROBOT3_TASKS_FILENAME).exists():
+        return "v3.0"
+    if (Path(dataset_path) / LE_ROBOT_EPISODE_FILENAME).exists():
+        return "v2.0"
+    return None
+
+
 def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
     """Calculate the dataset statistics of all columns for a list of parquet files."""
     # Dataset statistics
@@ -568,6 +585,7 @@ class LeRobotSingleDataset(Dataset):
         transforms: ComposedModalityTransform | None = None,
         delete_pause_frame: bool = False,
         data_cfg = None,
+        lerobot_version: str | None = None,
         **kwargs,
     ):
         """
@@ -586,8 +604,16 @@ class LeRobotSingleDataset(Dataset):
         self.data_cfg = data_cfg
         if not Path(dataset_path).exists():
             raise FileNotFoundError(f"Dataset path {dataset_path} does not exist")
-        # indict letobot version
-        self._lerobot_version =  self.data_cfg.get("lerobot_version", "v2.0") #self._indict_lerobot_version(**kwargs)
+        # Determine lerobot version: explicit override > auto-detect > data_cfg fallback > default
+        if lerobot_version is not None:
+            self._lerobot_version = lerobot_version
+        else:
+            detected = detect_lerobot_version(Path(dataset_path))
+            if detected is not None:
+                self._lerobot_version = detected
+            else:
+                self._lerobot_version = self.data_cfg.get("lerobot_version", "v2.0") if self.data_cfg else "v2.0"
+        print(f"[LeRobot] Dataset {Path(dataset_path).name}: using version {self._lerobot_version}")
 
         self._action_mode = None
         self._action_mode_state_map = {}
@@ -1001,6 +1027,7 @@ class LeRobotSingleDataset(Dataset):
         config_dict = {
             "delete_pause_frame": self.delete_pause_frame,
             "dataset_name": self.dataset_name,
+            "lerobot_version": self._lerobot_version,
         }
         # Create a hash of the configuration
         config_str = str(sorted(config_dict.items()))
