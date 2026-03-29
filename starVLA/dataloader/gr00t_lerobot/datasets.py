@@ -80,7 +80,7 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
 
     Uses Welford's online algorithm for mean/std, running min/max, and
     t-digest for q01/q99 quantile estimation. Memory is bounded to one
-    parquet row-group at a time regardless of total dataset size.
+    batch at a time regardless of total dataset size.
     """
     accumulators: dict[str, StreamingStatsAccumulator] = {}
 
@@ -89,27 +89,30 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
         desc="Computing dataset statistics...",
     ):
         pf = pq.ParquetFile(str(parquet_path))
-        for batch in pf.iter_batches():
-            if batch.num_rows == 0:
-                continue
-            for col_name in batch.schema.names:
-                if "task_info" in col_name:
+        try:
+            for batch in pf.iter_batches():
+                if batch.num_rows == 0:
                     continue
-                col = batch.column(col_name)
-                try:
-                    pylist = col.to_pylist()
-                    # Skip scalar (metadata) columns — only process list/array columns
-                    first = next((x for x in pylist if x is not None), None)
-                    if first is None or not isinstance(first, (list, np.ndarray)):
+                for col_name in batch.schema.names:
+                    if "task_info" in col_name:
                         continue
-                    values = np.vstack(
-                        [np.asarray(x, dtype=np.float32) for x in pylist]
-                    )
-                except Exception:
-                    continue
-                if col_name not in accumulators:
-                    accumulators[col_name] = StreamingStatsAccumulator()
-                accumulators[col_name].update(values)
+                    col = batch.column(col_name)
+                    try:
+                        pylist = col.to_pylist()
+                        # Skip scalar (metadata) columns — only process list/array columns
+                        first = next((x for x in pylist if x is not None), None)
+                        if first is None or not isinstance(first, (list, np.ndarray)):
+                            continue
+                        values = np.vstack(
+                            [np.asarray(x, dtype=np.float32) for x in pylist if x is not None]
+                        )
+                    except (ValueError, TypeError):
+                        continue
+                    if col_name not in accumulators:
+                        accumulators[col_name] = StreamingStatsAccumulator()
+                    accumulators[col_name].update(values)
+        finally:
+            pf.close()
 
     return {name: acc.finalize() for name, acc in accumulators.items() if acc._count > 0}
 
