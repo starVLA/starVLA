@@ -114,7 +114,7 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
         finally:
             pf.close()
 
-    return {name: acc.finalize() for name, acc in accumulators.items() if acc._count > 0}
+    return {name: acc.finalize() for name, acc in accumulators.items() if acc.count > 0}
 
 
 def _normalize_action_mode(mode: str) -> str:
@@ -442,7 +442,7 @@ def calculate_delta_action_statistics(
 
     delta_stats = copy.deepcopy(base_stats)
     for action_col, acc in accumulators.items():
-        if acc._count > 0:
+        if acc.count > 0:
             delta_stats[action_col] = acc.finalize()
     return delta_stats
 
@@ -530,7 +530,7 @@ def calculate_rel_action_statistics(
 
     rel_stats = copy.deepcopy(base_stats)
     for action_col, acc in accumulators.items():
-        if acc._count > 0:
+        if acc.count > 0:
             rel_stats[action_col] = acc.finalize()
     return rel_stats
 

@@ -41,17 +41,25 @@ class StreamingStatsAccumulator:
     """
 
     def __init__(self, digest_delta: float = 0.01, digest_k: int = 25) -> None:
+        """
+        Args:
+            digest_delta: Compression parameter for t-digest. Smaller values
+                give more accurate quantile estimates at the cost of memory.
+            digest_k: Size parameter for t-digest centroid merging.
+        """
         self._digest_delta = digest_delta
         self._digest_k = digest_k
-        # Welford state
         self._count: int = 0
         self._mean: np.ndarray | None = None
         self._m2: np.ndarray | None = None
-        # Running extrema
         self._min: np.ndarray | None = None
         self._max: np.ndarray | None = None
-        # Per-dimension t-digests
         self._digests: list[TDigest] | None = None
+
+    @property
+    def count(self) -> int:
+        """Total number of observations seen so far."""
+        return self._count
 
     def update(self, batch: np.ndarray) -> None:
         """Incorporate a batch of observations.
@@ -123,15 +131,13 @@ class StreamingStatsAccumulator:
             raise ValueError("No data has been fed to the accumulator.")
 
         std = np.sqrt(self._m2 / self._count)
-
-        q01 = [self._digests[d].percentile(1) for d in range(len(self._digests))]
-        q99 = [self._digests[d].percentile(99) for d in range(len(self._digests))]
+        n_dims = len(self._digests)
 
         return {
             "mean": self._mean.tolist(),
             "std": std.tolist(),
             "min": self._min.tolist(),
             "max": self._max.tolist(),
-            "q01": [float(v) for v in q01],
-            "q99": [float(v) for v in q99],
+            "q01": [float(self._digests[d].percentile(1)) for d in range(n_dims)],
+            "q99": [float(self._digests[d].percentile(99)) for d in range(n_dims)],
         }
