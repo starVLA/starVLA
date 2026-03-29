@@ -13,7 +13,11 @@ framework:
     base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct
     attn_implementation: flash_attention_2
     vl_hidden_dim: 2048
-
+  action_model:
+    action_dim: 7
+    state_dim: 7
+    future_action_window_size: 7
+    action_horizon: 8
 
 datasets:
   vlm_data:

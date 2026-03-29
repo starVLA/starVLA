@@ -230,8 +230,11 @@ def merge_framework_config(default_config_cls, cfg):
     # 4. Write back into the original cfg
     #    Handle both OmegaConf and AccessTrackedConfig transparently
     if hasattr(cfg, "_cfg") and isinstance(cfg._cfg, DictConfig):
-        # AccessTrackedConfig path
+        # AccessTrackedConfig path — write to underlying cfg AND invalidate
+        # the cached child so subsequent attribute access sees the merged result.
         cfg._cfg.framework = merged_fw
+        if hasattr(cfg, "_children") and "framework" in cfg._children:
+            del cfg._children["framework"]
     elif isinstance(cfg, DictConfig):
         cfg.framework = merged_fw
     else:

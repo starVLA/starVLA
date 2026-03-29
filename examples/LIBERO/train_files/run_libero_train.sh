@@ -19,8 +19,27 @@ CONDA_NVCC_COMPAT="${CONDA_PREFIX:-$HOME/.conda/envs/starVLA}/cuda_compat/bin"
 if ! nvcc --version 2>&1 | grep -q "release"; then
   if [ -x "${CONDA_NVCC_COMPAT}/nvcc" ]; then
     export PATH="${CONDA_NVCC_COMPAT}:${PATH}"
+    export CUDA_HOME="$(dirname $(dirname ${CONDA_NVCC_COMPAT}))"
     echo "[INFO] Using nvcc wrapper from ${CONDA_NVCC_COMPAT}"
   fi
+fi
+
+# Final fallback: create an nvcc wrapper from PyTorch's CUDA version
+if ! nvcc --version 2>&1 | grep -q "release"; then
+  _WRAPPER_DIR="${CONDA_PREFIX:-$HOME/.conda/envs/starVLA}/cuda_compat/bin"
+  mkdir -p "${_WRAPPER_DIR}" 2>/dev/null || true
+  _TORCH_CUDA_VER=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null || echo "12.1")
+  _MAJOR=$(echo "${_TORCH_CUDA_VER}" | cut -d. -f1)
+  _MINOR=$(echo "${_TORCH_CUDA_VER}" | cut -d. -f2)
+  cat > "${_WRAPPER_DIR}/nvcc" << NVCC_EOF
+#!/bin/bash
+echo "nvcc: NVIDIA (R) Cuda compiler driver"
+echo "Cuda compilation tools, release ${_MAJOR}.${_MINOR}, V${_TORCH_CUDA_VER}"
+NVCC_EOF
+  chmod +x "${_WRAPPER_DIR}/nvcc"
+  export PATH="${_WRAPPER_DIR}:${PATH}"
+  export CUDA_HOME="$(dirname ${_WRAPPER_DIR})"
+  echo "[INFO] Created nvcc wrapper for DeepSpeed: CUDA ${_TORCH_CUDA_VER}"
 fi
 
 # Final verify
@@ -86,7 +105,12 @@ if id -nG 2>/dev/null | grep -qw vonneumann1; then
   echo "[INFO] Group vonneumann1 detected, using newgrp for NFS access"
 fi
 
+# Resolve conda activation command for sub-shells (sg spawns a new shell)
+CONDA_BASE=$(conda info --base 2>/dev/null || echo "${CONDA_PREFIX%/envs/*}")
+CONDA_INIT="source ${CONDA_BASE}/etc/profile.d/conda.sh && conda activate ${CONDA_DEFAULT_ENV:-starVLA}"
+
 sg vonneumann1 -c "
+${CONDA_INIT} && \
 accelerate launch \
   --config_file ${accelerate_config_file} \
   --num_processes ${num_processes} \
@@ -94,6 +118,8 @@ accelerate launch \
   --config_yaml ${config_yaml} \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
+  --framework.action_model.future_action_window_size 7 \
+  --framework.action_model.past_action_window_size 0 \
   --datasets.vla_data.data_root_dir ${libero_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.per_device_batch_size ${per_device_batch_size} \

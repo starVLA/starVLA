@@ -79,7 +79,7 @@ class QwenOFTDefaultConfig:
         # Hidden dim for the action MLP (auto-set from VLM hidden_size at runtime)
         "action_hidden_dim": 2560,
         # How many future steps to predict
-        "future_action_window_size": 15,
+        "future_action_window_size": 8,
         # How many past steps included in action chunk (usually 0)
         "past_action_window_size": 0,
     })

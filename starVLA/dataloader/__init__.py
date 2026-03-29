@@ -7,6 +7,7 @@ import torch.distributed as dist
 from accelerate.logging import get_logger
 from torch.utils.data import DataLoader
 
+from starVLA.dataloader.dataloader_manager import DataLoaderManager
 from starVLA.dataloader.vlm_datasets import make_vlm_dataloader
 
 logger = get_logger(__name__)
@@ -52,7 +53,7 @@ def build_dataloader(
             num_workers=4,
             # shuffle=True
         )
-        if dist.get_rank() == 0:
+        if dist.is_initialized() and dist.get_rank() == 0 or not dist.is_initialized():
 
             output_dir = Path(cfg.output_dir)
             vla_dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
@@ -62,3 +63,12 @@ def build_dataloader(
         vlm_train_dataloader = vlm_data_module["train_dataloader"]
 
         return vlm_train_dataloader
+
+
+def build_dataloader_manager(cfg) -> DataLoaderManager:
+    """Convenience factory: build a DataLoaderManager from the full config.
+
+    Equivalent to ``DataLoaderManager.from_config(cfg)`` but exposed at
+    package level for symmetry with ``build_dataloader``.
+    """
+    return DataLoaderManager.from_config(cfg)
