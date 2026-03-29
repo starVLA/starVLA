@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Streaming normalization statistics accumulator.
 
 Uses Welford's online algorithm for mean/variance, running min/max,
@@ -49,6 +64,12 @@ class StreamingStatsAccumulator:
         batch = batch.astype(np.float64)
         n_rows, n_dims = batch.shape
 
+        if self._mean is not None and n_dims != len(self._mean):
+            raise ValueError(
+                f"Dimension mismatch: accumulator has {len(self._mean)} dims "
+                f"but batch has {n_dims}"
+            )
+
         # First batch: initialize all accumulators
         if self._mean is None:
             self._mean = np.zeros(n_dims, dtype=np.float64)
@@ -84,7 +105,7 @@ class StreamingStatsAccumulator:
 
         # --- t-digest quantile tracking ---
         for dim in range(n_dims):
-            self._digests[dim].batch_update(batch[:, dim])
+            self._digests[dim].batch_update(batch[:, dim].tolist())
 
     def finalize(self) -> dict[str, list[float]]:
         """Compute final statistics and return as JSON-serializable dict.
