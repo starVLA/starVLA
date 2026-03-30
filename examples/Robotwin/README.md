@@ -12,7 +12,7 @@ We have verified that this workflow runs successfully on **NVIDIA 4090** GPUs.
 
 
 <details close>
-<summary><b>RoboTwin 2.0 Benchmark Results over 48 Tasks </b></summary>
+<summary><b>RoboTwin 2.0 Benchmark Results over 50 Tasks </b></summary>
 
 
 | Task Name | RDT Easy | RDT Hard | Pi0 Easy | Pi0 Hard | ACT Easy | ACT Hard | DP Easy | DP Hard | DP3 Easy | DP3 Hard | Qwen3OFT Easy |
@@ -248,7 +248,7 @@ bash start_eval.sh -m <mode> -n <policy_name> -c <ckpt_path> [options] <tasks...
 All remaining arguments after flags are treated as tasks. You can specify:
 
 - One or more task names: `adjust_bottle open_laptop lift_pot`
-- The keyword `all` to evaluate all 48 RoboTwin 2.0 tasks
+- The keyword `all` to evaluate all 50 RoboTwin 2.0 tasks
 - A task-list file (one task per line): `task_list.txt`
 
 #### Optional flags
@@ -284,7 +284,7 @@ bash examples/Robotwin/eval_files/start_eval.sh \
     adjust_bottle open_laptop lift_pot place_shoe
 ```
 
-All 48 tasks with custom seed and 2 jobs per GPU:
+All 50 tasks with custom seed and 2 jobs per GPU:
 
 ```bash
 bash examples/Robotwin/eval_files/start_eval.sh \
@@ -318,7 +318,7 @@ bash examples/Robotwin/eval_files/start_eval.sh \
     all
 ```
 
-This schedules all 48 tasks across 8 GPUs, running up to 8 tasks in parallel. When a task finishes on a GPU, the next pending task is dispatched to that slot.
+This schedules all 50 tasks across 8 GPUs, running up to 8 tasks in parallel. When a task finishes on a GPU, the next pending task is dispatched to that slot.
 
 ### Runtime output
 
