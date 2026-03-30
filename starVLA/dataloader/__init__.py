@@ -53,7 +53,7 @@ def build_dataloader(
             num_workers=4,
             # shuffle=True
         )
-        if dist.is_initialized() and dist.get_rank() == 0 or not dist.is_initialized():
+        if (dist.is_initialized() and dist.get_rank() == 0) or not dist.is_initialized():
 
             output_dir = Path(cfg.output_dir)
             vla_dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")

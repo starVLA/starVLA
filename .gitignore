@@ -226,3 +226,13 @@ AGENTS.md
 
 temp
 temp/*
+
+tmp
+
+
+**/*.pt
+**/*.mp4
+**/*.npy
+**/*.parquet
+
+

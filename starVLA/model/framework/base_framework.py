@@ -119,6 +119,69 @@ class baseframework(PreTrainedModel):
             f"{type(self).__name__} must implement predict_action(examples) -> dict with 'normalized_actions' key."
         )
 
+    # ------------------------------------------------------------------
+    # Unified loss interface for Trainer
+    # ------------------------------------------------------------------
+
+    def compute_loss(self, tag: str, batch, loss_scale: dict = None) -> Dict[str, torch.Tensor]:
+        """Unified forward entry-point: route to the right forward by *tag*.
+
+        The trainer calls ``model.compute_loss(tag, batch)`` for every
+        ``(tag, batch)`` pair produced by :class:`DataLoaderManager`.
+        The model internally dispatches:
+
+        - ``"vla"`` → ``self.forward(batch)``
+        - ``"vlm"`` → ``self.forward_vlm(batch)``
+
+        Subclasses can override this to add more tags (e.g. ``"world"``).
+
+        Args:
+            tag: dataset type tag (``"vla"``, ``"vlm"``, …)
+            batch: the batch produced by the corresponding DataLoader.
+            loss_scale: ``{"vla": 1.0, "vlm": 0.1}`` per-tag loss multiplier.
+                        Defaults to 1.0 for unspecified tags.
+
+        Returns:
+            dict[str, Tensor]: keyed losses (e.g. ``{"action_loss": ...}``).
+                The trainer simply backwards each value.
+        """
+        scale = (loss_scale or {}).get(tag, 1.0)
+
+        if tag == "vla":
+            out = self.forward(batch)
+        elif tag == "vlm":
+            out = self.forward_vlm(batch)
+        else:
+            raise ValueError(
+                f"Unknown tag '{tag}'. Override compute_loss() in "
+                f"{type(self).__name__} to handle it."
+            )
+
+        # Apply loss scale and filter to Tensor values only
+        return {k: v * scale for k, v in out.items() if isinstance(v, torch.Tensor)}
+
+    def forward_vlm(self, batch) -> Dict[str, torch.Tensor]:
+        """VLM forward pass (default implementation).
+
+        Delegates to ``self.qwen_vl_interface(**batch)`` which is present on
+        every framework subclass that uses a Qwen VL backbone.
+
+        Subclasses may override to add custom VLM logic.
+
+        Args:
+            batch: dict produced by the VLM dataloader.
+
+        Returns:
+            dict: Must contain ``"vlm_loss"`` (torch.Tensor scalar).
+        """
+        if not hasattr(self, "qwen_vl_interface"):
+            raise NotImplementedError(
+                f"{type(self).__name__} has no `qwen_vl_interface`. "
+                "Override forward_vlm() to support VLM training."
+            )
+        out = self.qwen_vl_interface(**batch)
+        return {"vlm_loss": out.loss}
+
     @classmethod
     def from_pretrained(
         cls,

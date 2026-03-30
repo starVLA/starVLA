@@ -79,6 +79,9 @@ class DataLoaderManager:
 
         for ds_key in cfg.datasets:
             ds_cfg = cfg.datasets[ds_key]
+            # Skip entries set to null (e.g. ``datasets.vla_data=null`` via CLI)
+            if ds_cfg is None:
+                continue
             dataset_py = ds_cfg.get("dataset_py", None)
             if dataset_py is None:
                 continue
