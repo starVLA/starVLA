@@ -97,6 +97,11 @@ class _QWen_VL_Interface(nn.Module):
         self.processor = processor
         self.config = config
 
+        # Align with framework consumers that read `model.config.hidden_size`.
+        # Some transformers versions expose this only under `text_config.hidden_size` for Qwen2.5-VL.
+        if not hasattr(self.model.config, "hidden_size") and hasattr(self.model.config, "text_config"):
+            self.model.config.hidden_size = self.model.config.text_config.hidden_size
+
         self._ACTION_TOKEN_MIN = _ACTION_TOKEN_MIN
         self._ACTION_TOKEN_MAX = _ACTION_TOKEN_MAX
 

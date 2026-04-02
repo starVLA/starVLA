@@ -6,4 +6,4 @@ deepspeed_config:
   zero3_init_flag: false
 distributed_type: DEEPSPEED
 num_machines: 1
-num_processes: 8
+num_processes: 1

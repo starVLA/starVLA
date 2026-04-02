@@ -112,6 +112,12 @@ class Qwen_GR00T(baseframework):
             actions = torch.tensor(
                 np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype
             )  # [B, T_full, action_dim]
+            expected_action_dim = int(self.config.framework.action_model.action_dim)
+            if actions.shape[-1] != expected_action_dim:
+                raise ValueError(
+                    f"Action dim mismatch: expected {expected_action_dim}, got {actions.shape[-1]}. "
+                    "Please align dataset action vectors with framework.action_model.action_dim in your YAML."
+                )
             actions_target = actions[:, -(self.future_action_window_size+1):, :]  # (B, chunk_len, action_dim)
 
             repeated_diffusion_steps = (
@@ -194,12 +200,14 @@ if __name__ == "__main__":
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Rank 0 waiting for debugger attach on port 10092...")
     debugpy.wait_for_client()
-    args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
+    # args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
     # cfg.framework.action_model.action_hidden_dim = 2048
 
-    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
+    cfg.framework.qwenvl.base_vlm = "/root/model/Qwen3-VL-4B-Instruct"
+    cfg.framework.qwenvl.attn_implementation = "flash_attention_2"
+    # cfg.framework.qwenvl.attn_implementation = "sdpa"
     
 
     model: Qwen_GR00T = Qwen_GR00T(cfg)
@@ -209,15 +217,17 @@ if __name__ == "__main__":
 
     # fake sample 
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
+    action_dim = int(cfg.framework.action_model.action_dim)
+    action_chunk = int(cfg.framework.action_model.past_action_window_size + 1 + cfg.framework.action_model.future_action_window_size)
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
+        "action": np.random.uniform(-1, 1, size=(action_chunk, action_dim)).astype(np.float16), # action_chunk, action_dim
         "image": [image], # three views
         "lang": "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
     sample2 = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
+        "action": np.random.uniform(-1, 1, size=(action_chunk, action_dim)).astype(np.float16), # action_chunk, action_dim
         "image": [image], # three views
         "lang": "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim

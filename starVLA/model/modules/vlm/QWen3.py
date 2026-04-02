@@ -53,12 +53,28 @@ class _QWen3_VL_Interface(nn.Module):
 
         qwenvl_config = config.framework.get("qwenvl", {})
         model_id = qwenvl_config.get("base_vlm", "Qwen/Qwen3-VL-4B-Instruct")
+        attn_implementation = qwenvl_config.get("attn_implementation", "sdpa")
 
-        model = Qwen3VLForConditionalGeneration.from_pretrained(
-            model_id,
-            attn_implementation="flash_attention_2",
-            dtype=torch.bfloat16,
-        )
+        try:
+            model = Qwen3VLForConditionalGeneration.from_pretrained(
+                model_id,
+                attn_implementation=attn_implementation,
+                dtype=torch.bfloat16,
+            )
+        except Exception as err:
+            # Common on mismatched flash-attn binary (CUDA/torch/CXX11 ABI mismatch).
+            if attn_implementation == "flash_attention_2":
+                logger.warning(
+                    "Failed to load with flash_attention_2 (%s). Falling back to sdpa.",
+                    str(err),
+                )
+                model = Qwen3VLForConditionalGeneration.from_pretrained(
+                    model_id,
+                    attn_implementation="sdpa",
+                    dtype=torch.bfloat16,
+                )
+            else:
+                raise
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.padding_side = "left"
 

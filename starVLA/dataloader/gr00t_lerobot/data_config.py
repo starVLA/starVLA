@@ -983,6 +983,94 @@ class AgilexData50Config:
 
         return ComposedModalityTransform(transforms=transforms)
 
+###########################################################################################
+
+
+"""
+Dual XARM config for mixed-representation data:
+- state: joint-space (left/right arm joints + grippers)
+- action: absolute ee-space command (left/right arm + grippers)
+
+Note:
+- Keep action_mode as abs for this representation pair.
+- If you build a new dataset where state/action are in another space,
+    create a new DataConfig class and a new yaml file instead of reusing this one.
+"""
+class DualXarmAbsCartDataConfig:
+    video_keys = [
+        "video.head_camera",
+        "video.left_wrist_camera",
+        "video.right_wrist_camera",
+    ]
+    state_keys = [
+        "state.left_arm",
+        "state.left_gripper",
+        "state.right_arm",
+        "state.right_gripper",
+    ]
+    action_keys = [
+        "action.left_arm",
+        "action.left_gripper",
+        "action.right_arm",
+        "action.right_gripper",
+    ]
+    language_keys = ["annotation.human.task_description"]
+    observation_indices = [0]
+    action_indices = list(range(16))
+
+    def modality_config(self):
+        video_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.video_keys,
+        )
+        state_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.state_keys,
+        )
+        action_modality = ModalityConfig(
+            delta_indices=self.action_indices,
+            modality_keys=self.action_keys,
+        )
+        language_modality = ModalityConfig(
+            delta_indices=self.observation_indices,
+            modality_keys=self.language_keys,
+        )
+        modality_configs = {
+            "video": video_modality,
+            "state": state_modality,
+            "action": action_modality,
+            "language": language_modality,
+        }
+        return modality_configs
+
+    def transform(self):
+        transforms = [
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={
+                    "state.left_arm": "q99",
+                    "state.left_gripper": "binary",
+                    "state.right_arm": "q99",
+                    "state.right_gripper": "binary",
+                },
+                binary_threshold=0.49,
+            ),
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={
+                    "action.left_arm": "q99",
+                    "action.left_gripper": "binary",
+                    "action.right_arm": "q99",
+                    "action.right_gripper": "binary",
+                },
+                binary_threshold=0.49,
+            ),
+        ]
+
+        return ComposedModalityTransform(transforms=transforms)
+
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "oxe_droid": OxeDroidDataConfig(),
@@ -993,6 +1081,7 @@ ROBOT_TYPE_CONFIG_MAP = {
     "arx_x5": ArxX5DataConfig(),
     "robotwin": AgilexDataConfig(),
     "robotwin50": AgilexData50Config(),
+    "dual_xarm_abs_cart": DualXarmAbsCartDataConfig(),
     "fourier_gr1_arms_waist": FourierGr1ArmsWaistDataConfig(),
     
     "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),

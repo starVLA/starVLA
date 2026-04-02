@@ -169,8 +169,37 @@ class Qwenvl_OFT(baseframework):
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
+        # Backward compatibility: allow calling with batch_images + instructions.
+        if examples is None and "batch_images" in kwargs and "instructions" in kwargs:
+            batch_images = kwargs.get("batch_images")
+            instructions = kwargs.get("instructions")
+            if not isinstance(batch_images, list) or not isinstance(instructions, list):
+                raise TypeError("batch_images and instructions must be lists")
+            if len(batch_images) != len(instructions):
+                raise ValueError(
+                    f"batch_images and instructions length mismatch: {len(batch_images)} vs {len(instructions)}"
+                )
+            examples = [
+                {"image": image_item, "lang": instruction_item}
+                for image_item, instruction_item in zip(batch_images, instructions)
+            ]
+
+        if examples is None:
+            raise ValueError("predict_action requires `examples` or (`batch_images`, `instructions`) in kwargs")
+
         if type(examples) is not list:
             examples = [examples]
+
+        for i, example in enumerate(examples):
+            if example is None:
+                raise ValueError(f"examples[{i}] is None")
+            if not isinstance(example, dict):
+                raise TypeError(f"examples[{i}] must be a dict, got {type(example)}")
+            if "image" not in example or example["image"] is None:
+                raise ValueError(f"examples[{i}] missing valid 'image'")
+            if "lang" not in example or example["lang"] is None:
+                raise ValueError(f"examples[{i}] missing valid 'lang'")
+
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
     
@@ -267,14 +296,14 @@ if __name__ == "__main__":
     parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    # debugpy.listen(("0.0.0.0", 10092))
+    # print("🔍 Rank 0 waiting for debugger attach on port 10092...")
+    # debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
     cfg.framework.action_model.action_hidden_dim = 2048
 
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
+    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
     
 
     # try get model
@@ -285,14 +314,14 @@ if __name__ == "__main__":
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
+        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
         "image": [image], # two views
         "lang": "This is a fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
     sample2 = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
+        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
         "image": [image], # two views
         "lang": "For testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim

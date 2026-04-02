@@ -38,6 +38,10 @@ DATASET_NAMED_MIXTURES = {
         ("fractal20220817_data_0.1.0_lerobot", 1.0, "oxe_rt1"),
     ],
 
+    "dual_xarm_pick_box_action_cart_20260311": [
+        ("lerobot_datasets_20260311_pick_box_action_cart", 1.0, "dual_xarm_abs_cart"),
+    ],
+
     "demo_sim_pick_place": [
         ("sim_pick_place", 1.0, "demo_sim_franka_delta_joints"),
     ],
