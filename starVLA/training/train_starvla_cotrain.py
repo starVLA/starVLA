@@ -207,6 +207,9 @@ class VLAMTrainer(TrainerUtils):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
                 self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+                full_cfg_path = output_dir / "config.full.yaml"
+                logger.info(f"📦 Saving full merged configuration to `{full_cfg_path}`...")
+                self.config.save_full_config(full_cfg_path, resolve=True)
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()

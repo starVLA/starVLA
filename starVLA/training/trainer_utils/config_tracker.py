@@ -445,6 +445,16 @@ class AccessTrackedConfig:
                 OmegaConf.save(OmegaConf.create(accessed_config), f)
             else:
                 raise ValueError(f"Unsupported file format: {filepath.suffix}")
+
+    def save_full_config(self, filepath: Path, resolve: bool = True):
+        """Save the full merged configuration to file."""
+        filepath = Path(filepath)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        if filepath.suffix not in (".yaml", ".yml"):
+            raise ValueError(f"Unsupported file format: {filepath.suffix}")
+
+        OmegaConf.save(self.get_root()._cfg, filepath, resolve=resolve)
     
     def get_access_summary(self) -> dict:
         """Get summary of accessed configuration"""
