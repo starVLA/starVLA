@@ -22,6 +22,7 @@ def make_LeRobotSingleDataset(
     robot_type: str,
     delete_pause_frame: bool = False,
     data_cfg: dict | None = None,
+    lerobot_version: str | None = None,
 ) -> LeRobotSingleDataset:
     """
     Make a LeRobotSingleDataset object.
@@ -29,7 +30,7 @@ def make_LeRobotSingleDataset(
     :param data_root_dir: The root directory of the dataset.
     :param data_name: The name of the dataset.
     :param robot_type: The robot type config to use.
-    :param crop_obs_camera: Whether to crop the observation camera images.
+    :param lerobot_version: Explicit lerobot version override ("v2.0" or "v3.0"). If None, auto-detected from dataset file structure.
     :return: A LeRobotSingleDataset object.
     """
     
@@ -52,6 +53,7 @@ def make_LeRobotSingleDataset(
         video_backend=video_backend, # decord is more efficiency | torchvision_av for video.av1
         delete_pause_frame=delete_pause_frame,
         data_cfg=data_cfg,
+        lerobot_version=lerobot_version,
     )
 
 def get_vla_dataset(
@@ -70,18 +72,21 @@ def get_vla_dataset(
     delete_pause_frame = data_cfg.get("delete_pause_frame", False)
     mixture_spec = DATASET_NAMED_MIXTURES[data_mix]
     included_datasets, filtered_mixture_spec = set(), []
-    for d_name, d_weight, robot_type in mixture_spec:  
-        dataset_key = (d_name, robot_type)  
+    for entry in mixture_spec:
+        # Support both 3-tuple (name, weight, robot_type) and 4-tuple (name, weight, robot_type, lerobot_version)
+        d_name, d_weight, robot_type = entry[0], entry[1], entry[2]
+        d_version = entry[3] if len(entry) > 3 else None
+        dataset_key = (d_name, robot_type)
         if dataset_key in included_datasets:
             print(f"Skipping Duplicate Dataset: `{(d_name, d_weight, robot_type)}`")
             continue
 
         included_datasets.add(dataset_key)
-        filtered_mixture_spec.append((d_name, d_weight, robot_type))
+        filtered_mixture_spec.append((d_name, d_weight, robot_type, d_version))
 
     dataset_mixture = []
-    for d_name, d_weight, robot_type in filtered_mixture_spec:
-        dataset_mixture.append((make_LeRobotSingleDataset(Path(data_root_dir), d_name, robot_type, delete_pause_frame=delete_pause_frame, data_cfg=data_cfg), d_weight))
+    for d_name, d_weight, robot_type, d_version in filtered_mixture_spec:
+        dataset_mixture.append((make_LeRobotSingleDataset(Path(data_root_dir), d_name, robot_type, delete_pause_frame=delete_pause_frame, data_cfg=data_cfg, lerobot_version=d_version), d_weight))
 
     return LeRobotMixtureDataset(
         dataset_mixture,

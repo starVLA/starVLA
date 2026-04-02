@@ -9,5 +9,6 @@ instruction_type: unseen
 host: "127.0.0.1"
 port: 5694
 policy_ckpt_path: "/mnt/data/gaoning/code_repos/starVLA/results/Checkpoints/robotwin2/QwenPI-noState/checkpoints/steps_60000_pytorch_model.pt"
-unnorm_key: "robotwin"
+unnorm_key: "new_embodiment"
 action_mode: "abs"
+normalization_mode: "min_max"  # options: min_max, q99
