@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 # Add workspace root to Python path if not already there
-_workspace_root = Path(__file__).parent.parent.parent.parent
+_workspace_root = Path(__file__).parent.parent.parent.parent.parent
 if str(_workspace_root) not in sys.path:
     sys.path.insert(0, str(_workspace_root))
 import os

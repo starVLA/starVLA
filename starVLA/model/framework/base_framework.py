@@ -28,11 +28,22 @@ def _auto_import_framework_modules() -> None:
     if _FRAMEWORKS_IMPORTED:
         return
 
+    _SKIP = {"__init__", "base_framework", "share_tools"}
     framework_dir = Path(__file__).resolve().parent
-    for _, module_name, _ in pkgutil.iter_modules([str(framework_dir)]):
-        if module_name in {"__init__", "base_framework", "share_tools"}:
+
+    # Scan top-level modules (backwards compat)
+    for _, module_name, is_pkg in pkgutil.iter_modules([str(framework_dir)]):
+        if module_name in _SKIP:
             continue
-        importlib.import_module(f"starVLA.model.framework.{module_name}")
+        if is_pkg:
+            # Scan sub-packages (VLM4A/, WM4A/, etc.)
+            sub_dir = framework_dir / module_name
+            for _, sub_name, _ in pkgutil.iter_modules([str(sub_dir)]):
+                if sub_name.startswith("_"):
+                    continue
+                importlib.import_module(f"starVLA.model.framework.{module_name}.{sub_name}")
+        else:
+            importlib.import_module(f"starVLA.model.framework.{module_name}")
 
     _FRAMEWORKS_IMPORTED = True
 
