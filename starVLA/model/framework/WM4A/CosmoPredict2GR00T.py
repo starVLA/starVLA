@@ -9,14 +9,14 @@ spatiotemporal and physical dynamics, which are projected to the action head
 for continuous action prediction via flow-matching.
 
 Architecture:
-  T5 (text) + VAE (image) → DiT Transformer → hidden_states [B, N, 4096]
+  T5 (text) + VAE (image) → DiT Transformer → hidden_states [B, N, 2048]
     → Linear projection [B, N, action_hidden_dim]
     → FlowmatchingActionHead → action predictions
 
 Key differences from VLM4A frameworks:
   - Vision encoding: VAE latent (not pixel tokens)
   - Text encoding: T5 (not Qwen tokenizer)
-  - Feature dim: 4096 (DiT) vs 2048 (Qwen-VL)
+  - Feature dim: 2048 (DiT) vs 2048 (Qwen-VL)
   - Features are spatiotemporal patches, not sequential tokens
 """
 
@@ -56,7 +56,7 @@ class CosmoPredict2GR00TDefaultConfig:
 
     # === World Model backbone (Cosmos-Predict2) ===
     world_model: dict = field(default_factory=lambda: {
-        "base_wm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B",
+        "base_wm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
         # Which DiT layers to extract features from (-1 = last block)
         "extract_layers": [-1],
     })
@@ -65,8 +65,8 @@ class CosmoPredict2GR00TDefaultConfig:
     # fall back to qwenvl.base_vlm when world_model.base_wm is absent.
     # vl_hidden_dim is read by some action heads (VLA_AdapterHeader, LayerwiseFM).
     qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B",
-        "vl_hidden_dim": 4096,
+        "base_vlm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
+        "vl_hidden_dim": 2048,
     })
 
     # === Action head (Flow-matching / DiT diffusion) ===
@@ -89,8 +89,8 @@ class CosmoPredict2GR00TDefaultConfig:
         "num_inference_timesteps": 4,
         "num_target_vision_tokens": 32,
         "diffusion_model_cfg": {
-            # Will be set at runtime to match world model hidden_size (4096)
-            "cross_attention_dim": 4096,
+            # Will be set at runtime to match world model hidden_size (2048)
+            "cross_attention_dim": 2048,
             "dropout": 0.2,
             "final_dropout": True,
             "interleave_self_attention": True,
@@ -210,3 +210,81 @@ class CosmoPredict2_GR00T(baseframework):
 
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
+
+
+
+
+
+if __name__ == "__main__":
+    import argparse
+
+    from PIL import Image
+    from omegaconf import OmegaConf
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
+        help="Path to YAML config",
+    )
+    args, clipargs = parser.parse_known_args()
+
+    cfg = OmegaConf.load(args.config_yaml)
+
+    # Override for CosmoPredict2-GR00T testing
+    cfg.framework.name = "CosmoPredict2GR00T"
+    cfg.framework.world_model = {
+        "base_wm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
+        "extract_layers": [-1],
+    }
+
+    model: CosmoPredict2_GR00T = CosmoPredict2_GR00T(cfg)
+    print(model)
+
+    # fake sample
+    image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
+    # Create a sample
+    sample = {
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image],  # three views
+        "lang": (
+            "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room."
+        ),
+        # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
+    }
+    sample2 = {
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image],  # three views
+        "lang": (
+            "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room."
+        ),
+        # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
+    }
+
+    batch = [sample, sample2]  # batch size 2
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    forward_output = model(batch)
+    action_loss = forward_output["action_loss"]
+    print(f"Action Loss: {action_loss.item()}")
+
+    # test predict action
+    predict_output = model.predict_action(examples=[sample])  # , state=[batch[0]["state"]]
+    normalized_actions = predict_output["normalized_actions"]
+    print(f"Unnormalized Action: {normalized_actions}")
+
+    # # Advance: try forward model with dataloader
+    # # can be fake sample， but here get from dataloader for simpler
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # from torch.utils.data import DataLoader
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # cfg.datasets.vla_data.include_state = "False"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     model = model.to(device)
+    #     model(batch)
+    # action = model.predict_action(examples=batch)
+    print("Finished")

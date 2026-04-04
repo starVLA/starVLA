@@ -89,7 +89,7 @@ class _CosmoPredict2_Interface(nn.Module):
         self.text_encoder.requires_grad_(False)
 
         # Expose config compatible with framework expectations
-        # DiT: 32 heads × 128 dim = 4096
+        # DiT: 16 heads × 128 dim = 2048
         self._hidden_size = self.transformer.config.num_attention_heads * self.transformer.config.attention_head_dim
 
         # Create a config-like object for the framework to read hidden_size
@@ -158,14 +158,21 @@ class _CosmoPredict2_Interface(nn.Module):
 
         return text_embeds, text_inputs.attention_mask
 
-    def _encode_images(self, images):
+    def _encode_images(self, images, num_frames=5):
         """Encode observation images through VAE to get latent tokens.
+
+        Follows the Cosmos pipeline approach: pad 1 image to `num_frames`
+        with zeros, then VAE-encode the whole video. This avoids issues
+        with temporal downsampling on a single frame.
 
         Args:
             images: List of List of PIL Images [B, [imgs...]]
+            num_frames: Number of temporal frames to pad to (default: 5).
+                VAE temporal factor is 4, so T_latent = (num_frames-1)//4+1.
+                5 → T_latent=2, 9 → T_latent=3, etc.
 
         Returns:
-            latents: [B, C, T, H, W] video latent tensor
+            latents: [B, C, T_latent, H/8, W/8] video latent tensor
         """
         import torchvision.transforms.functional as TF
 
@@ -177,17 +184,32 @@ class _CosmoPredict2_Interface(nn.Module):
                 img = sample_imgs[-1]  # use last image
             else:
                 img = sample_imgs
-            # Convert PIL -> tensor [C, H, W] in [-1, 1]
+            # Convert PIL -> tensor [C, H, W] in [0, 1] then scale to [-1, 1]
             t = TF.to_tensor(img).to(device, dtype=torch.bfloat16) * 2.0 - 1.0
-            # Resize to expected VAE input size
-            t = TF.resize(t, [704, 1280])
+            # Resize to 480p (smaller than 720p to save VRAM)
+            t = TF.resize(t, [480, 832])
             frames.append(t)
 
-        # Stack to [B, C, H, W] then add temporal dim → [B, C, T=1, H, W]
-        pixel_values = torch.stack(frames, dim=0).unsqueeze(2)
+        # Stack to [B, C, H, W]
+        pixel_batch = torch.stack(frames, dim=0)  # [B, C, H, W]
+        B, C, H, W = pixel_batch.shape
+
+        # Create video: 1 condition frame + (num_frames-1) zero-padded frames
+        # This mirrors how the Cosmos pipeline processes single-image input
+        padding = pixel_batch.new_zeros(B, C, num_frames - 1, H, W)
+        video = torch.cat([pixel_batch.unsqueeze(2), padding], dim=2)  # [B, C, num_frames, H, W]
 
         with torch.no_grad():
-            latents = self.vae.encode(pixel_values).latent_dist.sample()  # [B, C, T, H/8, W/8]
+            latents = self.vae.encode(video).latent_dist.sample()  # [B, 16, T_latent, H/8, W/8]
+
+        # Normalize latents like the pipeline does
+        if self.vae.config.latents_mean is not None:
+            latents_mean = torch.tensor(self.vae.config.latents_mean, device=device, dtype=latents.dtype)
+            latents_std = torch.tensor(self.vae.config.latents_std, device=device, dtype=latents.dtype)
+            latents_mean = latents_mean.view(1, -1, 1, 1, 1)[:, :, :latents.size(2)]
+            latents_std = latents_std.view(1, -1, 1, 1, 1)[:, :, :latents.size(2)]
+            sigma_data = self.scheduler.config.sigma_data
+            latents = (latents - latents_mean) * sigma_data / latents_std
 
         return latents
 
@@ -204,20 +226,45 @@ class _CosmoPredict2_Interface(nn.Module):
         """
         assert len(images) == len(instructions)
 
+        # Ensure encoders are on the right device
+        device = next(self.transformer.parameters()).device
+        self.text_encoder.to(device)
+        self.vae.to(device)
+
         text_embeds, text_mask = self._encode_text(instructions)
         latents = self._encode_images(images)
+
+        # Offload T5 and VAE to CPU to free VRAM for the transformer
+        self.text_encoder.to("cpu")
+        self.vae.to("cpu")
+        torch.cuda.empty_cache()
 
         # For feature extraction, use timestep=0 (clean / minimal noise)
         batch_size = latents.shape[0]
         device = latents.device
+        _, _, t_lat, h_lat, w_lat = latents.shape
         timestep = torch.zeros(batch_size, device=device, dtype=torch.long)
+
+        # condition_mask: marks which temporal frames are conditions vs noise
+        # in_channels = 16 (latents) + 1 (condition_mask) = 17
+        # Shape: [B, 1, T_latent, H_latent, W_latent]
+        # First frame is condition (1), rest are noise (0)
+        condition_mask = latents.new_zeros(batch_size, 1, t_lat, h_lat, w_lat)
+        condition_mask[:, :, :1] = 1.0
+
+        # padding_mask: concat_padding_mask=True adds 1 more channel → 18 total
+        # Shape: [1, 1, H_orig, W_orig] — all zeros = no padding
+        # Will be resized to latent spatial dims by the transformer
+        padding_mask = latents.new_zeros(1, 1, h_lat, w_lat)
 
         return {
             "hidden_states": latents,
             "timestep": timestep,
             "encoder_hidden_states": text_embeds,
             "attention_mask": text_mask,
-            "_is_wm_input": True,  # flag for forward() to know this is pre-processed
+            "condition_mask": condition_mask,
+            "padding_mask": padding_mask,
+            "_is_wm_input": True,
         }
 
     def forward(self, **kwargs):
@@ -239,6 +286,8 @@ class _CosmoPredict2_Interface(nn.Module):
                 hidden_states=kwargs["hidden_states"],
                 timestep=kwargs["timestep"],
                 encoder_hidden_states=kwargs["encoder_hidden_states"],
+                condition_mask=kwargs.get("condition_mask", None),
+                padding_mask=kwargs.get("padding_mask", None),
             )
 
         # Build hidden_states tuple from captured intermediate features
@@ -265,7 +314,7 @@ class _CosmoPredict2_Interface(nn.Module):
                 self.hidden_states = hidden_states_tuple
                 self.loss = loss
 
-        return _WMOutput(hidden_states=tuple(extracted))
+        return _WMOutput(hidden_states_tuple=tuple(extracted))
 
     def generate(self, **kwargs):
         """Video generation (for world-model imagination / planning).
