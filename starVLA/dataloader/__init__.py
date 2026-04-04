@@ -53,6 +53,28 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             output_dir = Path(cfg.output_dir)
             vla_dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
         return vla_train_dataloader
+
+    elif dataset_py == "rlds_libero_datasets":
+        import importlib.util
+
+        adapter_path = Path(__file__).resolve().parents[2] / "examples" / "LIBERO" / "train_files" / "rlds_libero_datasets.py"
+        if not adapter_path.exists():
+            raise FileNotFoundError(f"RLDS adapter file not found: {adapter_path}")
+
+        spec = importlib.util.spec_from_file_location("rlds_libero_datasets_adapter", adapter_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load RLDS adapter from: {adapter_path}")
+        adapter_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter_module)
+
+        vla_dataset = adapter_module.get_vla_dataset(cfg=cfg)
+        vla_train_dataloader = DataLoader(
+            vla_dataset,
+            batch_size=cfg.datasets.vla_data.per_device_batch_size,
+            collate_fn=adapter_module.collate_fn,
+            num_workers=getattr(cfg.datasets.vla_data, "num_workers", 0),
+        )
+        return vla_train_dataloader
     elif dataset_py == "vlm_datasets":
         vlm_data_module = make_vlm_dataloader(cfg)
         vlm_train_dataloader = vlm_data_module["train_dataloader"]

@@ -121,3 +121,70 @@ bash examples/LIBERO/train_files/run_libero_train.sh
 ```
 ⚠️ **Note:** Please ensure that you specify the correct path in `examples/LIBERO/train_files/run_libero_train.sh`
 
+
+## 🚀 LIBERO Training (RLDS / OpenVLA-style)
+
+This repo also supports the OpenVLA / OpenVLA-OFT LIBERO RLDS dataset family:
+- `libero_spatial_no_noops`
+- `libero_object_no_noops`
+- `libero_goal_no_noops`
+- `libero_10_no_noops`
+
+These datasets are the modified LIBERO suites used in OpenVLA and OpenVLA-OFT experiments:
+- OpenVLA dataset release: <https://huggingface.co/datasets/openvla/modified_libero_rlds>
+- OpenVLA LIBERO setup: <https://github.com/openvla/openvla?tab=readme-ov-file#libero-setup>
+- OpenVLA-OFT LIBERO docs: <https://github.com/moojink/openvla-oft/blob/main/LIBERO.md>
+
+`_no_noops` means no-op transitions are filtered out in dataset regeneration.
+
+### 📦 Step 0: Prepare RLDS dataset
+
+Install RLDS reader dependency in the `starVLA` env:
+```bash
+pip install tensorflow-cpu tensorflow-datasets
+```
+
+Download and link the dataset:
+```bash
+export DEST=/path/to/your/data/directory
+bash examples/LIBERO/data_preparation_rlds.sh
+```
+
+Expected layout:
+```text
+playground/Datasets/MODIFIED_LIBERO_RLDS/
+  libero_spatial_no_noops/1.0.0/...
+  libero_object_no_noops/1.0.0/...
+  libero_goal_no_noops/1.0.0/...
+  libero_10_no_noops/1.0.0/...
+```
+
+### ✅ Step 1: Quick validation (recommended)
+
+Check statistics keys and dimensions:
+```bash
+python examples/LIBERO/tools/validate_rlds_statistics.py \
+  --data-root-dir playground/Datasets/MODIFIED_LIBERO_RLDS \
+  --data-mix libero_all
+```
+
+Inspect orientation samples:
+```bash
+python examples/LIBERO/tools/inspect_rlds_orientation.py \
+  --data-root-dir playground/Datasets/MODIFIED_LIBERO_RLDS \
+  --dataset-name libero_spatial_no_noops \
+  --output-dir examples/LIBERO/rlds_inspection/orientation
+```
+
+### 🚀 Step 2: Train with RLDS backend
+
+```bash
+bash examples/LIBERO/train_files/run_libero_train_rlds.sh
+```
+
+### ⚠️ Notes
+
+- The RLDS adapter is loaded from `examples/LIBERO/train_files/rlds_libero_datasets.py`.
+- Per-suite transition counts are read from `dataset_statistics_*.json` (fallback: `dataset_info.json`).
+- OpenVLA notes mention a 180° rotation in HDF5 -> RLDS conversion; verify your local data orientation with the inspection script before training:
+  <https://github.com/openvla/openvla/blob/main/experiments/robot/libero/regenerate_libero_dataset.py>
