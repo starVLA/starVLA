@@ -9,15 +9,15 @@ dynamics learned from large-scale video generation pretraining,
 which are projected to the action head for continuous action prediction.
 
 Architecture:
-  UMT5 (text) + CLIP (image) + VAE (image→latent) → WanTransformer3D
+  UMT5 (text) + VAE (image→latent) → WanTransformer3D
     → hidden_states [B, N, 3072]
     → Linear projection [B, N, action_hidden_dim]
     → FlowmatchingActionHead → action predictions
 
 Key differences from CosmoPredict2GR00T:
   - Text encoder: UMT5-XXL (dim=4096) vs T5 (dim=1024)
-  - Image conditioning: dual-path (CLIP + VAE) vs VAE only
-  - DiT hidden dim: 3072 (24×128) vs 4096 (32×128)
+  - VAE latent channels: 48 vs 16
+  - DiT hidden dim: 3072 (24×128) vs 2048 (16×128)
   - 30 transformer blocks vs 28
 """
 
@@ -55,9 +55,9 @@ class WanGR00TDefaultConfig:
 
     name: str = "WanGR00T"
 
-    # === World Model backbone (Wan2.2-TI2V-5B) ===
+    # === World Model backbone (Wan2.2-TI2V-5B-Diffusers) ===
     world_model: dict = field(default_factory=lambda: {
-        "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B",
+        "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
         "extract_layers": [-1],
     })
 
@@ -66,7 +66,7 @@ class WanGR00TDefaultConfig:
     # vl_hidden_dim is read by some action heads (VLA_AdapterHeader, LayerwiseFM).
     # TODO next version should refactor to remove this redundant config section and update all shared utilities to read from world_model.base_wm instead of qwenvl.base_vlm.
     qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B",
+        "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
         "vl_hidden_dim": 3072,
     })
 
@@ -111,12 +111,12 @@ class Wan_GR00T(baseframework):
     World-Model-for-Action framework using Wan2.2-TI2V-5B backbone.
 
     Components:
-      - Wan2.2-TI2V DiT (UMT5 + CLIP + VAE + WanTransformer3D) for features
+      - Wan2.2-TI2V DiT (UMT5 + VAE + WanTransformer3D) for features
       - Flow-matching (DiT) diffusion head for continuous action prediction
 
     The Wan world model provides spatiotemporal representations learned
-    from large-scale video generation pretraining with dual image conditioning
-    (CLIP cross-attention + VAE latent input).
+    from large-scale video generation pretraining with expand_timesteps
+    image conditioning (per-token timestep expansion).
     """
 
     def __init__(self, config: Optional[dict] = None, **kwargs) -> None:
@@ -143,7 +143,7 @@ class Wan_GR00T(baseframework):
 
         state = [example["state"] for example in examples] if "state" in examples[0] else None
 
-        # Step 1: World model input encoding (UMT5 + CLIP + VAE)
+        # Step 1: World model input encoding (UMT5 + VAE)
         wm_inputs = self.backbone.build_inputs(images=batch_images, instructions=instructions)
 
         # Step 2: DiT forward to extract spatiotemporal features
@@ -219,6 +219,7 @@ class Wan_GR00T(baseframework):
 if __name__ == "__main__":
     import argparse
 
+    from PIL import Image
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -230,20 +231,14 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    try:
-        import debugpy
-        debugpy.listen(("0.0.0.0", 10092))
-        print("Rank 0 waiting for debugger attach on port 10092...")
-        debugpy.wait_for_client()
-    except (ImportError, RuntimeError):
-        pass
-
-
     cfg = OmegaConf.load(args.config_yaml)
-    # try get model
-    # cfg.framework.action_model.action_hidden_dim = 2048
 
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B"
+    # Point to the diffusers-format model
+    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+    cfg.framework.world_model = {
+        "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+        "extract_layers": [-1],
+    }
 
     model: Wan_GR00T = Wan_GR00T(cfg)
     print(model)

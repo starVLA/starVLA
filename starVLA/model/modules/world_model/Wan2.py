@@ -3,26 +3,28 @@
 """
 Wan2.2-TI2V World Model Interface.
 
-Wraps Wan-AI/Wan2.2-TI2V-5B (diffusion-based Text+Image-to-Video model) as a
-world-model backend for starVLA action prediction frameworks.
+Wraps Wan-AI/Wan2.2-TI2V-5B-Diffusers (diffusion-based Text+Image-to-Video model)
+as a world-model backend for starVLA action prediction frameworks.
 
-Architecture:
+Architecture (diffusers format):
   - UMT5EncoderModel: text instruction → text embeddings [B, L_text, 4096]
-  - CLIPVisionModel: observation image → image embeddings [B, N_patches, 1280]
-  - AutoencoderKLWan (VAE): observation image → video latents [B, C, T, H, W]
+  - AutoencoderKLWan (VAE): observation image → video latents [B, 48, T, H/16, W/16]
   - WanTransformer3DModel: 30-layer DiT, hidden_dim=3072 (24 heads × 128 dim)
-    Takes noised latents + text/image embeddings → denoised latents
+    Takes noised latents + text embeddings → denoised latents
     We extract intermediate hidden states for action-conditioning.
+
+Note: The diffusers version of Wan2.2-TI2V-5B uses WanPipeline (text-only
+conditioning) with expand_timesteps=True for TI2V mode. There is NO CLIP
+image_encoder in this model variant — image conditioning is achieved through
+per-token timestep expansion where the first frame's latent is conditioned
+via timestep=0 (clean).
 
 Key differences from CosmoPredict2:
   - Text encoder: UMT5 (dim=4096) vs T5 (dim=1024)
-  - Image conditioning: CLIP embeddings + VAE latents (dual path)
-  - DiT hidden dim: 3072 (24×128) vs 4096 (32×128)
-  - Wan2.2 TI2V uses expand_timesteps with first_frame_mask for image conditioning
-
-Key differences from VLM wrappers:
-  - No chat template / processor — uses UMT5 for text, CLIP+VAE for vision
-  - Hidden states come from DiT blocks, not autoregressive LM
+  - VAE latent channels: 48 vs 16
+  - DiT hidden dim: 3072 (24×128) vs 2048 (16×128)
+  - Scheduler: UniPCMultistepScheduler vs FlowMatchEulerDiscreteScheduler
+  - No condition_mask / padding_mask (those are Cosmos-specific)
 """
 
 from typing import Optional
@@ -37,7 +39,7 @@ logger = initialize_overwatch(__name__)
 
 class _Wan2_Interface(nn.Module):
     """
-    World model wrapper for Wan2.2-TI2V-5B (diffusers-based).
+    World model wrapper for Wan2.2-TI2V-5B-Diffusers.
 
     The key methods are:
       - forward(**kwargs) → model outputs with hidden_states
@@ -57,38 +59,25 @@ class _Wan2_Interface(nn.Module):
         wm_cfg = config.framework.get("world_model", {})
         model_name = wm_cfg.get(
             "base_wm",
-            config.framework.get("qwenvl", {}).get("base_vlm", "Wan-AI/Wan2.2-TI2V-5B"),
+            config.framework.get("qwenvl", {}).get("base_vlm", "Wan-AI/Wan2.2-TI2V-5B-Diffusers"),
         )
         self.config = config
 
         from diffusers import (
             AutoencoderKLWan,
-            FlowMatchEulerDiscreteScheduler,
+            UniPCMultistepScheduler,
             WanTransformer3DModel,
         )
-        from transformers import (
-            AutoTokenizer,
-            CLIPImageProcessor,
-            CLIPVisionModel,
-            UMT5EncoderModel,
-        )
+        from transformers import T5TokenizerFast, UMT5EncoderModel
 
         logger.info(f"Loading Wan2.2-TI2V from {model_name}")
 
         # --- Text encoder: UMT5-XXL ---
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = T5TokenizerFast.from_pretrained(
             model_name, subfolder="tokenizer"
         )
         self.text_encoder = UMT5EncoderModel.from_pretrained(
             model_name, subfolder="text_encoder", torch_dtype=torch.bfloat16
-        )
-
-        # --- Image encoder: CLIP (for cross-attention conditioning) ---
-        self.image_processor = CLIPImageProcessor.from_pretrained(
-            model_name, subfolder="image_encoder"
-        )
-        self.image_encoder = CLIPVisionModel.from_pretrained(
-            model_name, subfolder="image_encoder", torch_dtype=torch.bfloat16
         )
 
         # --- DiT transformer ---
@@ -96,20 +85,19 @@ class _Wan2_Interface(nn.Module):
             model_name, subfolder="transformer", torch_dtype=torch.bfloat16
         )
 
-        # --- VAE (image → latents for DiT input) ---
+        # --- VAE (image → latents for DiT input, z_dim=48) ---
         self.vae = AutoencoderKLWan.from_pretrained(
             model_name, subfolder="vae", torch_dtype=torch.bfloat16
         )
 
         # --- Scheduler ---
-        self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+        self.scheduler = UniPCMultistepScheduler.from_pretrained(
             model_name, subfolder="scheduler"
         )
 
-        # Freeze VAE, text encoder, image encoder by default
+        # Freeze VAE and text encoder by default
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
-        self.image_encoder.requires_grad_(False)
 
         # DiT: 24 heads × 128 dim = 3072
         self._hidden_size = (
@@ -178,65 +166,30 @@ class _Wan2_Interface(nn.Module):
             return_tensors="pt",
         ).to(device)
 
-        mask = text_inputs.attention_mask
-        seq_lens = mask.gt(0).sum(dim=1).long()
-
         with torch.no_grad():
             text_embeds = self.text_encoder(
                 input_ids=text_inputs.input_ids,
-                attention_mask=mask,
+                attention_mask=text_inputs.attention_mask,
             ).last_hidden_state  # [B, L, 4096]
 
-        # Trim to actual lengths then re-pad (matches Wan pipeline)
-        text_embeds = text_embeds.to(dtype=torch.bfloat16)
-        trimmed = [u[:v] for u, v in zip(text_embeds, seq_lens)]
-        text_embeds = torch.stack(
-            [
-                torch.cat([u, u.new_zeros(max_length - u.size(0), u.size(1))])
-                for u in trimmed
-            ],
-            dim=0,
-        )
-        return text_embeds  # [B, max_length, 4096]
+        return text_embeds.to(dtype=torch.bfloat16)  # [B, max_length, 4096]
 
-    def _encode_image_clip(self, images):
-        """Encode images through CLIP for cross-attention conditioning.
-
-        Args:
-            images: List of List of PIL Images [B, [imgs...]]
-
-        Returns:
-            image_embeds: [B, N_patches, 1280]
-        """
-        device = next(self.image_encoder.parameters()).device
-
-        # Take the last image from each sample
-        pil_images = []
-        for sample_imgs in images:
-            if isinstance(sample_imgs, (list, tuple)):
-                pil_images.append(sample_imgs[-1])
-            else:
-                pil_images.append(sample_imgs)
-
-        pixel_values = self.image_processor(
-            images=pil_images, return_tensors="pt"
-        ).pixel_values.to(device, dtype=torch.bfloat16)
-
-        with torch.no_grad():
-            image_embeds = self.image_encoder(
-                pixel_values, output_hidden_states=True
-            ).hidden_states[-2]  # [B, N_patches, 1280]
-
-        return image_embeds
-
-    def _encode_images_vae(self, images):
+    def _encode_images_vae(self, images, num_frames=5):
         """Encode observation images through VAE to get latent tokens.
 
+        Follows the same temporal padding approach as CosmoPredict2:
+        pad 1 image to `num_frames` with zeros, then VAE-encode the whole
+        video. This avoids issues with temporal downsampling on a single frame.
+
+        VAE config: z_dim=48, scale_factor_spatial=16, scale_factor_temporal=4
+        5 frames → T_latent = (5-1)//4+1 = 2
+
         Args:
             images: List of List of PIL Images [B, [imgs...]]
+            num_frames: Number of temporal frames to pad to (default: 5).
 
         Returns:
-            latents: [B, C, T=1, H', W'] video latent tensor
+            latents: [B, 48, T_latent, H/16, W/16] video latent tensor
         """
         import torchvision.transforms.functional as TF
 
@@ -250,15 +203,21 @@ class _Wan2_Interface(nn.Module):
                 img = sample_imgs
             # PIL → tensor [C, H, W] in [-1, 1]
             t = TF.to_tensor(img).to(device, dtype=torch.bfloat16) * 2.0 - 1.0
-            # Wan expects height/width multiples of (vae_spatial=8 * patch_h=2) = 16
+            # Wan VAE: scale_factor_spatial=16, transformer patch_size=[1,2,2]
+            # So spatial dims must be multiples of 16*2=32
             t = TF.resize(t, [480, 832])
             frames.append(t)
 
-        # [B, C, H, W] → [B, C, T=1, H, W]
-        pixel_values = torch.stack(frames, dim=0).unsqueeze(2)
+        # Stack to [B, C, H, W]
+        pixel_batch = torch.stack(frames, dim=0)
+        B, C, H, W = pixel_batch.shape
+
+        # Create video: 1 condition frame + (num_frames-1) zero-padded frames
+        padding = pixel_batch.new_zeros(B, C, num_frames - 1, H, W)
+        video = torch.cat([pixel_batch.unsqueeze(2), padding], dim=2)  # [B, C, num_frames, H, W]
 
         with torch.no_grad():
-            latents = self.vae.encode(pixel_values).latent_dist.sample()
+            latents = self.vae.encode(video).latent_dist.sample()  # [B, 48, T_latent, H/16, W/16]
 
         # Normalize latents (Wan convention)
         latents_mean = (
@@ -281,24 +240,35 @@ class _Wan2_Interface(nn.Module):
 
         Encoding pipeline:
         1. Text → UMT5 → text embeddings [B, L, 4096]
-        2. Image → CLIP → image embeddings [B, N, 1280] (cross-attn conditioning)
-        3. Image → VAE → latents [B, C, T, H', W'] (DiT input)
+        2. Image → VAE → latents [B, 48, T, H', W'] (DiT input)
+
+        Note: No CLIP image conditioning — this diffusers variant uses
+        expand_timesteps mode (per-token timesteps) instead.
 
         Returns:
             dict with keys matching forward() expectations
         """
         assert len(images) == len(instructions)
 
+        # Ensure encoders are on the right device
+        device = next(self.transformer.parameters()).device
+        self.text_encoder.to(device)
+        self.vae.to(device)
+
         text_embeds = self._encode_text(instructions)
-        image_embeds = self._encode_image_clip(images)
         latents = self._encode_images_vae(images)
+
+        # Offload T5 and VAE to CPU to free VRAM for the transformer
+        self.text_encoder.to("cpu")
+        self.vae.to("cpu")
+        torch.cuda.empty_cache()
 
         batch_size = latents.shape[0]
         device = latents.device
 
         # Wan2.2 TI2V uses expand_timesteps: timestep is per-token
-        # For feature extraction at σ≈0, use zeros
-        # Shape: [B, seq_len] where seq_len = num_latent_frames * (H'//p_h) * (W'//p_w)
+        # Shape: [B, seq_len] where seq_len = T_lat * (H_lat//p_h) * (W_lat//p_w)
+        # For feature extraction at σ≈0, use zeros (clean input)
         p_t, p_h, p_w = self.transformer.config.patch_size
         _, _, T, H, W = latents.shape
         seq_len = (T // p_t) * (H // p_h) * (W // p_w)
@@ -308,7 +278,6 @@ class _Wan2_Interface(nn.Module):
             "hidden_states": latents,
             "timestep": timestep,
             "encoder_hidden_states": text_embeds,
-            "encoder_hidden_states_image": image_embeds,
             "_is_wm_input": True,
         }
 
@@ -330,10 +299,10 @@ class _Wan2_Interface(nn.Module):
                 hidden_states=kwargs["hidden_states"],
                 timestep=kwargs["timestep"],
                 encoder_hidden_states=kwargs["encoder_hidden_states"],
-                encoder_hidden_states_image=kwargs.get("encoder_hidden_states_image"),
             )
 
         # Collect features from hooks
+        # WanTransformer3DModel blocks output [B, seq_len, hidden_dim] (already flattened)
         extracted = []
         for feat in self._intermediate_features:
             if feat.dim() == 5:
@@ -357,21 +326,19 @@ class _Wan2_Interface(nn.Module):
                 self.hidden_states = hidden_states_tuple
                 self.loss = loss
 
-        return _WMOutput(hidden_states=tuple(extracted))
+        return _WMOutput(hidden_states_tuple=tuple(extracted))
 
     def generate(self, **kwargs):
-        """Video generation using the full WanImageToVideoPipeline.
+        """Video generation using the WanPipeline.
 
         Not used during standard VLA training, but useful for visualization
         and planning-based approaches.
         """
-        from diffusers import WanImageToVideoPipeline
+        from diffusers import WanPipeline
 
-        pipe = WanImageToVideoPipeline(
+        pipe = WanPipeline(
             tokenizer=self.tokenizer,
             text_encoder=self.text_encoder,
-            image_processor=self.image_processor,
-            image_encoder=self.image_encoder,
             vae=self.vae,
             transformer=self.transformer,
             scheduler=self.scheduler,

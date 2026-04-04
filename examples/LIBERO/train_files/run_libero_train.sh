@@ -1,34 +1,28 @@
+#!/bin/bash
+# Smoke tests for VLA-only and VLA+VLM cotrain training after DataLoaderManager changes
+# Usage: run on a compute node with 2+ GPUs
+#   srun --jobid=<JOB_ID> --overlap --pty bash /home/jye624/Projcets/starVLA/tmp/run_train_test.sh
 set -e
 
-# === CUDA auto-detection for compute nodes ===
-# Try common CUDA paths and set CUDA_HOME + PATH so DeepSpeed can find nvcc
-if [ -z "$CUDA_HOME" ]; then
-  for cuda_path in /usr/local/cuda /usr/local/cuda-12 /usr/local/cuda-12.4; do
-    if [ -x "${cuda_path}/bin/nvcc" ]; then
-      export CUDA_HOME="${cuda_path}"
-      export PATH="${cuda_path}/bin:${PATH}"
-      export LD_LIBRARY_PATH="${cuda_path}/lib64:${LD_LIBRARY_PATH:-}"
-      echo "[INFO] Auto-detected CUDA_HOME=${CUDA_HOME}"
-      break
-    fi
-  done
-fi
+# === Conda setup ===
+source /cm/shared/apps/Anaconda3/2023.09-0/etc/profile.d/conda.sh
+conda activate starVLA
 
-# Fallback: use conda env's nvcc wrapper (for clusters without system CUDA toolkit)
-CONDA_NVCC_COMPAT="${CONDA_PREFIX:-$HOME/.conda/envs/starVLA}/cuda_compat/bin"
-if ! nvcc --version 2>&1 | grep -q "release"; then
-  if [ -x "${CONDA_NVCC_COMPAT}/nvcc" ]; then
-    export PATH="${CONDA_NVCC_COMPAT}:${PATH}"
-    export CUDA_HOME="$(dirname $(dirname ${CONDA_NVCC_COMPAT}))"
-    echo "[INFO] Using nvcc wrapper from ${CONDA_NVCC_COMPAT}"
+# === CUDA setup ===
+for cuda_path in /usr/local/cuda /usr/local/cuda-12 /usr/local/cuda-12.4; do
+  if [ -x "${cuda_path}/bin/nvcc" ]; then
+    export CUDA_HOME="${cuda_path}"
+    export PATH="${cuda_path}/bin:${PATH}"
+    export LD_LIBRARY_PATH="${cuda_path}/lib64:${LD_LIBRARY_PATH:-}"
+    break
   fi
-fi
+done
 
-# Final fallback: create an nvcc wrapper from PyTorch's CUDA version
+# nvcc wrapper fallback
 if ! nvcc --version 2>&1 | grep -q "release"; then
-  _WRAPPER_DIR="${CONDA_PREFIX:-$HOME/.conda/envs/starVLA}/cuda_compat/bin"
+  _WRAPPER_DIR="${CONDA_PREFIX}/cuda_compat/bin"
   mkdir -p "${_WRAPPER_DIR}" 2>/dev/null || true
-  _TORCH_CUDA_VER=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null || echo "12.1")
+  _TORCH_CUDA_VER=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null || echo "12.4")
   _MAJOR=$(echo "${_TORCH_CUDA_VER}" | cut -d. -f1)
   _MINOR=$(echo "${_TORCH_CUDA_VER}" | cut -d. -f2)
   cat > "${_WRAPPER_DIR}/nvcc" << NVCC_EOF
@@ -38,30 +32,13 @@ echo "Cuda compilation tools, release ${_MAJOR}.${_MINOR}, V${_TORCH_CUDA_VER}"
 NVCC_EOF
   chmod +x "${_WRAPPER_DIR}/nvcc"
   export PATH="${_WRAPPER_DIR}:${PATH}"
-  export CUDA_HOME="$(dirname ${_WRAPPER_DIR})"
-  echo "[INFO] Created nvcc wrapper for DeepSpeed: CUDA ${_TORCH_CUDA_VER}"
+  export CUDA_HOME="${CONDA_PREFIX}/cuda_compat"
+  echo "[INFO] Created nvcc wrapper: CUDA ${_TORCH_CUDA_VER}"
 fi
 
-# Final verify
-if ! nvcc --version 2>&1 | grep -q "release"; then
-  echo "[WARN] nvcc not found or not working. DeepSpeed may fail to import."
-  echo "[WARN] Make sure you are on a compute node with CUDA."
-fi
+echo "[INFO] CUDA_HOME=$CUDA_HOME"
+nvcc --version 2>/dev/null || echo "[WARN] nvcc not found"
 
-# Set Triton cache to local to avoid NFS slowdowns
-export TRITON_CACHE_DIR="/tmp/${USER}_triton_cache"
-mkdir -p "${TRITON_CACHE_DIR}" 2>/dev/null || true
-
-if ip link show bond0 >/dev/null 2>&1; then
-  export NCCL_SOCKET_IFNAME=bond0
-fi
-
-if [ -d /sys/class/infiniband ]; then
-  ib_hca_list=$(ls /sys/class/infiniband 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-  if [ -n "${ib_hca_list}" ]; then
-    export NCCL_IB_HCA=${ib_hca_list}
-  fi
-fi
 
 # used for check save when communication
 export NCCL_BLOCKING_WAIT=1
@@ -72,7 +49,7 @@ export NCCL_SOCKET_TIMEOUT_MS=360000
 # === Please modify the following paths according to your environment ===
 cd /home/jye624/Projcets/starVLA
 
-Framework_name=QwenOFT
+Framework_name=CosmoPredict2GR00T
 freeze_module_list=''
 base_vlm=/home/jye624/Models/Pretrained_models/Qwen3-VL-4B-Instruct
 config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
@@ -93,7 +70,7 @@ mkdir -p ${output_dir}
 cp $0 ${output_dir}/
 
 num_processes=${NUM_PROCESSES:-$(nvidia-smi -L | wc -l)}
-per_device_batch_size=${PER_DEVICE_BATCH_SIZE:-8}
+per_device_batch_size=${PER_DEVICE_BATCH_SIZE:-2}
 attn_implementation=${ATTN_IMPLEMENTATION:-sdpa}
 accelerate_config_file=${ACCELERATE_CONFIG_FILE:-starVLA/config/deepseeds/deepspeed_zero2.yaml}
 
