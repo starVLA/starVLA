@@ -5,9 +5,10 @@ def get_world_model(config):
     ``config.framework.world_model.base_wm`` (or falls back to
     ``config.framework.qwenvl.base_vlm`` for backward compatibility).
 
-    Every world-model wrapper exposes the **same interface** as VLM
-    wrappers (``forward``, ``generate``, ``build_qwenvl_inputs``),
-    so frameworks can swap VLM ↔ WM transparently.
+    Every world-model wrapper exposes:
+      - ``forward(**kwargs)`` → model outputs with hidden_states
+      - ``build_inputs(images, instructions)`` → dict of tensors
+      - ``generate(**kwargs)`` → generation (optional)
     """
 
     # Prefer explicit world_model config; fall back to qwenvl for compat
@@ -18,8 +19,16 @@ def get_world_model(config):
         wm_name = config.framework.qwenvl.base_vlm
 
     if "cosmos-reason2" in wm_name.lower():
-        from .CosmosReason2 import _CosmosReason2_Interface
+        from ..vlm.CosmosReason2 import _CosmosReason2_Interface
 
         return _CosmosReason2_Interface(config)
+    elif "cosmos-predict2" in wm_name.lower() or "cosmos-predict2" in wm_name.lower():
+        from .CosmoPredict2 import _CosmoPredict2_Interface
+
+        return _CosmoPredict2_Interface(config)
+    elif "wan2" in wm_name.lower() or "ti2v" in wm_name.lower():
+        from .Wan2 import _Wan2_Interface
+
+        return _Wan2_Interface(config)
     else:
         raise NotImplementedError(f"World model {wm_name} not implemented")

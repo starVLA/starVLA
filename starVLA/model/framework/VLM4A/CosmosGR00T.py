@@ -1,13 +1,12 @@
 # Copyright 2025 starVLA community. All rights reserved.
 # Licensed under the MIT License, Version 1.0 (the "License");
 """
-CosmosGR00T Framework — World-Model-for-Action variant of GR00T.
+CosmosGR00T Framework — Cosmos-Reason2 VLM variant of GR00T.
 
 Identical architecture to QwenGR00T (flow-matching DiT action head),
-but uses a World Model backbone (e.g. Cosmos-Reason2) instead of a
-vanilla VLM.  Because Cosmos-Reason2 shares the Qwen3-VL architecture,
-the interface is fully compatible — the only difference is the routing
-through `get_world_model()` instead of `get_vlm_model()`.
+but uses Cosmos-Reason2 as the VLM backbone. Cosmos-Reason2 is built
+on the Qwen3-VL architecture with physical-reasoning pretraining,
+so it shares the same interface as other Qwen VLMs.
 """
 
 import sys
@@ -33,7 +32,7 @@ IGNORE_INDEX = -100
 from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.GR00T_ActionHeader import FlowmatchingActionHead, get_action_model
-from starVLA.model.modules.world_model import get_world_model
+from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
@@ -107,8 +106,7 @@ class Cosmos_GR00T(baseframework):
         super().__init__()
         self.config = merge_framework_config(CosmosGR00TDefaultConfig, config)
 
-        # Use world model factory instead of VLM factory
-        self.qwen_vl_interface = get_world_model(config=self.config)
+        self.qwen_vl_interface = get_vlm_model(config=self.config)
 
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
             self.qwen_vl_interface.model.config.hidden_size

@@ -7,10 +7,11 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import transformers
-from accelerate.logging import get_logger
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-logger = get_logger(__name__)
+from starVLA.training.trainer_utils import initialize_overwatch
+
+logger = initialize_overwatch(__name__)
 
 import warnings
 

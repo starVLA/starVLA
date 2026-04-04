@@ -6,7 +6,7 @@
 from typing import Optional
 
 import torch
-from accelerate.logging import get_logger
+from starVLA.training.trainer_utils import initialize_overwatch
 from transformers import AutoProcessor
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
@@ -17,7 +17,7 @@ except ImportError as import_error:
         "Qwen3.5 model class is unavailable. Please install transformers >= 5.2.0 or check your transformers version."
     ) from import_error
 
-logger = get_logger(__name__)
+logger = initialize_overwatch(__name__)
 
 IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = 248056

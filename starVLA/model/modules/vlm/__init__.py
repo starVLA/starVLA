@@ -19,9 +19,10 @@ def get_vlm_model(config):
 
         return _Florence_Interface(config)
     elif "cosmos-reason2" in vlm_name.lower():
-        # Cosmos-Reason2 is a world model; route through world_model module
-        from starVLA.model.modules.world_model import get_world_model
+        # Cosmos-Reason2 is architecturally Qwen3-VL (VLM), but implemented
+        # in world_model/ for historical reasons. Import directly.
+        from starVLA.model.modules.vlm.CosmosReason2 import _CosmosReason2_Interface
 
-        return get_world_model(config)
+        return _CosmosReason2_Interface(config)
     else:
         raise NotImplementedError(f"VLM model {vlm_name} not implemented")

@@ -5,12 +5,12 @@
 from typing import List, Optional
 
 import torch
-from accelerate.logging import get_logger
+from starVLA.training.trainer_utils import initialize_overwatch
 from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-logger = get_logger(__name__)
+logger = initialize_overwatch(__name__)
 
 IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = 151655

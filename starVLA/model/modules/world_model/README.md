@@ -36,9 +36,10 @@ wm = get_world_model(config)  # 根据模型名路由
 
 ## 现有实现
 
-| 文件 | 类名 | 支持的模型 |
-|------|------|-----------|
-| `CosmosReason2.py` | `_CosmosReason2_Interface` | nvidia/Cosmos-Reason2-2B |
+| 文件 | 类名 | 支持的模型 | 架构 |
+|------|------|-----------|------|
+| `CosmosReason2.py` | `_CosmosReason2_Interface` | nvidia/Cosmos-Reason2-2B | Qwen3-VL (自回归 LM), hidden=2048 |
+| `CosmoPredict2.py` | `_CosmoPredict2_Interface` | nvidia/Cosmos-Predict2-2B | DiT (扩散 Transformer), hidden=4096 |
 
 ## Framework 层使用
 
@@ -77,6 +78,7 @@ starVLA/model/
 │   │   ├── ABot_M0.py      # VLM + VGGT + DiT
 │   │   └── M1.py           # VLM + DINO + QFormer + DiT
 │   └── WM4A/               # World-Model-for-Action 框架
-│       └── CosmosGR00T.py  # WorldModel + DiT flow-matching
+│       ├── CosmosGR00T.py           # CosmosReason2 + Flowmatching
+│       └── CosmoPredict2GR00T.py    # CosmosPredict2 (DiT) + Flowmatching
 └── tools.py                # Registry, 归一化工具
 ```
