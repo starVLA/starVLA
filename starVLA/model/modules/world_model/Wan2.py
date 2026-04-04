@@ -95,6 +95,12 @@ class _Wan2_Interface(nn.Module):
             model_name, subfolder="scheduler"
         )
 
+        # Use diffusers' VideoProcessor for image/video preprocessing (resize, normalize, etc.)
+        from diffusers.video_processor import VideoProcessor
+        self.vae_scale_factor_spatial = 2 ** len(self.vae.temperal_downsample)
+        self.vae_scale_factor_temporal = 2 ** sum(self.vae.temperal_downsample)
+        self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
+
         # Freeze VAE and text encoder by default
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
@@ -191,35 +197,40 @@ class _Wan2_Interface(nn.Module):
         Returns:
             latents: [B, 48, T_latent, H/16, W/16] video latent tensor
         """
-        import torchvision.transforms.functional as TF
-
         device = next(self.vae.parameters()).device
+        dtype = self.vae.dtype
+        height, width = 480, 832
 
-        frames = []
+        # Use VideoProcessor for image preprocessing (resize, normalize to [-1,1])
+        batch_videos = []
         for sample_imgs in images:
-            if isinstance(sample_imgs, (list, tuple)):
-                img = sample_imgs[-1]
-            else:
-                img = sample_imgs
-            # PIL → tensor [C, H, W] in [-1, 1]
-            t = TF.to_tensor(img).to(device, dtype=torch.bfloat16) * 2.0 - 1.0
-            # Wan VAE: scale_factor_spatial=16, transformer patch_size=[1,2,2]
-            # So spatial dims must be multiples of 16*2=32
-            t = TF.resize(t, [480, 832])
-            frames.append(t)
+            if not isinstance(sample_imgs, (list, tuple)):
+                sample_imgs = [sample_imgs]
 
-        # Stack to [B, C, H, W]
-        pixel_batch = torch.stack(frames, dim=0)
-        B, C, H, W = pixel_batch.shape
+            # Truncate if more images than num_frames
+            if len(sample_imgs) > num_frames:
+                sample_imgs = sample_imgs[:num_frames]
 
-        # Create video: 1 condition frame + (num_frames-1) zero-padded frames
-        padding = pixel_batch.new_zeros(B, C, num_frames - 1, H, W)
-        video = torch.cat([pixel_batch.unsqueeze(2), padding], dim=2)  # [B, C, num_frames, H, W]
+            # preprocess_video: list[PIL] → [1, C, T, H, W] (normalized to [-1,1])
+            video_tensor = self.video_processor.preprocess_video(sample_imgs, height=height, width=width)
+            video_tensor = video_tensor.to(device=device, dtype=dtype)  # [1, C, n_imgs, H, W]
+
+            # Pad with last-frame repetition (matches official Wan pipeline)
+            n_imgs = video_tensor.shape[2]
+            if n_imgs < num_frames:
+                last_frame = video_tensor[:, :, -1:]
+                padding = last_frame.repeat(1, 1, num_frames - n_imgs, 1, 1)
+                video_tensor = torch.cat([video_tensor, padding], dim=2)
+
+            batch_videos.append(video_tensor.squeeze(0))  # [C, num_frames, H, W]
+
+        # Stack to [B, C, num_frames, H, W]
+        video = torch.stack(batch_videos, dim=0)
 
         with torch.no_grad():
             latents = self.vae.encode(video).latent_dist.sample()  # [B, 48, T_latent, H/16, W/16]
 
-        # Normalize latents (Wan convention)
+        # Normalize latents (matches official Wan pipeline: (latent - mean) * (1/std))
         latents_mean = (
             torch.tensor(self.vae.config.latents_mean)
             .view(1, self.vae.config.z_dim, 1, 1, 1)

@@ -101,7 +101,8 @@ class Wan_OFT(baseframework):
         self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
-        self.action_query_proj = nn.Linear(wm_hidden, self.chunk_len * wm_hidden)
+        self.action_query_proj = nn.Linear(wm_hidden, self.chunk_len * wm_hidden) # 变成两层MLP
+
         self.l1_loss = nn.L1Loss()
 
     def _pool_to_action_queries(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -127,7 +128,7 @@ class Wan_OFT(baseframework):
             last_hidden = wm_outputs.hidden_states[-1]
 
         with torch.autocast("cuda", dtype=torch.float32):
-            action_queries = self._pool_to_action_queries(last_hidden)
+            action_queries = self._pool_to_action_queries(last_hidden) # B, chunk_len, hidden_dim
             pred_actions = self.action_model.predict_action(action_queries)
 
             actions = torch.tensor(
@@ -169,9 +170,16 @@ class Wan_OFT(baseframework):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
     from PIL import Image
     from omegaconf import OmegaConf
+
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -197,7 +205,7 @@ if __name__ == "__main__":
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     sample = {
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
-        "image": [image],
+        "image": [image, image],
         "lang": "Pick up the red block and place it on the table.",
     }
     sample2 = {

@@ -4,7 +4,7 @@ STARVLA_DIR=/home/jye624/Projcets/starVLA
 
 cd ${STARVLA_DIR}
 # === Checkpoint ===
-CKPT=${STARVLA_DIR}/playground/Pretrained_models/StarVLA/Qwen3-VL-OFT-LIBERO-4in1/checkpoints/steps_50000_pytorch_model.pt
+CKPT=${STARVLA_DIR}/results/Checkpoints/0405_libero4in1_CosmoPredict2GR00T/checkpoints/steps_50000_pytorch_model.pt
 
 
 ###########################################################################################

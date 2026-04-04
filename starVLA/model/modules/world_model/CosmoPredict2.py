@@ -53,7 +53,7 @@ class _CosmoPredict2_Interface(nn.Module):
         wm_cfg = config.framework.get("world_model", {})
         model_name = wm_cfg.get(
             "base_wm",
-            config.framework.get("qwenvl", {}).get("base_vlm", "nvidia/Cosmos-Predict2-2B"),
+            config.framework.get("qwenvl", {}).get("base_vlm", "nvidia/Cosmos-Predict2-2B-Video2World"),
         )
         self.config = config
 
@@ -67,7 +67,7 @@ class _CosmoPredict2_Interface(nn.Module):
 
         logger.info(f"Loading Cosmos-Predict2 from {model_name}")
 
-        # Load components individually for flexibility
+        # Load components individually (Pipeline is not nn.Module; split loading enables per-component freeze/finetune)
         self.tokenizer = T5TokenizerFast.from_pretrained(
             model_name, subfolder="tokenizer"
         )
@@ -83,6 +83,12 @@ class _CosmoPredict2_Interface(nn.Module):
         self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
             model_name, subfolder="scheduler"
         )
+
+        # Use diffusers' VideoProcessor for image/video preprocessing (resize, normalize, etc.)
+        from diffusers.video_processor import VideoProcessor
+        self.vae_scale_factor_spatial = 2 ** len(self.vae.temperal_downsample)
+        self.vae_scale_factor_temporal = 2 ** sum(self.vae.temperal_downsample)
+        self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
         # Freeze VAE and text encoder by default
         self.vae.requires_grad_(False)
@@ -158,60 +164,86 @@ class _CosmoPredict2_Interface(nn.Module):
 
         return text_embeds, text_inputs.attention_mask
 
-    def _encode_images(self, images, num_frames=5):
+    def _encode_images(self, images, num_frames=None):
         """Encode observation images through VAE to get latent tokens.
 
-        Follows the Cosmos pipeline approach: pad 1 image to `num_frames`
-        with zeros, then VAE-encode the whole video. This avoids issues
-        with temporal downsampling on a single frame.
+        Follows the Cosmos pipeline approach: pad images to uniform frame count
+        with last-frame repetition, then VAE-encode the whole video.
 
         Args:
             images: List of List of PIL Images [B, [imgs...]]
-            num_frames: Number of temporal frames to pad to (default: 5).
+            num_frames: If given, pad/truncate to this exact count.
+                If None (default), pad to the max frame count in the batch.
                 VAE temporal factor is 4, so T_latent = (num_frames-1)//4+1.
-                5 → T_latent=2, 9 → T_latent=3, etc.
 
         Returns:
             latents: [B, C, T_latent, H/8, W/8] video latent tensor
+            cond_frame_counts: list[int], real frame count per sample (before padding)
         """
-        import torchvision.transforms.functional as TF
-
         device = next(self.vae.parameters()).device
-        # Take the last image from each sample as the observation frame
-        frames = []
+        dtype = self.vae.dtype
+        # 480×832 is the pretrained resolution; spatial dims must be multiples of 16.
+        # Smaller sizes (e.g. 224×224) technically work but hurt quality due to positional embedding mismatch.
+        # If saving VRAM, keep ~16:9 aspect ratio: 256×448 or 320×576.
+        height, width = 320, 576
+
+        # First pass: preprocess each sample, record real frame counts
+        preprocessed = []
+        cond_frame_counts = []
         for sample_imgs in images:
-            if isinstance(sample_imgs, (list, tuple)):
-                img = sample_imgs[-1]  # use last image
-            else:
-                img = sample_imgs
-            # Convert PIL -> tensor [C, H, W] in [0, 1] then scale to [-1, 1]
-            t = TF.to_tensor(img).to(device, dtype=torch.bfloat16) * 2.0 - 1.0
-            # Resize to 480p (smaller than 720p to save VRAM)
-            t = TF.resize(t, [480, 832])
-            frames.append(t)
+            if not isinstance(sample_imgs, (list, tuple)):
+                sample_imgs = [sample_imgs]
 
-        # Stack to [B, C, H, W]
-        pixel_batch = torch.stack(frames, dim=0)  # [B, C, H, W]
-        B, C, H, W = pixel_batch.shape
+            video_tensor = self.video_processor.preprocess_video(sample_imgs, height=height, width=width)
+            video_tensor = video_tensor.to(device=device, dtype=dtype)  # [1, C, n_imgs, H, W]
+            preprocessed.append(video_tensor)
+            cond_frame_counts.append(video_tensor.shape[2])
 
-        # Create video: 1 condition frame + (num_frames-1) zero-padded frames
-        # This mirrors how the Cosmos pipeline processes single-image input
-        padding = pixel_batch.new_zeros(B, C, num_frames - 1, H, W)
-        video = torch.cat([pixel_batch.unsqueeze(2), padding], dim=2)  # [B, C, num_frames, H, W]
+        # Determine target frame count: use num_frames if specified, otherwise batch max
+        # Ensure at least 1 frame (VAE needs T >= 1)
+        if num_frames is None:
+            target_frames = max(cond_frame_counts)
+        else:
+            target_frames = num_frames
+
+        # Second pass: truncate or pad each sample to target_frames
+        batch_videos = []
+        for i, video_tensor in enumerate(preprocessed):
+            n = video_tensor.shape[2]
+            if n > target_frames:
+                video_tensor = video_tensor[:, :, :target_frames]
+                cond_frame_counts[i] = target_frames
+            elif n < target_frames:
+                # Pad with last-frame repetition (matches official pipeline)
+                last_frame = video_tensor[:, :, -1:]
+                padding = last_frame.repeat(1, 1, target_frames - n, 1, 1)
+                video_tensor = torch.cat([video_tensor, padding], dim=2)
+            batch_videos.append(video_tensor.squeeze(0))  # [C, target_frames, H, W]
+
+        # Stack to [B, C, target_frames, H, W]
+        video = torch.stack(batch_videos, dim=0)
 
         with torch.no_grad():
+            # T_latent = temporal latent frames = (num_frames-1)//4+1  (VAE temporal downsample factor=4)
+            # e.g. 5 frames → 2 latent frames, 9 frames → 3 latent frames
             latents = self.vae.encode(video).latent_dist.sample()  # [B, 16, T_latent, H/8, W/8]
 
-        # Normalize latents like the pipeline does
+        # Normalize latents (matches official pipeline: prepare_latents) # TODO 去检查是否真的要做这个？
         if self.vae.config.latents_mean is not None:
-            latents_mean = torch.tensor(self.vae.config.latents_mean, device=device, dtype=latents.dtype)
-            latents_std = torch.tensor(self.vae.config.latents_std, device=device, dtype=latents.dtype)
-            latents_mean = latents_mean.view(1, -1, 1, 1, 1)[:, :, :latents.size(2)]
-            latents_std = latents_std.view(1, -1, 1, 1, 1)[:, :, :latents.size(2)]
+            latents_mean = (
+                torch.tensor(self.vae.config.latents_mean)
+                .view(1, self.vae.config.z_dim, 1, 1, 1)
+                .to(device, dtype=latents.dtype)
+            )
+            latents_std = (
+                torch.tensor(self.vae.config.latents_std)
+                .view(1, self.vae.config.z_dim, 1, 1, 1)
+                .to(device, dtype=latents.dtype)
+            ) 
             sigma_data = self.scheduler.config.sigma_data
-            latents = (latents - latents_mean) * sigma_data / latents_std
+            latents = (latents - latents_mean) / latents_std * sigma_data
 
-        return latents
+        return latents, cond_frame_counts # latents: [B, C, T_latent, H/8, W/8], cond_frame_counts: list[int]
 
     def build_inputs(self, images, instructions, **kwargs):
         """Build inputs for the DiT world model.
@@ -228,29 +260,33 @@ class _CosmoPredict2_Interface(nn.Module):
 
         # Ensure encoders are on the right device
         device = next(self.transformer.parameters()).device
-        self.text_encoder.to(device)
-        self.vae.to(device)
+        # self.text_encoder.to(device)
+        # self.vae.to(device)
 
         text_embeds, text_mask = self._encode_text(instructions)
-        latents = self._encode_images(images)
+        latents, cond_frame_counts = self._encode_images(images)
 
         # Offload T5 and VAE to CPU to free VRAM for the transformer
-        self.text_encoder.to("cpu")
-        self.vae.to("cpu")
-        torch.cuda.empty_cache()
+        # self.text_encoder.to("cpu")
+        # self.vae.to("cpu")
+        # torch.cuda.empty_cache()
 
         # For feature extraction, use timestep=0 (clean / minimal noise)
         batch_size = latents.shape[0]
         device = latents.device
-        _, _, t_lat, h_lat, w_lat = latents.shape
+        _, _, t_lat, h_lat, w_lat = latents.shape # B, C, T_latent, H/8, W/8
         timestep = torch.zeros(batch_size, device=device, dtype=torch.long)
-
-        # condition_mask: marks which temporal frames are conditions vs noise
+        # condition_mask: tells DiT which latent frames are reliable conditions (=1) vs to-be-generated (=0).
+        # In Video2World, this separates input frames from predicted future frames.
+        # Here (action prediction, not generation), we set timestep=0 + condition_mask on real frames
+        # so DiT runs a near-clean forward pass for feature extraction, not actual denoising.
         # in_channels = 16 (latents) + 1 (condition_mask) = 17
         # Shape: [B, 1, T_latent, H_latent, W_latent]
-        # First frame is condition (1), rest are noise (0)
         condition_mask = latents.new_zeros(batch_size, 1, t_lat, h_lat, w_lat)
-        condition_mask[:, :, :1] = 1.0
+        for i, n_cond in enumerate(cond_frame_counts):
+            # Map pixel-frame count to latent-frame count
+            n_cond_latent = (n_cond - 1) // self.vae_scale_factor_temporal + 1
+            condition_mask[i, :, :n_cond_latent] = 1.0
 
         # padding_mask: concat_padding_mask=True adds 1 more channel → 18 total
         # Shape: [1, 1, H_orig, W_orig] — all zeros = no padding

@@ -2129,7 +2129,7 @@ class LeRobotMixtureDataset(Dataset):
         # Set the epoch and sample the first epoch
         self.set_epoch(0)
 
-        self._sequential_step_sampling = True
+        self._sequential_step_sampling = False
         if self.data_cfg is not None:
             seq_cfg = self.data_cfg.get("sequential_step_sampling", True)
             self._sequential_step_sampling = seq_cfg not in ["False", False]

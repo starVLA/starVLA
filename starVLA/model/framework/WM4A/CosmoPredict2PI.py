@@ -227,9 +227,16 @@ class CosmoPredict2_PI(baseframework):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
     from PIL import Image
     from omegaconf import OmegaConf
+
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -259,7 +266,7 @@ if __name__ == "__main__":
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     sample = {
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
-        "image": [image],
+        "image": [image, image],
         "lang": "Pick up the red block and place it on the table.",
         "state": np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16),
     }

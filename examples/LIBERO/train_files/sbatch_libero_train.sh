@@ -1,7 +1,19 @@
 #!/bin/bash
-# Smoke tests for VLA-only and VLA+VLM cotrain training after DataLoaderManager changes
-# Usage: run on a compute node with 2+ GPUs
-#   srun --jobid=<JOB_ID> --overlap --pty bash /home/jye624/Projcets/starVLA/tmp/run_train_test.sh
+#SBATCH --account=vonneumann1
+#SBATCH --partition=vonneumann
+#SBATCH --gpus=4
+#SBATCH --nodes=1
+#SBATCH --time=8:00:00
+#SBATCH --job-name=libero_train
+#SBATCH --output=logs/train_%j.log
+#SBATCH --error=logs/train_%j.err
+#
+# Usage:
+#   sbatch examples/LIBERO/train_files/sbatch_libero_train.sh
+#
+# Override GPU count:
+#   sbatch --gpus=4 examples/LIBERO/train_files/sbatch_libero_train.sh
+#
 set -e
 
 # === Conda setup ===
@@ -39,14 +51,14 @@ fi
 echo "[INFO] CUDA_HOME=$CUDA_HOME"
 nvcc --version 2>/dev/null || echo "[WARN] nvcc not found"
 
-
-# used for check save when communication
+# === NCCL ===
 export NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
-export NCCL_TIMEOUT=10000  # timeout set to 1 hour (unit: seconds)
+export NCCL_TIMEOUT=10000
 export NCCL_SOCKET_TIMEOUT_MS=360000
+
 ###########################################################################################
-# === Please modify the following paths according to your environment ===
+# === Training config ===
 cd /home/jye624/Projcets/starVLA
 
 Framework_name=CosmoPredict2OFT
@@ -57,39 +69,33 @@ libero_data_root=/home/jye624/Datasets/LIBERO
 data_mix=libero_all
 run_root_dir=./results/Checkpoints
 run_id=0405_libero4in1_${Framework_name}
-# === End of environment variable configuration ===
+per_device_batch_size=8
 ###########################################################################################
-
-
-# export WANDB_MODE=disabled
-
-
-output_dir=${run_root_dir}/${run_id}
-mkdir -p ${output_dir}
-# mv this script to the output dir
-cp $0 ${output_dir}/
-
-num_processes=${NUM_PROCESSES:-$(nvidia-smi -L | wc -l)}
-attn_implementation=${ATTN_IMPLEMENTATION:-sdpa}
-accelerate_config_file=${ACCELERATE_CONFIG_FILE:-starVLA/config/deepseeds/deepspeed_zero2.yaml}
-main_process_port=${MAIN_PROCESS_PORT:-29501}
 
 export WANDB_API_KEY=${WANDB_API_KEY:-943ecb8d26fc2b3879cbc2d667414974906aebb9}
 
+output_dir=${run_root_dir}/${run_id}
+mkdir -p ${output_dir} logs/
+cp $0 ${output_dir}/
 
-# Fix: ensure vonneumann1 group is active for NFS file access on compute nodes
-# Worker processes spawned by accelerate/deepspeed may lose supplementary group context
-if id -nG 2>/dev/null | grep -qw vonneumann1; then
-  export _STARVLA_GROUP_FIX=vonneumann1
-  echo "[INFO] Group vonneumann1 detected, using newgrp for NFS access"
-fi
+# Auto-detect GPU count from SLURM allocation
+num_processes=${SLURM_GPUS_ON_NODE:-$(nvidia-smi -L | wc -l)}
+attn_implementation=sdpa
+accelerate_config_file=starVLA/config/deepseeds/deepspeed_zero2.yaml
+main_process_port=${MAIN_PROCESS_PORT:-29501}
 
-# Resolve conda activation command for sub-shells (sg spawns a new shell)
-CONDA_BASE=$(conda info --base 2>/dev/null || echo "${CONDA_PREFIX%/envs/*}")
-CONDA_INIT="source ${CONDA_BASE}/etc/profile.d/conda.sh && conda activate ${CONDA_DEFAULT_ENV:-starVLA}"
+echo "=============================="
+echo "Job ID:       ${SLURM_JOB_ID}"
+echo "Node:         ${SLURM_NODELIST}"
+echo "GPUs:         ${num_processes}"
+echo "Batch/GPU:    ${per_device_batch_size}"
+echo "Framework:    ${Framework_name}"
+echo "Run ID:       ${run_id}"
+echo "=============================="
 
 sg vonneumann1 -c "
-${CONDA_INIT} && \
+source /cm/shared/apps/Anaconda3/2023.09-0/etc/profile.d/conda.sh && \
+conda activate starVLA && \
 accelerate launch \
   --config_file ${accelerate_config_file} \
   --num_processes ${num_processes} \
@@ -102,7 +108,7 @@ accelerate launch \
   --framework.action_model.past_action_window_size 0 \
   --datasets.vla_data.data_root_dir ${libero_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
-  --datasets.vla_data.per_device_batch_size 8 \
+  --datasets.vla_data.per_device_batch_size ${per_device_batch_size} \
   --trainer.vla_data.video_backend torchvision_av \
   --framework.qwenvl.attn_implementation ${attn_implementation} \
   --trainer.freeze_modules ${freeze_module_list} \
@@ -115,23 +121,3 @@ accelerate launch \
   --wandb_project starVLA_Libero \
   --wandb_entity jinhuiye
 "
-
-
-
-##### Multi-Server Multi-GPU training script #####
-  # accelerate launch \
-  #   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
-  #   --main_process_ip $MASTER_ADDR \
-  #   --main_process_port $MASTER_PORT \
-  #   --machine_rank $SLURM_PROCID \
-  #   --num_machines $SLURM_NNODES \
-  #   --num_processes=${TOTAL_GPUS} \
-  #   starVLA/training/train_starvla.py \
-  #   --config_yaml ${config_yaml} \
-  #   --framework.name ${Framework_name} \
-  #   --framework.qwenvl.base_vlm ${base_vlm} \
-  #   --run_root_dir ${run_root_dir} \
-  #   --run_id ${run_id} \
-  #   --wandb_project your_project \
-  #   --wandb_entity your_name
-##### Multi-Server Multi-GPU training script #####
