@@ -30,10 +30,10 @@ Training configs and efficiency benchmarks for community reference.
 
 **[2026/01/29]** Calvin benchmark experiments were conducted by the UNT team. For inquiries, please contact Zhijie Song (1600013008@pku.edu.cn) or Feng Yan (bphengyan@163.com).
 
+**[2025/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchmarks with the community!
+
 <details>
 <summary><b>Prior Timeline</b></summary>
-
-**[2025/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchmarks with the community!
 
 **[2025/12/25]**  We've released RoboCasa evaluation support, which was trained **without pretraining and reached SOTA performance**. Check out more details in [examples/Robocasa_tabletop](examples/Robocasa_tabletop).
 
@@ -48,23 +48,6 @@ Training configs and efficiency benchmarks for community reference.
 **[2025/10/25]:** We fixed several script links and so everything is smoother now. Thanks to the community for the feedback.
 
 </details>
-
----
-
-## Table of Contents
-
-- [News](#news)
-- [Overview and Key Features](#overview-and-key-features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Benchmark Results](#benchmark-results)
-- [Model Zoo](#model-zoo)
-- [Start Building Your VLA Like Lego!](#start-building-your-vla-like-lego)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [Citation & Copyright](#citation--copyright)
-- [Acknowledgements](#acknowledgements)
-- [Star History](#star-history)
 
 ## Overview and Key Features
 
@@ -102,7 +85,7 @@ Every recipe is paradigm-agnostic and applies uniformly to all supported framewo
 <details open>
 <summary><b>Broad Benchmark Integration</b></summary>
 
-Unified server-client interface for both simulation and real-robot deployment.
+Achieve **state-of-the-art (SOTA) performance** on a variety of benchmarks, as follows:
 
 - [x] **SimplerEnV**
 - [x] **LIBERO**
@@ -300,7 +283,7 @@ Parameters are passed primarily via extensible dicts, allowing overrides and con
 </details>
 
 
-🧪 *To self‑test and iterate on StarVLA's usability, we re‑implemented several representative VLA frameworks. We have done a beta test: an internal developer can stand up a new VLA framework in under half a day (less than 3 hours), and a new user can build their first custom VLA framework within a single day. More design insights for each item can be found in *[*assets/intro_v1.md*](assets/intro_v1.md)*.*
+<!-- 🧪 *To self‑test and iterate on StarVLA's usability, we re‑implemented several representative VLA frameworks. We have done a beta test: an internal developer can stand up a new VLA framework in under half a day (less than 3 hours), and a new user can build their first custom VLA framework within a single day. More design insights for each item can be found in *[*assets/intro_v1.md*](assets/intro_v1.md)*.* -->
 
 ---
 
@@ -310,13 +293,6 @@ See [docs/faq.md](docs/faq.md) for common questions on configuration, freezing, 
 
 ## Contributing
 
-StarVLA is built by the community, for the community. Here's how you can get involved:
-
-- **Report a bug** — Open an [Issue](https://github.com/starVLA/starVLA/issues). If it needs more context, start a Discussion.
-- **Propose a feature or improvement** — Please align scope via an Issue or a short sync through our [Cooperation Form](https://forms.gle/R4VvgiVveULibTCCA) before submitting a PR.
-- **Need help or want to brainstorm?** — Fill out the [Cooperation Form](https://forms.gle/R4VvgiVveULibTCCA). We host office hours every Friday afternoon.
-- **Before submitting a PR**, run `make check` locally to pass formatting and lint.
-
 Community contributors are the driving force behind StarVLA's growing ecosystem. We deeply appreciate every PR, bug fix, and piece of feedback from the open-source community — your efforts keep StarVLA evolving rapidly. A full, continuously updated contributor list is maintained at [starvla.github.io/contributors](https://starvla.github.io/contributors).
 
 Thanks to all the people who have contributed to StarVLA:
@@ -324,6 +300,8 @@ Thanks to all the people who have contributed to StarVLA:
 <a href="https://github.com/starVLA/starVLA/graphs/contributors">
 <img src="https://contrib.rocks/image?repo=starVLA/starVLA&max=100&columns=15" />
 </a>
+
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on reporting bugs, proposing features, and submitting PRs.
 
 ### Projects Based on StarVLA
 
@@ -339,22 +317,17 @@ Thanks to all the people who have contributed to StarVLA:
 
 ## Citation & Copyright
 
-
 StarVLA is released under the MIT License, which permits commercial use, modification, distribution, and private use. Rebases are allowed for forks and feature branches; when rebasing from upstream StarVLA, use descriptive commit messages (e.g., "chore: rebase from StarVLA") and keep at least the two latest upstream commits as separate. See [License](LICENSE) for details.
-
 
 ```
 @misc{starvla2025,
   title        = {StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
   author       = {starVLA Contributors},
   year         = {2025},
-  month        = {1},
-  version      = {1.2.0},
   url          = {https://github.com/starVLA/starVLA},
   doi          = {10.5281/zenodo.18264214},
   howpublished = {GitHub repository},
-  publisher    = {GitHub},
-  keywords     = {vision-language-action, robot-learning, modular-framework}
+  publisher    = {GitHub}
 }
 ```
 
@@ -366,6 +339,7 @@ This project draws inspiration and references from several notable open-source i
 - [Qwen-VL](https://github.com/QwenLM/Qwen3-VL/tree/main)
 - [InternVL](https://github.com/OpenGVLab/InternVL)
 - [ABot-Manipulation](https://github.com/amap-cvlab/ABot-Manipulation)
+
 The codebase was originally forked from [InternVLA-M1](https://github.com/InternRobotics/InternVLA-M1).
 
 ## Star History
