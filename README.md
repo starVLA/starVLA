@@ -7,7 +7,9 @@
 <p align="center">An open-source research platform for integrating and exploring cutting-edge technologies for generalist robots.</p>
 
 <p align="center">
+<a href="https://starvla.github.io/"><img src="https://img.shields.io/badge/Project%20Page-starvla.github.io-blue?style=for-the-badge&logo=github" alt="Project Page"></a>
 <a href="https://huggingface.co/StarVLA"><img src="https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface" alt="Model & Data on Hugging Face"></a>
+<a href=""><img src="https://img.shields.io/badge/Report-Coming%20Soon-red?style=for-the-badge&logo=arxiv" alt="Report"></a>
 <a href="https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845"><img src="https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat" alt="WeChat"></a>
 </p>
 
@@ -61,7 +63,6 @@ Training configs and efficiency benchmarks for community reference.
 - [Model Zoo](#model-zoo)
 - [Start Building Your VLA Like Lego!](#start-building-your-vla-like-lego)
 - [FAQ](#faq)
-- [Projects Based on StarVLA](#projects-based-on-starvla)
 - [Contributing](#contributing)
 - [Citation & Copyright](#citation--copyright)
 - [Acknowledgements](#acknowledgements)
@@ -75,12 +76,12 @@ Training configs and efficiency benchmarks for community reference.
 <details open>
 <summary><b>Various VLA Frameworks</b></summary>
 
-StarVLA implements four representative paradigms under a shared backbone–action-head abstraction. It supports both VLM backbones (e.g., Qwen2.5-VL) and world-model backbones (e.g., Cosmos). All variants share the same data interface and downstream infrastructure; only the action head differs, enabling researchers to isolate the effect of any single design choice while holding all others constant.
+All variants share the same data interface and infrastructure; only the action head differs.
 
-- [x] **StarVLA-FAST**: Utilizes Qwen2.5-VL-3B with a fast tokenizer to autoregressively generate discrete action tokens conditioned on visual and linguistic inputs (in line with π₀-fast).
-- [x] **StarVLA-OFT**: Combines Qwen2.5-VL-3B with an MLP action head to perform parallel decoding of continuous actions, regressed from the hidden states of predefined special action tokens (in line with OpenVLA-OFT/EO).
-- [x] **StarVLA-PI**: Integrates the Flow-Matching (FM) action expert with Qwen2.5-VL-3B, adopting a diffusion-based approach for continuous action prediction (in line with π₀).
-- [x] **StarVLA-GR00T**: Implements a dual-system VLA architecture, where Qwen2.5-VL-3B serves as System2 for high-level vision-language reasoning, while the Flow-Matching module acts as System1 for rapid action prediction (in line with GR00T).
+- [x] **StarVLA-FAST**: Autoregressive discrete action tokens via a fast tokenizer (à la π₀-fast).
+- [x] **StarVLA-OFT**: Parallel continuous action decoding with an MLP head (à la OpenVLA-OFT/EO).
+- [x] **StarVLA-PI**: Flow-Matching action expert for diffusion-based continuous actions (à la π₀).
+- [x] **StarVLA-GR00T**: Dual-system architecture — VLM as System 2, Flow-Matching as System 1 (à la GR00T).
 
 <p align="center">
 <img src="assets/starvla_variants.png" alt="StarVLA variant architectures" width="95%">
@@ -91,7 +92,7 @@ StarVLA implements four representative paradigms under a shared backbone–actio
 <details open>
 <summary><b>Various Training Recipes</b></summary>
 
-StarVLA treats cross-embodiment learning and multimodal co-training as reusable, paradigm-agnostic configurations rather than method-specific add-ons. Every recipe applies uniformly to all supported paradigms, making it straightforward to study how training strategies interact with different architectural choices.
+Every recipe is paradigm-agnostic and applies uniformly to all supported frameworks.
 
 - [x] Supervised fine-tuning (SFT)
 - [x] Multimodal Multi-objectives Co-Training
@@ -103,7 +104,7 @@ StarVLA treats cross-embodiment learning and multimodal co-training as reusable,
 <details open>
 <summary><b>Broad Benchmark Integration</b></summary>
 
-StarVLA integrates mainstream benchmarks through a unified server-client testing interface, enabling controlled comparison across environments and embodiments. The same interface supports both simulation evaluation and real-robot deployment without code changes.
+Unified server-client interface for both simulation and real-robot deployment.
 
 - [x] **SimplerEnV**
 - [x] **LIBERO**
@@ -309,18 +310,6 @@ Parameters are passed primarily via extensible dicts, allowing overrides and con
 
 See [docs/faq.md](docs/faq.md) for common questions on configuration, freezing, learning rates, checkpointing, smaller VLMs, and more.
 
-## Projects Based on StarVLA
-
-**NeuroVLA**: [*A Brain-like Embodied Intelligence for Fluid and Fast Reflexive Robotics Control*](https://github.com/guoweiyu/NeuroVLA)
-
-**PhysBrain**: [*Human Egocentric Data as a Bridge from Vision Language Models to Physical Intelligence*](https://zgc-embodyai.github.io/PhysBrain)
-
-**TwinBrainVLA**: [*TwinBrainVLA: Unleashing the Potential of Generalist VLMs for Embodied Tasks via Asymmetric Mixture-of-Transformers*](https://github.com/ZGC-EmbodyAI/TwinBrainVLA)
-
-**LangForce**: [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
-
-**ABot-M0**: [*ABot-M0: VLA Foundation Model for Robotic Manipulation with Action Manifold Learning*](https://github.com/amap-cvlab/ABot-Manipulation)
-
 ## Contributing
 
 StarVLA is built by the community, for the community. Here's how you can get involved:
@@ -337,6 +326,18 @@ Thanks to all the people who have contributed to StarVLA:
 <a href="https://github.com/starVLA/starVLA/graphs/contributors">
 <img src="https://contrib.rocks/image?repo=starVLA/starVLA&max=100&columns=15" />
 </a>
+
+### Projects Based on StarVLA
+
+**NeuroVLA**: [*A Brain-like Embodied Intelligence for Fluid and Fast Reflexive Robotics Control*](https://github.com/guoweiyu/NeuroVLA)
+
+**PhysBrain**: [*Human Egocentric Data as a Bridge from Vision Language Models to Physical Intelligence*](https://zgc-embodyai.github.io/PhysBrain)
+
+**TwinBrainVLA**: [*TwinBrainVLA: Unleashing the Potential of Generalist VLMs for Embodied Tasks via Asymmetric Mixture-of-Transformers*](https://github.com/ZGC-EmbodyAI/TwinBrainVLA)
+
+**LangForce**: [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
+
+**ABot-M0**: [*ABot-M0: VLA Foundation Model for Robotic Manipulation with Action Manifold Learning*](https://github.com/amap-cvlab/ABot-Manipulation)
 
 ## Citation & Copyright
 
