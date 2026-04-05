@@ -7,7 +7,7 @@
 <p align="center">An open-source research platform for integrating and exploring cutting-edge technologies for generalist robots.</p>
 
 <p align="center">
-[IMG0](https://huggingface.co/StarVLA) [IMG1](https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845)
+[![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845)
 </p>
 
 ---
@@ -111,7 +111,7 @@ StarVLA integrates mainstream benchmarks through a unified server-client testing
 - [x] **RoboTwin**
 - [x] **BEHAVIOR**
 - [ ] **SO101**
-- [x] **Calvin** *See details in [CODE0](examples/calvin)
+- [x] **Calvin** *See details in [`examples/calvin`](examples/calvin)
 - [ ] **RLBench**
 
 </details>
@@ -176,7 +176,7 @@ We publish benchmark-specific evaluation guides inside each folder under [exampl
 
 1. Download [Qwen2.5-VL-GR00T-LIBERO-4in1](https://huggingface.co/StarVLA/Qwen2.5-VL-GR00T-LIBERO-4in1).
 2. Follow the [LIBERO Eval](https://github.com/starVLA/starVLA/tree/starVLA/examples/LIBERO#-1-environment-setup) instructions to prepare the Python environment.
-3. Set the environment variables at the top of [CODE0](examples/LIBERO/eval_files/eval_libero.sh) and [CODE1](examples/LIBERO/eval_files/run_policy_server.sh).
+3. Set the environment variables at the top of [`eval_libero.sh`](examples/LIBERO/eval_files/eval_libero.sh) and [`run_policy_server.sh`](examples/LIBERO/eval_files/run_policy_server.sh).
 4. Run:
 
 ```bash
@@ -371,7 +371,7 @@ The codebase was originally forked from [InternVLA-M1](https://github.com/Intern
 ## Star History
 Here's how our community has grown over time:
 
-[IMG0](https://www.star-history.com/#starVLA/starVLA&type=date&legend=bottom-right)
+[![Star History Chart](https://api.star-history.com/svg?repos=starVLA/starVLA&type=date&legend=bottom-right)](https://www.star-history.com/#starVLA/starVLA&type=date&legend=bottom-right)
 
 
 <!-- *Chart updates automatically. Click to interact with the full timeline.* -->
