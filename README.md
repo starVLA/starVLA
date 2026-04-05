@@ -1,7 +1,6 @@
 <p align="center">
-<img src="assets/starVLA_LOGO.png" alt="StarVLA Logo" width="100%">
+<img src="assets/logo.svg" alt="StarVLA Logo" width="20%">
 </p>
-
 <h1 align="center">StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing</h1>
 
 <p align="center">An open-source research platform for integrating and exploring cutting-edge technologies for generalist robots.</p>
@@ -31,6 +30,8 @@ Training configs and efficiency benchmarks for community reference.
 
 **[2026/01/29]** Calvin benchmark experiments were conducted by the UNT team. For inquiries, please contact Zhijie Song (1600013008@pku.edu.cn) or Feng Yan (bphengyan@163.com).
 
+<details>
+<summary><b>Prior Timeline</b></summary>
 
 **[2025/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchmarks with the community!
 
@@ -39,9 +40,6 @@ Training configs and efficiency benchmarks for community reference.
 **[2025/12/15]** Completed a release regression check to ensure the public code runs smoothly. Routine updates—including recent support for the LeRobot dataset v3.0 and DeepSpeed ZeRO-3—will continue to appear in the [🚧 Daily Development Log](https://github.com/starVLA/starVLA/issues/64#issue-3727060165).
 
 **[2025/12/09]** Became the first open-source repository to support training with [train your vlm](starVLA/training/train_starvlm.py), [train your vla](starVLA/training/train_starvla.py), and [train your vla with vlm](starVLA/training/train_starvla_cotrain.py). Check out how to co-train your VLA with multimodal data in [examples/CoTrainVLM](examples/CoTrainVLM/README.md).
-
-<details>
-<summary><b>Prior Timeline</b></summary>
 
 **[2025/11/12]** We now support [Florence-2](https://github.com/anyantudre/Florence-2-Vision-Language-Model) as a smaller VLM for resource-constrained development. StarVLA can now run on a single A100 GPU. See the [🚀Train with a smaller VLM](docs/faq.md#how-to-train-with-a-smaller-vlm) section for more details.
 
