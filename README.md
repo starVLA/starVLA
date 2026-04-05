@@ -1,5 +1,5 @@
 <p align="center">
-<img src="assets/logo.svg" alt="StarVLA Logo" width="20%">
+<img src="assets/logo.svg" alt="StarVLA Logo" width="10%">
 </p>
 <h1 align="center">StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing</h1>
 
