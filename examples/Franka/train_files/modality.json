@@ -1,0 +1,61 @@
+{
+    "state": {
+        "joints": {
+            "start": 0,
+            "end": 18,
+            "original_key": "observation.state"
+        }
+        
+    },
+    "action": {
+        "x": {
+            "start": 0,
+            "end": 1,
+            "original_key": "x_position"
+        },
+        "y": {
+            "start": 1,
+            "end": 2,
+            "original_key": "y_position"
+        },
+        "z": {
+            "start": 2,
+            "end": 3,
+            "original_key": "z_position"
+        },
+        "roll": {
+            "start": 3,
+            "end": 4,
+            "original_key": "x_quaternion"
+        },
+        "pitch": {
+            "start": 4,
+            "end": 5,
+            "original_key": "y_quaternion"
+        },
+        "yaw": {
+            "start": 5,
+            "end": 6,
+            "original_key": "z_quaternion"
+        },
+        "gripper": {
+            "start": 6,
+            "end": 7,
+            "original_key": "gripper_command"
+        }
+    },
+    "video": {
+        "external_upper_camera": {
+            "original_key": "observation.images.external_upper_camera"
+        },
+        "left_single_camera": {
+            "original_key": "observation.images.left_single_camera"
+        },
+        "left_dual_camera": {
+            "original_key": "observation.images.left_dual_camera"
+        }
+    },
+    "annotation": {
+        "human.action.task_description": {"original_key": "task_index"}
+    }
+}
