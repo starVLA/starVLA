@@ -19,7 +19,7 @@ STARVLA_HOME="${STARVLA_HOME:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 ###########################################################################################
 # === Configuration ===
 your_ckpt=""
-VLA_ARENA_ENV=""          # path to VLA-Arena uv project, e.g. /path/to/VLA-Arena/envs/openpi
+VLA_ARENA_ENV=""          # path to VLA-Arena uv project, e.g. /path/to/VLA-Arena/env/
 NUM_SERVERS=4
 BASE_PORT=10090           # ports will be BASE_PORT + gpu_id
 GPU_MEM_THRESHOLD=2000    # GPUs with memory usage below this (MiB) are considered free
@@ -299,6 +299,7 @@ for i in $(seq 0 $((NUM_SERVERS - 1))); do
     print_info "Starting eval group $i on port ${port}: ${suites_str}"
     uv run --project "${VLA_ARENA_ENV}" \
         bash "${SCRIPT_DIR}/eval_vla_arena.sh" \
+        --checkpoint "${your_ckpt}" \
         --port "${port}" \
         --suites "${suites_str}" \
         > "${eval_log}" 2>&1 &

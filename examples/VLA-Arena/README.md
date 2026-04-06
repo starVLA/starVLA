@@ -2,26 +2,7 @@
 
 This document describes how to train and evaluate StarVLA models on the [VLA-Arena](https://github.com/VLA-Arena/VLA-Arena) benchmark.
 
-VLA-Arena covers 11 task suites, 3 difficulty levels, and 4 evaluation domains. Each suite has **3 difficulty levels** (L0 basic → L2 advanced), and each level contains 5-10 tasks. The evaluation metrics include **success rate** and **constraint cost** (for safety suites).
-
----
-
-## Benchmark Overview
-
-| Domain | Suite | Tasks / Level |
-| ------ | ----- | ------------- |
-| **Safety** | safety_static_obstacles | 5 |
-|  | safety_cautious_grasp | 5 |
-|  | safety_hazard_avoidance | 5 |
-|  | safety_state_preservation | 5 |
-|  | safety_dynamic_obstacles | 5 |
-| **Distractor** | distractor_static_distractors | 5 |
-|  | distractor_dynamic_distractors | 5 |
-| **Extrapolation** | extrapolation_preposition_combinations | 5 |
-|  | extrapolation_task_workflows | 5 |
-|  | extrapolation_unseen_objects | 5 |
-| **Long Horizon** | long_horizon | 10 (L0) / 5 (L1, L2) |
-
+VLA-Arena covers 4 evaluation domains and 11 task suites. Each suite has **3 difficulty levels** (L0 basic → L2 advanced), and each level contains 5-10 tasks. The evaluation metrics include **success rate** and **constraint cost** (for safety suites).
 
 ---
 
