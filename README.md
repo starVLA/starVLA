@@ -18,6 +18,8 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 ## News
 
+**[2026/04/06]** 🚀 **StarVLA** will soon release a major update. The new version will cover a much wider range of VL foundation models as backbones, **including world models (e.g., WM4A)**. Stay tuned!
+
 **[2026/03/29]** 🔥 Thanks to the [ABot-M0](https://github.com/amap-cvlab/ABot-Manipulation) team for providing the [pre-trained weights](https://www.modelscope.cn/models/amap_cvlab/ABot-M0-Pretrain). For `Qwen3-VL 4B`, you can reload the `qwen_vl_interface` module in various frameworks!
 
 **[2026/03/19]** 🔥 StarVLA now provides a complete real-robot development case with [Franka robot examples](https://github.com/starVLA/starVLA/pull/198)!
