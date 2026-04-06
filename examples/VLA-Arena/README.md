@@ -1,12 +1,12 @@
-# 🚀 VLA-Arena Training and Evaluation
+# VLA-Arena Training and Evaluation
 
 This document describes how to train and evaluate StarVLA models on the [VLA-Arena](https://github.com/VLA-Arena/VLA-Arena) benchmark.
 
-VLA-Arena covers 11 task suites, 3 difficulty levels, and 4 evaluation domains. The StarVLA integration follows the same WebSocket policy-server workflow used in other benchmarks.
+VLA-Arena covers 11 task suites, 3 difficulty levels, and 4 evaluation domains. Each suite has **3 difficulty levels** (L0 basic → L2 advanced), and each level contains 5-10 tasks. The evaluation metrics include **success rate** and **constraint cost** (for safety suites).
 
 ---
 
-## 📊 Benchmark Overview
+## Benchmark Overview
 
 | Domain | Suite | Tasks / Level |
 | ------ | ----- | ------------- |
@@ -22,26 +22,24 @@ VLA-Arena covers 11 task suites, 3 difficulty levels, and 4 evaluation domains. 
 |  | extrapolation_unseen_objects | 5 |
 | **Long Horizon** | long_horizon | 10 (L0) / 5 (L1, L2) |
 
-Each suite has **3 difficulty levels** (L0 basic to L2 advanced).
-Safety suites additionally report a **constraint cost** metric.
 
 ---
 
-## 📦 0. Environment and Data Preparation
+## 0. Environment Setup
 
-### 0.1 Install VLA-Arena
+### StarVLA environment
 
-```bash
-git clone https://github.com/PKU-Alignment/VLA-Arena.git
-cd VLA-Arena
-pip install -e ".[base]"
-```
+Follow the main `README.md` at the repository root to set up the StarVLA environment.
 
-Make sure the `vla_arena` package is importable in the evaluation environment.
+### VLA-Arena environment
 
-### 0.2 Prepare Training Data (LeRobot Format)
+VLA-Arena uses [uv](https://github.com/astral-sh/uv) for environment management. Follow the installation instructions in the [VLA-Arena repository](https://github.com/PKU-Alignment/VLA-Arena) to set it up.
 
-The VLA-Arena L0 training data is available as three HuggingFace repos:
+---
+
+## 1. Data Preparation
+
+The VLA-Arena L0 training data is available on HuggingFace in three sizes. The splits are **inclusive**: Large ⊃ Medium ⊃ Small.
 
 | Split | HuggingFace repo |
 | ----- | ---------------- |
@@ -49,7 +47,7 @@ The VLA-Arena L0 training data is available as three HuggingFace repos:
 | Medium | `VLA-Arena/VLA_Arena_L0_M_lerobot_openpi` |
 | Large | `VLA-Arena/VLA_Arena_L0_L_lerobot_openpi` |
 
-Run the provided preparation script to download all three splits and set up symlinks:
+The **Large** split is used by default. To download it and set up the required symlinks:
 
 ```bash
 export DEST=/path/to/storage
@@ -57,132 +55,76 @@ bash examples/VLA-Arena/data_preparation.sh
 ```
 
 This will:
-1. Download the three repos under `$DEST/vla_arena/`
+1. Download the Large split to `$DEST/vla_arena/`
 2. Create `playground/Datasets/VLA_ARENA_LEROBOT_DATA` → `$DEST/vla_arena/`
 3. Copy `train_files/modality.json` into each dataset's `meta/` directory
 
-Expected StarVLA keys (defined by `VLAArenaFrankaDataConfig` in `data_config.py`):
-
-| Key | Description |
-| --- | ----------- |
-| `video.primary_image` | agent-view camera (mapped from dataset via modality.json) |
-| `state.{x,y,z,roll,pitch,yaw,gripper}` | 7-dim EEF state |
-| `action.{x,y,z,roll,pitch,yaw,gripper}` | 7-DoF delta EEF action |
-| `annotation.human.action.task_description` | language instruction |
-
-> **Note:** `train_files/modality.json` maps the raw dataset key
-> `observation.images.agentview_rgb` to `video.primary_image`.
-> If the actual primary camera key in the downloaded dataset differs,
-> update `modality.json` accordingly before training.
+To use the Small or Medium split instead, modify the corresponding lines in `data_preparation.sh`.
 
 ---
 
-## 🚀 1. Training
+## 2. Training
 
-Before training, edit user configuration in `examples/VLA-Arena/train_files/run_vla_arena_train.sh`.
-
-Start training from the StarVLA root:
+Edit the user configuration in `examples/VLA-Arena/train_files/run_vla_arena_train.sh`, then run:
 
 ```bash
 bash examples/VLA-Arena/train_files/run_vla_arena_train.sh
 ```
 
-Key config options in `examples/VLA-Arena/train_files/starvla_cotrain_vla_arena.yaml`:
+---
 
-| Parameter | Default | Notes |
-| --------- | ------- | ----- |
-| `framework.name` | `QwenGR00T` | Alternatives: `QwenOFT`, `QwenPI`, `QwenFast` |
-| `framework.qwenvl.base_vlm` | `Qwen2.5-VL-3B` | Can be replaced by larger backbones |
-| `datasets.vla_data.data_mix` | `vla_arena_all` | Supports all-suite or domain-specific mixes |
-| `trainer.max_train_steps` | `80000` | Adjust by dataset size and compute budget |
+## 3. Evaluation
 
-Available `data_mix` values (defined in `starVLA/dataloader/gr00t_lerobot/mixtures.py`):
+Evaluation requires two separate environments running in parallel:
 
-**L0 splits (downloaded via `data_preparation.sh`):**
+- **StarVLA environment** — runs the policy server
+- **VLA-Arena uv environment** — runs the simulator and benchmark
 
-- `vla_arena_L0_all` – all three L0 splits combined (recommended)
-- `vla_arena_L0_S` – small split only
-- `vla_arena_L0_M` – medium split only
-- `vla_arena_L0_L` – large split only
+### Option A: Evaluate all 11 suites in parallel (recommended)
+
+`run_parallel_eval.sh` automatically selects free GPUs, launches one policy server per GPU, and distributes the 11 task suites across them.
+
+```bash
+bash examples/VLA-Arena/eval_files/run_parallel_eval.sh \
+    -c /path/to/checkpoint.pt \
+    --vla-arena-env /path/to/VLA-Arena/env/
+```
+
+Evaluation metrics and rollouts will be saved under `results/`.
 
 ---
 
-## 🧪 2. Evaluation Workflow
+### Option B: Evaluate a single suite manually
 
-Evaluation uses two terminals from the repository root:
+Use this when you want finer control or are debugging a specific suite.
 
-- **starVLA environment**: policy server (PyTorch + VLM model)
-- **VLA-Arena environment**: simulator and benchmark runner
+**Terminal 1 — Start the policy server (StarVLA environment):**
 
-### Step 1. Start Policy Server (starVLA environment)
+Edit `your_ckpt`, `gpu_id`, and `port` in `run_policy_server.sh`, then run from the starVLA root:
 
 ```bash
 bash examples/VLA-Arena/eval_files/run_policy_server.sh
 ```
 
-Before running, set `your_ckpt`, `gpu_id`, and `port` in `run_policy_server.sh`.
-
-### Step 2. Run Single-Suite Evaluation (VLA-Arena environment)
+Or equivalently:
 
 ```bash
-export PYTHONPATH=/path/to/VLA-Arena/vla_arena:$PYTHONPATH
-export PYTHONPATH=$(pwd):$PYTHONPATH
-
-bash examples/VLA-Arena/eval_files/eval_vla_arena.sh
+export PYTHONPATH=$(pwd):${PYTHONPATH}
+CUDA_VISIBLE_DEVICES=<gpu_id> python deployment/model_server/server_policy.py \
+    --ckpt_path /path/to/checkpoint.pt \
+    --port 10090 \
+    --use_bf16
 ```
 
-Before running, set `task_suite_name`, `task_level`, and `your_ckpt` in `eval_vla_arena.sh`.
-
-### Step 3. Run Parallel Evaluation for All 11 Suites
+**Terminal 2 — Run the evaluator (VLA-Arena uv environment):**
 
 ```bash
-bash examples/VLA-Arena/eval_files/auto_eval_scripts/auto_eval_vla_arena.sh
+uv run --project /path/to/VLA-Arena/env/ \
+    bash examples/VLA-Arena/eval_files/eval_vla_arena.sh \
+    --checkpoint /path/to/checkpoint.pt \
+    --port 10090 \
+    --suites "safety_static_obstacles safety_cautious_grasp" \
+    --levels "0 1 2"
 ```
 
-This launches 11 background workers, each with its own GPU/port slot.
-
-### Step 4. Check Aggregated Results
-
-```bash
-bash examples/VLA-Arena/eval_files/auto_eval_scripts/see_sr_auto.sh \
-    results/Checkpoints/vla_arena_qwenoft_all
-```
-
-Evaluation results are also saved as JSON:
-
-```text
-results/vla_arena/starvla_vla_arena_<timestamp>.json
-```
-
----
-
-## 🔒 3. Safety Metric Notes
-
-Safety suites report both success rate and constraint cost.
-
-Use the following flag to enable safety-constraint filtering:
-
-```bash
---args.apply-safety-constraint true
-```
-
-Default threshold is `10.0`.
-For `safety_hazard_avoidance`, each step cost is additionally scaled by `0.05` before thresholding.
-
----
-
-## 📌 4. Environment Split Summary
-
-| Component | Environment |
-| --------- | ----------- |
-| Policy server | starVLA conda environment |
-| Evaluation script | VLA-Arena conda environment |
-| Communication | WebSocket (JSON + msgpack-numpy) |
-
-This split is consistent with the other benchmark integrations in `examples/`.
-
----
-
-## 📚 Citation
-
-If you use VLA-Arena, please cite the original VLA-Arena paper (see the official repository for BibTeX).
+Results are saved as a CSV summary under the output directory.

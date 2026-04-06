@@ -29,8 +29,10 @@ DEFAULT_NUM_TRIALS=10
 DEFAULT_SEED=7
 save_video_mode=first_success_failure   # all | first_success_failure | none
 
-RESULTS_DIR="./results/vla_arena"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+RUN_DATE=$(date +"%Y%m%d")
+RUN_TIME=$(date +"%H%M%S")
+RESULTS_DIR="./results/${RUN_DATE}/${RUN_TIME}"
+TIMESTAMP="${RUN_DATE}_${RUN_TIME}"
 
 # Visual perturbation (set to true to enable)
 add_noise=false
@@ -40,24 +42,23 @@ camera_offset=false
 
 # Safety constraint
 apply_safety_constraint=false
-safety_cost_threshold=10.0
 
 # Initial state selection
-init_state_offset_random=false
+init_state_offset_random=true
 
 # Default task suites (comment/uncomment as needed)
 TASK_SUITES=(
     "safety_static_obstacles"
-    # "safety_cautious_grasp"
-    # "safety_hazard_avoidance"
-    # "safety_state_preservation"
-    # "safety_dynamic_obstacles"
-    # "distractor_static_distractors"
-    # "distractor_dynamic_distractors"
-    # "extrapolation_preposition_combinations"
-    # "extrapolation_task_workflows"
-    # "extrapolation_unseen_objects"
-    # "long_horizon"
+    "safety_cautious_grasp"
+    "safety_hazard_avoidance"
+    "safety_state_preservation"
+    "safety_dynamic_obstacles"
+    "distractor_static_distractors"
+    "distractor_dynamic_distractors"
+    "extrapolation_preposition_combinations"
+    "extrapolation_task_workflows"
+    "extrapolation_unseen_objects"
+    "long_horizon"
 )
 
 TASK_LEVELS=(0 1 2)
@@ -204,7 +205,8 @@ run_evaluation() {
     local folder_name
     folder_name=$(echo "${your_ckpt}" | awk -F'/' '{print $(NF-2)"_"$(NF-1)"_"$NF}')
     local run_id="${suite}_L${level}_${folder_name}_${TIMESTAMP}"
-    local log_file="${OUTPUT_DIR}/${run_id}.log"
+    local suite_log_dir="${OUTPUT_DIR}/${suite}"
+    local log_file="${suite_log_dir}/${run_id}.log"
     local video_out_path="${OUTPUT_DIR}/videos/${suite}_L${level}/${folder_name}"
 
     if [[ "$SKIP_EXISTING" == true && -f "$log_file" ]]; then
@@ -212,34 +214,40 @@ run_evaluation() {
         return 0
     fi
 
-    local cmd="${VLA_ARENA_python} ./examples/VLA-Arena/eval_files/eval_vla_arena.py \
-        --args.pretrained-path \"${your_ckpt}\" \
-        --args.host \"${host}\" \
-        --args.port \"${port}\" \
-        --args.task-suite-name \"${suite}\" \
-        --args.task-level \"${level}\" \
-        --args.num-trials-per-task \"${NUM_TRIALS}\" \
-        --args.seed \"${SEED}\" \
-        --args.video-out-path \"${video_out_path}\" \
-        --args.save-video-mode \"${save_video_mode}\" \
-        --args.add-noise \"${add_noise}\" \
-        --args.adjust-light \"${adjust_light}\" \
-        --args.randomize-color \"${randomize_color}\" \
-        --args.camera-offset \"${camera_offset}\" \
-        --args.apply-safety-constraint \"${apply_safety_constraint}\" \
-        --args.safety-cost-threshold \"${safety_cost_threshold}\" \
-        --args.init-state-offset-random \"${init_state_offset_random}\""
+    local cmd=(
+        "${VLA_ARENA_python}" ./examples/VLA-Arena/eval_files/eval_vla_arena.py
+        --args.pretrained-path "${your_ckpt}"
+        --args.host "${host}"
+        --args.port "${port}"
+        --args.task-suite-name "${suite}"
+        --args.task-level "${level}"
+        --args.num-trials-per-task "${NUM_TRIALS}"
+        --args.seed "${SEED}"
+        --args.video-out-path "${video_out_path}"
+        --args.save-video-mode "${save_video_mode}"
+    )
+
+    # For these switches, presence means true.
+    [[ "${add_noise}" == true ]] && cmd+=(--args.add-noise)
+    [[ "${adjust_light}" == true ]] && cmd+=(--args.adjust-light)
+    [[ "${randomize_color}" == true ]] && cmd+=(--args.randomize-color)
+    [[ "${camera_offset}" == true ]] && cmd+=(--args.camera-offset)
+    [[ "${apply_safety_constraint}" == true ]] && cmd+=(--args.apply-safety-constraint)
+    [[ "${init_state_offset_random}" == true ]] && cmd+=(--args.init-state-offset-random)
 
     if [[ "$DRY_RUN" == true ]]; then
-        print_info "DRY RUN: $cmd"
+        local cmd_str
+        printf -v cmd_str '%q ' "${cmd[@]}"
+        print_info "DRY RUN: ${cmd_str}"
         return 0
     fi
 
+    mkdir -p "${suite_log_dir}"
     mkdir -p "${video_out_path}"
     print_info "Running: $suite  L$level"
     print_info "Log  → $log_file"
 
-    if eval "$cmd" > "$log_file" 2>&1; then
+    if "${cmd[@]}" > "$log_file" 2>&1; then
         local sr ts te ac
         sr=$(extract_success_rate    "$log_file")
         ts=$(extract_total_successes "$log_file")

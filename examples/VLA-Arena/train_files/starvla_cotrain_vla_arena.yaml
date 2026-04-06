@@ -67,7 +67,7 @@ datasets:
   vla_data:
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/VLA_ARENA_LEROBOT_DATA
-    data_mix: vla_arena_L0_all    # see starVLA/dataloader/gr00t_lerobot/mixtures.py
+    data_mix: vla_arena_L0_L    # see starVLA/dataloader/gr00t_lerobot/mixtures.py
     action_type: delta_eef        # 7-DOF delta EEF (pos + rotation + gripper)
     sequential_step_sampling: false
     CoT_prompt: "Your task is {instruction}. Identify the key objects and locate their bounding boxes in [x1,y1,x2,y2] format."

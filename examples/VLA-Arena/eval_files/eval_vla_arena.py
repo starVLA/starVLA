@@ -28,6 +28,7 @@ from pathlib import Path
 
 import imageio
 import numpy as np
+import torch
 import tqdm
 import tyro
 
@@ -91,6 +92,17 @@ SAFETY_SUITES = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+def set_seed_everywhere(seed: int) -> None:
+    """Sets random seeds for reproducible evaluation."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+
 def _quat2axisangle(quat: np.ndarray) -> np.ndarray:
     """Convert quaternion (x,y,z,w) to axis-angle."""
     if quat[3] > 1.0:
@@ -107,7 +119,7 @@ def _binarize_gripper_open(open_val: np.ndarray | float) -> np.ndarray:
     arr = np.asarray(open_val, dtype=np.float32).reshape(-1)
     v = float(arr[0])
     # 1 = open, -1 = close  (VLA-Arena env expects [-1, +1] gripper range)
-    bin_val = 1.0 - 2.0 * (v > 0.5)
+    bin_val = 1.0 - 2.0 * (v < 0.5)
     return np.asarray([bin_val], dtype=np.float32)
 
 
@@ -332,8 +344,7 @@ def eval_vla_arena(args: Args) -> dict:
     logger = logging.getLogger(__name__)
     logger.info(f"Arguments: {json.dumps(dataclasses.asdict(args), indent=4)}")
 
-    np.random.seed(args.seed)
-    random.seed(args.seed)
+    set_seed_everywhere(args.seed)
 
     # Determine which suites to evaluate
     benchmark_dict = benchmark.get_benchmark_dict()

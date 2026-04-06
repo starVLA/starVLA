@@ -16,8 +16,8 @@
 # ---------------------------------------------------------------------------
 export NCCL_SOCKET_IFNAME=bond0
 export NCCL_IB_HCA=mlx5_2,mlx5_3
-export NCCL_BLOCKING_WAIT=1
-export NCCL_ASYNC_ERROR_HANDLING=1
+export TORCH_NCCL_BLOCKING_WAIT=1
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=10000
 export NCCL_SOCKET_TIMEOUT_MS=360000
 
@@ -34,11 +34,10 @@ config_yaml=./examples/VLA-Arena/train_files/starvla_cotrain_vla_arena.yaml
 vla_arena_data_root=playground/Datasets/VLA_ARENA_LEROBOT_DATA
 
 # Which data mix to use (see starVLA/dataloader/gr00t_lerobot/mixtures.py)
-#   vla_arena_L0_all      – all three L0 splits (S+M+L) combined  [recommended]
-#   vla_arena_L0_S        – small split only
-#   vla_arena_L0_M        – medium split only
-#   vla_arena_L0_L        – large split only
-data_mix=vla_arena_L0_all
+#   vla_arena_L0_S        – small split
+#   vla_arena_L0_M        – medium split
+#   vla_arena_L0_L        – large split
+data_mix=vla_arena_L0_L
 
 run_root_dir=./results/Checkpoints
 run_id=vla_arena_qwenoft_all
