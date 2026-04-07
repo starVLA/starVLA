@@ -5,18 +5,18 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=48:00:00
-#SBATCH --job-name=libero_train
+#SBATCH --job-name=oxe_train
 #SBATCH --output=logs/train_%j.log
 #SBATCH --error=logs/train_%j.err
 #
 # Usage (single-node):
-#   sbatch examples/LIBERO/train_files/sbatch_libero_train.sh
+#   sbatch examples/SimplerEnv/train_files/sbatch_oxe_train.sh
 #
-# Usage (multi-node, e.g. 2 nodes × 8 GPUs = 16 GPUs):
-#   sbatch --nodes=2 examples/LIBERO/train_files/sbatch_libero_train.sh
+# Usage (multi-node, e.g. 2 nodes × 4 GPUs = 8 GPUs):
+#   sbatch --nodes=2 examples/SimplerEnv/train_files/sbatch_oxe_train.sh
 #
 # Override GPU count per node:
-#   sbatch --gpus-per-node=4 examples/LIBERO/train_files/sbatch_libero_train.sh
+#   sbatch --gpus-per-node=8 examples/SimplerEnv/train_files/sbatch_oxe_train.sh
 #
 set -e
 
@@ -68,11 +68,11 @@ cd /home/jye624/Projcets/starVLA
 Framework_name=CosmoPredict2OFT
 freeze_module_list=''
 base_vlm=/home/jye624/Models/Pretrained_models/Qwen3-VL-4B-Instruct
-config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
-libero_data_root=/home/jye624/Datasets/LIBERO
-data_mix=libero_all
+config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
+oxe_data_root=/home/jye624/Datasets
+data_mix=bridge_rt_1
 run_root_dir=./results/Checkpoints
-run_id=0405_libero4in1_${Framework_name}
+run_id=0408_oxe_${data_mix}_${Framework_name}
 per_device_batch_size=8
 ###########################################################################################
 
@@ -125,20 +125,18 @@ accelerate launch \
   --config_yaml ${config_yaml} \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
-  --framework.action_model.future_action_window_size 7 \
-  --framework.action_model.past_action_window_size 0 \
-  --datasets.vla_data.data_root_dir ${libero_data_root} \
+  --datasets.vla_data.data_root_dir ${oxe_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.per_device_batch_size ${per_device_batch_size} \
   --trainer.vla_data.video_backend torchvision_av \
   --framework.qwenvl.attn_implementation ${attn_implementation} \
   --trainer.freeze_modules ${freeze_module_list} \
-  --trainer.max_train_steps 80000 \
+  --trainer.max_train_steps 100000 \
   --trainer.save_interval 10000 \
   --trainer.logging_frequency 100 \
-  --trainer.eval_interval 100 \
+  --trainer.eval_interval 1000 \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
-  --wandb_project starVLA_Libero \
+  --wandb_project starVLA_simplerEnv \
   --wandb_entity jinhuiye
 "

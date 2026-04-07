@@ -72,6 +72,8 @@ cp $0 ${output_dir}/
 num_processes=${NUM_PROCESSES:-$(nvidia-smi -L | wc -l)}
 attn_implementation=${ATTN_IMPLEMENTATION:-sdpa}
 accelerate_config_file=${ACCELERATE_CONFIG_FILE:-starVLA/config/deepseeds/deepspeed_zero2.yaml}
+# Use port 0 to let the system auto-select a free port, avoiding conflicts when multiple jobs land on the same node
+# 是你这里不能设置为0， 要设置为
 main_process_port=${MAIN_PROCESS_PORT:-29501}
 
 export WANDB_API_KEY=${WANDB_API_KEY:-943ecb8d26fc2b3879cbc2d667414974906aebb9}
@@ -93,8 +95,7 @@ ${CONDA_INIT} && \
 accelerate launch \
   --config_file ${accelerate_config_file} \
   --num_processes ${num_processes} \
-  --main_process_port ${main_process_port} \
-  starVLA/training/train_starvla.py \
+  starVLA/training/train_unified.py \
   --config_yaml ${config_yaml} \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
@@ -126,7 +127,7 @@ accelerate launch \
   #   --machine_rank $SLURM_PROCID \
   #   --num_machines $SLURM_NNODES \
   #   --num_processes=${TOTAL_GPUS} \
-  #   starVLA/training/train_starvla.py \
+  #   starVLA/training/train_unified.py \
   #   --config_yaml ${config_yaml} \
   #   --framework.name ${Framework_name} \
   #   --framework.qwenvl.base_vlm ${base_vlm} \
