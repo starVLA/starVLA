@@ -1,4 +1,4 @@
-# VLA-Arena Training and Evaluation
+# 🚀 VLA-Arena Training and Evaluation
 
 This document describes how to train and evaluate StarVLA models on the [VLA-Arena](https://github.com/VLA-Arena/VLA-Arena) benchmark.
 
@@ -6,7 +6,16 @@ VLA-Arena covers 4 evaluation domains and 11 task suites. Each suite has **3 dif
 
 ---
 
-## 0. Environment Setup
+## 📊 Evaluation Results
+
+The evaluation results of our models on VLA-Arena are summarized in the table below. The metrics are averaged over 50 trials for each task level (5 tasks × 10 episodes).
+<p align="center">
+    <img src="./eval_results.png" alt="VLA-Arena Results" width="80%">
+</p>
+
+---
+
+## 📦 0. Environment Setup
 
 ### StarVLA environment
 
@@ -18,7 +27,7 @@ VLA-Arena uses [uv](https://github.com/astral-sh/uv) for environment management.
 
 ---
 
-## 1. Data Preparation
+## 📁 1. Data Preparation
 
 The VLA-Arena L0 training data is available on HuggingFace in three sizes. The splits are **inclusive**: Large ⊃ Medium ⊃ Small.
 
@@ -44,7 +53,7 @@ To use the Small or Medium split instead, modify the corresponding lines in `dat
 
 ---
 
-## 2. Training
+## 📈 2. Training
 
 Edit the user configuration in `examples/VLA-Arena/train_files/run_vla_arena_train.sh`, then run:
 
@@ -54,14 +63,14 @@ bash examples/VLA-Arena/train_files/run_vla_arena_train.sh
 
 ---
 
-## 3. Evaluation
+## 🧪 3. Evaluation
 
 Evaluation requires two separate environments running in parallel:
 
 - **StarVLA environment** — runs the policy server
 - **VLA-Arena uv environment** — runs the simulator and benchmark
 
-### Option A: Evaluate all 11 suites in parallel (recommended)
+### ⚡ Option A: Evaluate all 11 suites in parallel (recommended)
 
 `run_parallel_eval.sh` automatically selects free GPUs, launches one policy server per GPU, and distributes the 11 task suites across them.
 
@@ -75,7 +84,7 @@ Evaluation metrics and rollouts will be saved under `results/`.
 
 ---
 
-### Option B: Evaluate a single suite manually
+### 🛠️ Option B: Evaluate a single suite manually
 
 Use this when you want finer control or are debugging a specific suite.
 
