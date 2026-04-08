@@ -6,6 +6,7 @@ import asyncio
 import logging
 import traceback
 import time
+import uuid
 
 import websockets.asyncio.server
 import websockets.frames
@@ -65,19 +66,22 @@ class WebsocketPolicyServer:
     async def _handler(self, websocket: websockets.asyncio.server.ServerConnection):
         logging.info(f"Connection from {websocket.remote_address} opened")
         packer = msgpack_numpy.Packer()
+        session_id = str(uuid.uuid4())
 
-        await websocket.send(packer.pack(self._metadata))
+        await websocket.send(packer.pack({**self._metadata, "session_id": session_id}))
 
         while True:
             try:
                 msg = msgpack_numpy.unpackb(await websocket.recv())
                 self._last_active = time.time()  # 每次收到消息刷新活跃时间
-                ret = self._route_message(msg)  # route message
+                ret = self._route_message(msg, session_id=session_id)  # route message
                 await websocket.send(packer.pack(ret))
             except websockets.ConnectionClosed:
                 logging.info(f"Connection from {websocket.remote_address} closed")
+                self._clear_policy_cache(session_id=session_id)
                 break
             except Exception:
+                self._clear_policy_cache(session_id=session_id)
                 await websocket.send(traceback.format_exc())
                 await websocket.close(
                     code=websockets.frames.CloseCode.INTERNAL_ERROR,
@@ -85,8 +89,12 @@ class WebsocketPolicyServer:
                 )
                 raise
 
+    def _clear_policy_cache(self, session_id: str | None = None) -> None:
+        if hasattr(self._policy, "clear_inference_cache"):
+            self._policy.clear_inference_cache(session_id=session_id)
+
     # route logic: recognize request from client
-    def _route_message(self, msg: dict) -> dict:
+    def _route_message(self, msg: dict, session_id: str | None = None) -> dict:
         """
         Route rules (fault-tolerant):
         - Supports messages of form:
@@ -96,16 +104,27 @@ class WebsocketPolicyServer:
         """
         req_id = msg.get("request_id", "default")
         mtype = msg.get("type", "infer")          # default = infer
-        msg       # when no explicit payload, treat top-level as payload
+        payload = msg.get("payload", msg)
+        if isinstance(payload, dict):
+            payload = dict(payload)
 
         # ping
         if mtype == "ping":
             return {"status": "ok", "ok": True, "type": "ping", "request_id": req_id}
 
+        elif mtype == "reset":
+            self._clear_policy_cache(session_id=session_id)
+            return {
+                "status": "ok",
+                "ok": True,
+                "type": "reset",
+                "request_id": req_id,
+            }
+
         # infer --> framework.predict_action
         elif mtype == "infer" or mtype == "predict_action":
             # Basic payload sanity
-            if not isinstance(msg, dict):
+            if not isinstance(payload, dict):
                 return {
                     "status": "error",
                     "ok": False,
@@ -114,8 +133,12 @@ class WebsocketPolicyServer:
                     "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))}
                 }
             try:
-
-                ouput_dict = self._policy.predict_action(**msg)
+                payload.pop("type", None)
+                payload.pop("request_id", None)
+                payload["cache_session_id"] = session_id
+                start_time = time.perf_counter()
+                ouput_dict = self._policy.predict_action(**payload)
+                predict_action_ms = (time.perf_counter() - start_time) * 1000.0
             except Exception as e:
                 logging.exception("Policy inference error (request_id=%s)", req_id)
                 logging.exception(e)
@@ -137,6 +160,9 @@ class WebsocketPolicyServer:
                 "type": "inference_result",
                 "request_id": req_id,
                 "data": data,
+                "metrics": {
+                    "predict_action_ms": predict_action_ms,
+                },
             }
 
         # unknow request type

@@ -548,27 +548,52 @@ class LangForce(baseframework):
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
-            images=batch_images,
-            instructions=instructions_posteriori
-        )
+        cache_session_id = kwargs.get("cache_session_id")
+        use_vlm_cache = bool(kwargs.get("use_vlm_cache", True))
+        return_cache_info = bool(kwargs.get("return_cache_info", False))
+        cache_key_override = kwargs.get("cache_key")
+        cache_info = {
+            "enabled": use_vlm_cache,
+            "hit": False,
+            "session_id": str(cache_session_id or "default"),
+        }
 
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            qwenvl_outputs = self.qwen_vl_interface(
-                **qwen_inputs,
-                output_attentions=False,
-                output_hidden_states=True,
-                return_dict=True,
-                use_cache=False,
+        action_hidden = None
+        if use_vlm_cache:
+            cache_key = self.build_inference_cache_key(
+                images=batch_images,
+                instructions=instructions_posteriori,
+                cache_key=cache_key_override,
+                extra={"framework": self.__class__.__name__},
+            )
+            cache_info["key"] = cache_key
+            action_hidden, cache_info["hit"] = self.get_inference_cache(cache_session_id, cache_key)
+
+        if action_hidden is None:
+            qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+                images=batch_images,
+                instructions=instructions_posteriori
             )
 
-            last_hidden = qwenvl_outputs.hidden_states[-1]
-            action_hidden = self._extract_action_query_hidden_states(
-                last_hidden,
-                qwen_inputs["input_ids"],
-                self.qwen_vl_interface.processor.tokenizer,
-                return_starts=False
-            )  # [B, K, H]
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                qwenvl_outputs = self.qwen_vl_interface(
+                    **qwen_inputs,
+                    output_attentions=False,
+                    output_hidden_states=True,
+                    return_dict=True,
+                    use_cache=False,
+                )
+
+                last_hidden = qwenvl_outputs.hidden_states[-1]
+                action_hidden = self._extract_action_query_hidden_states(
+                    last_hidden,
+                    qwen_inputs["input_ids"],
+                    self.qwen_vl_interface.processor.tokenizer,
+                    return_starts=False
+                )  # [B, K, H]
+
+            if use_vlm_cache:
+                self.put_inference_cache(cache_session_id, cache_key, action_hidden)
 
         state_tensor = None
         if state is not None:
@@ -577,7 +602,11 @@ class LangForce(baseframework):
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action(action_hidden, state_tensor)
 
-        return {"normalized_actions": pred_actions.detach().cpu().numpy()}
+        output = {"normalized_actions": pred_actions.detach().cpu().numpy()}
+        if return_cache_info:
+            cache_info.update(self.get_inference_cache_stats(cache_session_id))
+            output["cache_info"] = cache_info
+        return output
 
 
 if __name__ == "__main__":

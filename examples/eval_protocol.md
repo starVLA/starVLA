@@ -35,26 +35,34 @@ import WebsocketClientPolicy
 
 client = WebsocketClientPolicy(
     host="127.0.0.1",
-    port=10092
+    port=10093
 )
 
 while True:
     images = capture_multiview()          # returns List[np.ndarray]
     lang = get_instruction()              # may come from task scripts
-    example = {
-        "image": images,
-        "lang": lang,
+    request = {
+        "examples": [{
+            "image": images,
+            "lang": lang,
+        }],
+        "use_vlm_cache": True,            # optional: enable server-side VLM reuse
+        "return_cache_info": True,        # optional: return hit/miss metadata for profiling
     }
 
-    result = client.predict_action(example)  # --> forwarded to framework.predict_action
-    action = result["normalized_actions"][0] # take the first item in the batch
+    result = client.predict_action(request)   # --> forwarded to framework.predict_action
+    action = result["data"]["normalized_actions"][0]
     apply_action(action)
 ```
 
 ### Notes
-- Ensure every field in `example` is JSON-serializable or convertible (lists, floats, ints, strings); convert custom objects explicitly.
+- Ensure every field in the request payload is JSON-serializable or convertible (lists, floats, ints, strings); convert custom objects explicitly.
 - Images must be sent as `np.ndarray`. Perform `PIL.Image -> np.ndarray` before transmission and convert back on the server (`to_pil_preserve`) if required.
 - Keep auxiliary metadata (episode IDs, timestamps, etc.) in dedicated keys so the framework can forward or log them without collisions.
+- When instruction or task context changes, call `client.reset_cache()` before the next request so the server drops stale cached VLM features.
+- Several provided evaluation wrappers now do this inside their `reset(...)` path automatically; if you build a custom client, follow the same pattern.
+- `return_cache_info=True` adds cache hit / miss counters plus cache footprint metadata (`cache_entries`, `cache_bytes`) to the response, which is useful for latency benchmarks and debugging reuse behavior.
+- The benchmark helper under `deployment/model_server/tools/benchmark_policy_server.py` uses the same request shape and, in compare mode, prints the latency delta and throughput uplift between forced cold requests and same-session reuse.
 
 
 ### PolicyClient Interface Design

@@ -27,6 +27,7 @@ from starVLA.model.framework.share_tools import read_mode_config
 from starVLA.training.trainer_utils import initialize_overwatch
 from starVLA.model.framework.share_tools import dict_to_namespace
 from starVLA.model.framework.__init__ import build_framework
+from starVLA.model.framework.inference_cache import SessionInferenceCache, build_multimodal_cache_key
 
 logger = initialize_overwatch(__name__)
 
@@ -52,6 +53,36 @@ class baseframework(PreTrainedModel):
         """
         
         super().__init__(hf_config)
+        self._inference_cache = SessionInferenceCache()
+
+    def build_inference_cache_key(
+        self,
+        *,
+        images,
+        instructions,
+        cache_key: str | None = None,
+        extra=None,
+    ) -> str:
+        return build_multimodal_cache_key(
+            images=images,
+            instructions=instructions,
+            override_key=cache_key,
+            extra=extra,
+        )
+
+    def get_inference_cache(self, session_id: str | None, cache_key: str):
+        return self._inference_cache.get(session_id=session_id, cache_key=cache_key)
+
+    def put_inference_cache(self, session_id: str | None, cache_key: str, value) -> None:
+        self._inference_cache.put(session_id=session_id, cache_key=cache_key, value=value)
+
+    def clear_inference_cache(self, session_id: str | None = None) -> None:
+        self._inference_cache.clear(session_id=session_id)
+        if hasattr(self, "qwen_vl_interface") and hasattr(self.qwen_vl_interface, "clear_cache"):
+            self.qwen_vl_interface.clear_cache()
+
+    def get_inference_cache_stats(self, session_id: str | None = None) -> Dict[str, int]:
+        return self._inference_cache.stats(session_id=session_id)
 
     @classmethod
     def from_pretrained(

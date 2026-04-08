@@ -6,7 +6,15 @@ import logging, argparse
 import time, os
 from typing import Dict, Optional, Tuple
 
-from typing_extensions import override
+try:
+    from typing import override
+except ImportError:
+    try:
+        from typing_extensions import override
+    except ImportError:
+        def override(func):
+            return func
+
 import websockets.sync.client
 
 from . import msgpack_numpy
@@ -63,15 +71,26 @@ class WebsocketClientPolicy:
             self._ws.close()
         except Exception:
             pass
-    
-    @override
-    def predict_action(self, query_info: Dict) -> Dict:
-        data = self._packer.pack(query_info)
+
+    def _send_message(self, message: Dict) -> Dict:
+        data = self._packer.pack(message)
         self._ws.send(data)
         response = self._ws.recv()
         if isinstance(response, str):
             raise RuntimeError(f"Error in inference server:\n{response}")
         return msgpack_numpy.unpackb(response)
+
+    @override
+    def predict_action(self, query_info: Dict) -> Dict:
+        return self._send_message(query_info)
+
+    def infer(self, query_info: Dict) -> Dict:
+        message = dict(query_info)
+        message.setdefault("type", "infer")
+        return self._send_message(message)
+
+    def reset_cache(self, request_id: str = "reset-cache") -> Dict:
+        return self._send_message({"type": "reset", "request_id": request_id})
 
 
 
