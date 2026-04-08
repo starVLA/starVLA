@@ -3,14 +3,13 @@
 
 
 ```bash
-
 your_ckpt=./results/Checkpoints/1003_qwenfast/checkpoints/steps_50000_pytorch_model.pt
 
-python deployment/model_server/server_policy.py \
-    --ckpt_path ${your_ckpt} \
-    --port 10093 \
-    --device auto \
-    --use_bf16
+python -m deployment.model_server.server_policy \
+  --ckpt_path ${your_ckpt} \
+  --port 10093 \
+  --device auto \
+  --use_bf16
 ```
 
 Use `--device cpu` for a functional smoke test on machines without CUDA. For meaningful latency numbers, prefer a real GPU-backed run.
@@ -19,7 +18,9 @@ Use `--device cpu` for a functional smoke test on machines without CUDA. For mea
 # connect to policy server for debug
 
 ```bash
-python deployment/model_server/tools/debug_server_policy.py
+python -m deployment.model_server.tools.debug_server_policy \
+  --image assets/starVLA_LOGO.png \
+  --instruction "pick up the red block"
 
 # plus server_policy.py into your vla controler by ref to tools/debug_server_policy.py
 ```
@@ -30,16 +31,18 @@ python deployment/model_server/tools/debug_server_policy.py
 Use the same image/instruction repeatedly to compare cold requests against same-session reuse:
 
 ```bash
-python deployment/model_server/tools/benchmark_policy_server.py \
-    --host 127.0.0.1 \
-    --port 10093 \
-    --image assets/table.jpeg \
-    --instruction "pick up the red block" \
-    --mode compare \
-    --runs 10 \
-    --warmup 1 \
-    --output-json benchmark-cache-report.json
+python -m deployment.model_server.tools.benchmark_policy_server \
+  --host 127.0.0.1 \
+  --port 10093 \
+  --image assets/starVLA_LOGO.png \
+  --instruction "pick up the red block" \
+  --mode compare \
+  --runs 10 \
+  --warmup 1 \
+  --output-json benchmark-cache-report.json
 ```
+
+Replace `assets/starVLA_LOGO.png` with a real observation frame if you want more meaningful latency numbers.
 
 What the benchmark reports:
 

@@ -3,37 +3,45 @@ Debug / smoke-test client for deployment/model_server/server_policy.py.
 
 Purpose:
   - Establish a WebSocket connection to the policy server.
-  - Initialize device on the server side.
-  - Optionally run a very simple inference request to verify end-to-end transport
-    (serialization + server handling).
+  - Optionally run a simple inference request to verify end-to-end transport.
 
 Usage example:
-  python debug_server_policy.py --host 127.0.0.1 --port 10093 --device cuda --test infer
-
-Notes:
-  - The random observation is synthetic and only meant to validate the interface.
-  - Adjust keys (e.g. 'images', 'task_description') to match the server's expected schema.
+  python -m deployment.model_server.tools.debug_server_policy --host 127.0.0.1 --port 10093 --test infer
 """
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
 import numpy as np
+from PIL import Image
 
+_WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+if str(_WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WORKSPACE_ROOT))
 
-from tools.websocket_policy_client import WebsocketClientPolicy
+from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 
 
 def _build_argparser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="WebSocket policy client smoke test (msgpack protocol)")
     ap.add_argument("--host", default="127.0.0.1", help="server hostname/IP (do not use 0.0.0.0)")
     ap.add_argument("--port", type=int, default=10093, help="server port")
-    ap.add_argument("--api_key", default="", help="optional: API key for authentication")
-    ap.add_argument("--device", default="cuda", choices=["cuda", "cpu"], help="initialize device")
-    ap.add_argument(
-        "--test", choices=["init", "infer"], default="infer", help="test mode: only initialize, or try simple inference"
-    )
+    ap.add_argument("--api_key", default="", help="optional API key")
+    ap.add_argument("--image", default="assets/starVLA_LOGO.png", help="local RGB image used for the smoke test")
+    ap.add_argument("--instruction", default="pick up the red block", help="instruction text for smoke-test inference")
+    ap.add_argument("--test", choices=["connect", "infer"], default="infer", help="connect only, or run one inference")
     ap.add_argument("--log_level", default="INFO")
     return ap
+
+
+def _load_image(image_path: str) -> np.ndarray:
+    resolved_path = Path(image_path)
+    if not resolved_path.is_absolute():
+        resolved_path = (_WORKSPACE_ROOT / resolved_path).resolve()
+    image = Image.open(resolved_path).convert("RGB")
+    return np.asarray(image, dtype=np.uint8)
 
 
 def _main():
@@ -43,45 +51,22 @@ def _main():
     client = WebsocketClientPolicy(host=args.host, port=args.port, api_key=(args.api_key or None))
     logging.info("Connected. Server metadata: %s", client.get_server_metadata())
 
-    # 1) device initialization
-    init_ret = client.init_device(args.device)  # here to set some things on the server
-    logging.info("Init device resp: %s", init_ret)
-
-    # 2) optional: try one simple inference
     if args.test == "infer":
         try:
-            # build observation aligned with model API
-            H, W = 224, 224
-            img = np.random.randint(0, 256, (H, W, 3), dtype=np.uint8)
-            wrist_img = np.random.randint(0, 256, (H, W, 3), dtype=np.uint8)
-            state = np.zeros((7,), dtype=np.float32)  # [x,y,z, ax,ay,az, gripper]
-
-            observation = {  # key to align with model API
+            image_primary_np = _load_image(args.image)
+            request = {
+                "type": "infer",
                 "request_id": "smoke-test",
-                "observation.primary": np.expand_dims(img, axis=0),  # (1,H,W,C), uint8 0-255
-                "observation.wrist_image": np.expand_dims(wrist_img, axis=0),  # (1,H,W,C)
-                "observation.state": np.expand_dims(state, axis=0),  # (1,7), float32
-                "instruction": ["debug: pick up the red block"],  # single element list
+                "examples": [{
+                    "image": [image_primary_np],
+                    "lang": args.instruction,
+                }],
+                "return_cache_info": True,
             }
-
-            image_path = "assets/table.jpeg"
-            # read image as PIL
-            from PIL import Image
-            image_primary = Image.open(image_path).convert("RGB")
-            # Convert PIL -> numpy uint8 (H,W,3)
-            image_primary_np = np.asarray(image_primary, dtype=np.uint8)
-
-            instruction_lang="pick up the red block"
-            obs = {
-                "request_id": "smoke-test",
-                "batch_images": [[image_primary_np]],
-                "instructions": [instruction_lang],  # assume batch task description
-            }
-
-            infer_ret = client.infer(obs)
+            infer_ret = client.infer(request)
             logging.info("Infer resp: %s", infer_ret)
-        except Exception as e:
-            logging.error("Infer error (this still proves transport OK): %s", e)
+        except Exception as exc:
+            logging.error("Infer error (transport may still be fine): %s", exc)
 
     client.close()
     logging.info("Smoke test done.")

@@ -2,13 +2,21 @@
 # Licensed under the MIT License, Version 1.0 (the "License"); 
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
-import logging
-import socket
 import argparse
+import logging
+import os
+import socket
+import sys
+from pathlib import Path
+
+_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+if str(_WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WORKSPACE_ROOT))
+
 from deployment.model_server.tools.websocket_policy_server import WebsocketPolicyServer
 from deployment.model_server.server_policy_utils import build_server_metadata, resolve_server_device
 from starVLA.model.framework.base_framework import baseframework
-import torch, os
+import torch
 
 
 def debug_enabled() -> bool:
@@ -62,11 +70,15 @@ def build_argparser():
 
 def start_debugpy_once():
     """start debugpy once"""
-    import debugpy
+    try:
+        import debugpy
+    except ImportError:
+        logging.warning("DEBUGPY requested but debugpy is not installed; skipping debugger attach.")
+        return
     if getattr(start_debugpy_once, "_started", False):
         return
     debugpy.listen(("0.0.0.0", 10095))
-    print("🔍 Waiting for VSCode attach on 0.0.0.0:10095 ...")
+    logging.info("Waiting for VSCode attach on 0.0.0.0:10095 ...")
     debugpy.wait_for_client()
     start_debugpy_once._started = True
 

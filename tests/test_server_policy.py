@@ -1,8 +1,13 @@
+import subprocess
+import sys
 import unittest
 from unittest import mock
 import importlib
+from pathlib import Path
 
 from deployment.model_server import server_policy_utils
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _DummyPolicy:
@@ -10,9 +15,33 @@ class _DummyPolicy:
 
 
 class ServerPolicyTests(unittest.TestCase):
+    def _run_script_help(self, relative_script_path: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(REPO_ROOT / relative_script_path), "--help"],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
     def test_server_policy_module_imports_without_optional_framework_dependencies(self):
         module = importlib.import_module("deployment.model_server.server_policy")
         self.assertTrue(hasattr(module, "main"))
+
+    def test_server_policy_help_runs_as_script(self):
+        proc = self._run_script_help("deployment/model_server/server_policy.py")
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        self.assertIn("--ckpt_path", proc.stdout)
+
+    def test_benchmark_policy_server_help_runs_as_script(self):
+        proc = self._run_script_help("deployment/model_server/tools/benchmark_policy_server.py")
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        self.assertIn("--image", proc.stdout)
+
+    def test_debug_server_policy_help_runs_as_script(self):
+        proc = self._run_script_help("deployment/model_server/tools/debug_server_policy.py")
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        self.assertIn("--instruction", proc.stdout)
 
     def test_resolve_server_device_uses_cpu_when_auto_and_cuda_missing(self):
         with mock.patch.object(server_policy_utils.torch.cuda, "is_available", return_value=False):
