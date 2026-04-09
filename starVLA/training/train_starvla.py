@@ -16,6 +16,7 @@ import json
 import os
 import time
 from pathlib import Path
+from datetime import timedelta
 from typing import Tuple
 
 # Third-Party Libraries
@@ -23,7 +24,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin
+from accelerate import Accelerator, DeepSpeedPlugin, InitProcessGroupKwargs
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
@@ -38,7 +39,11 @@ from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, w
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, normalize_dotlist_args
 
 deepspeed_plugin = DeepSpeedPlugin()
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+# Avoid default c10d 30-minute timeout (1800000ms) on slow/imbalanced steps.
+# You can override via env: TORCH_DIST_TIMEOUT_MINUTES=1440
+dist_timeout_minutes = int(os.environ.get("TORCH_DIST_TIMEOUT_MINUTES", "1440"))
+process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(minutes=dist_timeout_minutes))
+accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, kwargs_handlers=[process_group_kwargs])
 accelerator.print(accelerator.state)
 
 # Sane Defaults
@@ -233,6 +238,9 @@ class VLATrainer(TrainerUtils):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
                 self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+                full_cfg_path = output_dir / "config.full.yaml"
+                logger.info(f"📦 Saving full merged configuration to `{full_cfg_path}`...")
+                self.config.save_full_config(full_cfg_path, resolve=True)
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
@@ -357,7 +365,14 @@ class VLATrainer(TrainerUtils):
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            self.lr_scheduler.step()
+            # Only step the scheduler when an actual optimizer update occurs.
+            # Inside accelerator.accumulate(), optimizer.step() is a no-op on
+            # non-sync micro-steps, but lr_scheduler.step() always advances
+            # the internal counter.  This caused the scheduler to advance
+            # gradient_accumulation_steps times faster than intended, leading
+            # to premature LR decay and incorrect LR on resume (#204).
+            if self.accelerator.sync_gradients:
+                self.lr_scheduler.step()
 
         return {
             "action_dit_loss": action_loss.item(),

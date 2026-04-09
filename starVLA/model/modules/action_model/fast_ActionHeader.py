@@ -19,6 +19,50 @@ import numpy as np
 import torch.nn as nn
 from transformers import AutoProcessor
 
+def _load_fast_processor(pretrained_path: str = "physical-intelligence/fast"):
+    """Load the FAST UniversalActionProcessor with compatibility for transformers >= 5.x.
+
+    transformers 5.x changed AutoProcessor internals which breaks the default
+    loading path for the physical-intelligence/fast custom processor. This
+    helper manually loads the custom class and its BPE tokenizer component.
+    """
+    try:
+        return AutoProcessor.from_pretrained(pretrained_path, trust_remote_code=True)
+    except (ValueError, OSError):
+        pass
+
+    # Fallback: manual load
+    from huggingface_hub import snapshot_download
+    import importlib.util
+
+    local_dir = snapshot_download(pretrained_path)
+
+    spec = importlib.util.spec_from_file_location(
+        "processing_action_tokenizer",
+        os.path.join(local_dir, "processing_action_tokenizer.py"),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    UniversalActionProcessor = mod.UniversalActionProcessor
+
+    bpe_tokenizer = PreTrainedTokenizerFast(
+        tokenizer_file=os.path.join(local_dir, "tokenizer.json"),
+        clean_up_tokenization_spaces=False,
+    )
+
+    with open(os.path.join(local_dir, "processor_config.json"), "r") as f:
+        cfg = json.load(f)
+
+    processor = UniversalActionProcessor(
+        bpe_tokenizer=bpe_tokenizer,
+        scale=cfg.get("scale", 10),
+        vocab_size=cfg.get("vocab_size", 2048),
+        min_token=cfg.get("min_token", -354),
+        action_dim=cfg.get("action_dim"),
+        time_horizon=cfg.get("time_horizon"),
+    )
+    return processor
+
 
 class Fast_Action_Tokenizer(nn.Module):
     """One MLP ResNet block with a residual connection."""

@@ -49,12 +49,24 @@ class CategorySpecificMLP(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim=1024, output_dim=2048):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim=1024,
+        output_dim=2048,
+        use_input_norm=False,
+    ):
         super().__init__()
+        self.norm = (
+            nn.LayerNorm(input_dim, elementwise_affine=False, eps=1e-6)
+            if use_input_norm
+            else nn.Identity()
+        )
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
+        x = self.norm(x)
         return self.layer2(F.relu(self.layer1(x)))
 
 
@@ -237,6 +249,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             input_dim=self.input_embedding_dim,
             hidden_dim=1024,
             output_dim=self.action_dim,
+            use_input_norm=False, # set this to True will make the training loss start from a normal value
         )
         self.future_tokens = nn.Embedding(action_config.num_target_vision_tokens, self.input_embedding_dim)
         nn.init.normal_(self.future_tokens.weight, mean=0.0, std=0.02)

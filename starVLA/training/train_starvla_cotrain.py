@@ -212,6 +212,9 @@ class VLAMTrainer(TrainerUtils):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
                 self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+                full_cfg_path = output_dir / "config.full.yaml"
+                logger.info(f"📦 Saving full merged configuration to `{full_cfg_path}`...")
+                self.config.save_full_config(full_cfg_path, resolve=True)
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
@@ -351,7 +354,9 @@ class VLAMTrainer(TrainerUtils):
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            self.lr_scheduler.step()
+            # Only step scheduler on actual optimizer updates (see train_starvla.py)
+            if self.accelerator.sync_gradients:
+                self.lr_scheduler.step()
 
             log_dict.update(
                 {

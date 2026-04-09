@@ -71,6 +71,7 @@ def make_LeRobotSingleDataset(
     robot_type: str,
     delete_pause_frame: bool = False,
     data_cfg: dict | None = None,
+    lerobot_version: str | None = None,
 ) -> LeRobotSingleDataset:
     """
     Make a LeRobotSingleDataset object.
@@ -78,7 +79,7 @@ def make_LeRobotSingleDataset(
     :param data_root_dir: The root directory of the dataset.
     :param data_name: The name of the dataset.
     :param robot_type: The robot type config to use.
-    :param crop_obs_camera: Whether to crop the observation camera images.
+    :param lerobot_version: Explicit lerobot version override ("v2.0" or "v3.0"). If None, auto-detected from dataset file structure.
     :return: A LeRobotSingleDataset object.
     """
 
@@ -103,6 +104,7 @@ def make_LeRobotSingleDataset(
         video_backend=video_backend,  # decord is more efficiency | torchvision_av for video.av1
         delete_pause_frame=delete_pause_frame,
         data_cfg=data_cfg,
+        lerobot_version=lerobot_version,
     )
 
 
@@ -129,7 +131,7 @@ def get_vla_dataset(
             continue
 
         included_datasets.add(dataset_key)
-        filtered_mixture_spec.append((d_name, d_weight, robot_type))
+        filtered_mixture_spec.append((d_name, d_weight, robot_type, d_version))
 
     dataset_mixture = []
     for d_name, d_weight, robot_type in filtered_mixture_spec:
