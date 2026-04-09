@@ -414,14 +414,11 @@ Note: To ensure better compatibility with already released checkpoints, we are c
 StarVLA is released under the MIT License, which permits commercial use, modification, distribution, and private use. Rebases are allowed for forks and feature branches; when rebasing from upstream StarVLA, use descriptive commit messages (e.g., "chore: rebase from StarVLA") and keep at least the two latest upstream commits as separate. See [License](LICENSE) for details.
 
 ```
-@misc{starvla2025,
-  title        = {StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
-  author       = {starVLA Contributors},
-  year         = {2025},
-  url          = {https://github.com/starVLA/starVLA},
-  doi          = {10.5281/zenodo.18264214},
-  howpublished = {GitHub repository},
-  publisher    = {GitHub}
+@article{starvla2025,
+  title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
+  author={StarVLA Community},
+  journal={arXiv preprint arXiv:2604.05014},
+  year={2026}
 }
 ```
 
