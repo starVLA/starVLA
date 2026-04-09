@@ -131,7 +131,7 @@ def get_vla_dataset(
             continue
 
         included_datasets.add(dataset_key)
-        filtered_mixture_spec.append((d_name, d_weight, robot_type, d_version))
+        filtered_mixture_spec.append((d_name, d_weight, robot_type))
 
     dataset_mixture = []
     for d_name, d_weight, robot_type in filtered_mixture_spec:
