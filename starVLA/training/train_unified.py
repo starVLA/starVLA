@@ -124,11 +124,20 @@ class UnifiedTrainer(TrainerUtils):
         self.accelerator = accelerator
 
         self.completed_steps = 0
-        self.total_batch_size = self._calculate_total_batch_size()
+        self.supported_tags = [name for name in self.data_manager.names if self.model.supports_training_tag(name)]
+        self.skipped_tags = [name for name in self.data_manager.names if name not in self.supported_tags]
 
-        # Convenience flags derived from which dataloaders are registered
-        self.has_vla = "vla" in self.data_manager.names
-        self.has_vlm = "vlm" in self.data_manager.names
+        if not self.supported_tags:
+            raise ValueError(
+                f"{type(self.model).__name__} does not support any registered dataloader tags: "
+                f"{self.data_manager.names}"
+            )
+
+        self.total_batch_size = self._calculate_total_batch_size()
+        # @JinhuiYE 我发现uinified trainer 并不是一个乐观的事情，TODO 重新思考 封装边界
+        # Convenience flags derived from compatible dataloaders only
+        self.has_vla = "vla" in self.supported_tags
+        self.has_vlm = "vlm" in self.supported_tags
 
     # ------------------------------------------------------------------
     # Preparation
@@ -162,9 +171,9 @@ class UnifiedTrainer(TrainerUtils):
         self._init_wandb()
 
     def _calculate_total_batch_size(self):
-        """Calculate global batch size (uses first available dataset)."""
-        for ds_key in ["vla_data", "vlm_data"]:
-            ds_cfg = getattr(self.config.datasets, ds_key, None)
+        """Calculate global batch size from the first compatible dataset."""
+        for tag in self.supported_tags:
+            ds_cfg = getattr(self.config.datasets, f"{tag}_data", None)
             if ds_cfg is not None:
                 per_device_bs = getattr(ds_cfg, "per_device_batch_size", 1)
                 return per_device_bs * self.accelerator.num_processes * self.accelerator.gradient_accumulation_steps
@@ -276,7 +285,7 @@ class UnifiedTrainer(TrainerUtils):
             if not dist.is_initialized() or dist.get_rank() == 0:
                 metrics["learning_rate"] = self.lr_scheduler.get_last_lr()[0]
                 # Use first available dataloader for epoch count
-                for name in self.data_manager.names:
+                for name in self.supported_tags:
                     dl = self.data_manager.dataloaders[name]
                     if hasattr(dl, "__len__") and len(dl):
                         metrics["epoch"] = round(self.completed_steps / len(dl), 2)
@@ -289,6 +298,9 @@ class UnifiedTrainer(TrainerUtils):
         if self.accelerator.is_main_process:
             logger.info("***** Training Configuration *****")
             logger.info(f"  Datasets = {self.data_manager.names}")
+            logger.info(f"  Active training tags = {self.supported_tags}")
+            if self.skipped_tags:
+                logger.warning(f"  Skipping unsupported dataloader tags = {self.skipped_tags}")
             logger.info(f"  Total optimization steps = {self.config.trainer.max_train_steps}")
             logger.info(f"  Total batch size = {self.total_batch_size}")
             logger.info(f"  Gradient accumulation steps = {self.config.trainer.gradient_accumulation_steps}")
@@ -301,17 +313,24 @@ class UnifiedTrainer(TrainerUtils):
         """Execute single training step – delegates dispatch to model.compute_loss()."""
         log_dict = {}
         loss_scale = OmegaConf.to_container(self.config.trainer.loss_scale, resolve=True)
+        processed_batches = 0
 
         with self.accelerator.accumulate(self.model):
             self.optimizer.zero_grad()
 
-            batches = self.data_manager.get_next_batches()
+            batches = self.data_manager.get_next_batches(allowed_names=set(self.supported_tags))
             for tag, batch in batches:
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     loss_dict = self.model.compute_loss(tag, batch, loss_scale=loss_scale)
+                if not loss_dict:
+                    continue
+                processed_batches += 1
                 for loss_val in loss_dict.values():
                     self.accelerator.backward(loss_val)
                 log_dict.update({k: v.item() for k, v in loss_dict.items()})
+
+            if processed_batches == 0:
+                return log_dict, False
 
             if self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
@@ -319,7 +338,7 @@ class UnifiedTrainer(TrainerUtils):
             self.optimizer.step()
             self.lr_scheduler.step()
 
-        return log_dict
+        return log_dict, True
 
     def eval_action_model(self, step_metrics: dict = None) -> dict:
         """Run simple action-eval on current batch.  No-op when VLA data is absent."""
@@ -352,8 +371,11 @@ class UnifiedTrainer(TrainerUtils):
 
         while self.completed_steps < self.config.trainer.max_train_steps:
             t_start = time.perf_counter()
-            step_metrics = self._train_step()
+            step_metrics, did_update = self._train_step()
             t_end = time.perf_counter()
+
+            if not did_update:
+                continue
 
             if self.accelerator.sync_gradients:
                 progress_bar.update(1)

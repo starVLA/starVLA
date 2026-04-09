@@ -1,8 +1,8 @@
 ###########################################################################################
 # === Please modify the following paths according to your environment ===
-export LIBERO_HOME=/mnt/petrelfs/share/yejinhui/Projects/LIBERO  # Root directory of the LIBERO project
-export LIBERO_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/lerobot/bin/python  # Path to the Python environment
-export starVLA_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python  # Path to the Python environment
+export LIBERO_HOME=/home/jye624/Projcets/LIBERO  # Root directory of the LIBERO project
+export LIBERO_python=/home/jye624/.conda/envs/libero/bin/python  # Path to the Python environment
+export starVLA_python=/home/jye624/.conda/envs/starVLA/bin/python  # Path to the Python environment
 
 # === End of environment variable configuration ===
 export LIBERO_CONFIG_PATH=${LIBERO_HOME}/libero  # Path to LIBERO configuration files
@@ -13,20 +13,14 @@ export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools fro
 
 
 ##### === variables for which evaluation to setup ===
-your_ckpt=$1 # results/Checkpoints/1025_libero_all_qwengroot/checkpoints/steps_20000_pytorch_model.pt
+your_ckpt=$1 # results/Checkpoints/.../steps_20000_pytorch_model.pt
 task_suite_name=$2 # align with your model | libero_goal
-run_index=$3
-# your_ckpt=results/Checkpoints/1025_libero_10_qwengroot/checkpoints/steps_10000_pytorch_model.pt
-# task_suite_name=libero_10
-# run_index=8
+gpu_id=$3   # GPU id to use (e.g. 0, 1, 2, ...)
+base_port=$4 # unique port for this eval instance
 ##### === variables for which evaluation to setup ===
-
-num_gpus=8
-gpu_id=$((run_index % num_gpus))
 
 num_trials_per_task=50
 host="127.0.0.1"
-base_port=$((6450 + run_index))
 unnorm_key="franka"
 
 CUDA_VISIBLE_DEVICES=$gpu_id ${starVLA_python} deployment/model_server/server_policy.py \

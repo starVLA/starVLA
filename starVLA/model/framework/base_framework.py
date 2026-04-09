@@ -134,7 +134,15 @@ class baseframework(PreTrainedModel):
     # Unified loss interface for Trainer
     # ------------------------------------------------------------------
 
-    def compute_loss(self, tag: str, batch, loss_scale: dict = None) -> Dict[str, torch.Tensor]:
+    def supports_training_tag(self, tag: str) -> bool:
+        """Return whether this framework can consume batches for *tag*."""
+        if tag == "vla":
+            return type(self).forward is not baseframework.forward
+        if tag == "vlm":
+            return hasattr(self, "qwen_vl_interface") or type(self).forward_vlm is not baseframework.forward_vlm
+        return False
+
+    def compute_loss(self, tag: str, batch, loss_scale: dict = None) -> Dict[str, torch.Tensor] | None:
         """Unified forward entry-point: route to the right forward by *tag*.
 
         The trainer calls ``model.compute_loss(tag, batch)`` for every
@@ -153,9 +161,13 @@ class baseframework(PreTrainedModel):
                         Defaults to 1.0 for unspecified tags.
 
         Returns:
-            dict[str, Tensor]: keyed losses (e.g. ``{"action_loss": ...}``).
-                The trainer simply backwards each value.
+            dict[str, Tensor] | None: keyed losses (e.g. ``{"action_loss": ...}``).
+                Returns ``None`` when this framework does not support the
+                incoming dataloader tag so the trainer can ``continue``.
         """
+        if not self.supports_training_tag(tag):
+            return None
+
         scale = (loss_scale or {}).get(tag, 1.0)
 
         if tag == "vla":
@@ -163,10 +175,7 @@ class baseframework(PreTrainedModel):
         elif tag == "vlm":
             out = self.forward_vlm(batch)
         else:
-            raise ValueError(
-                f"Unknown tag '{tag}'. Override compute_loss() in "
-                f"{type(self).__name__} to handle it."
-            )
+            return None
 
         # Apply loss scale and filter to Tensor values only
         return {k: v * scale for k, v in out.items() if isinstance(v, torch.Tensor)}

@@ -2,10 +2,10 @@
 #SBATCH --account=vonneumann1
 #SBATCH --partition=vonneumann
 #SBATCH --gpus-per-node=8
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=48:00:00
-#SBATCH --job-name=oxe_train
+#SBATCH --job-name=oxe_train_sbath
 #SBATCH --output=logs/train_%j.log
 #SBATCH --error=logs/train_%j.err
 #
@@ -65,7 +65,7 @@ export NCCL_SOCKET_TIMEOUT_MS=360000
 # === Training config ===
 cd /home/jye624/Projcets/starVLA
 
-Framework_name=CosmoPredict2OFT
+Framework_name=CosmoPredict2GR00T
 freeze_module_list=''
 base_vlm=/home/jye624/Models/Pretrained_models/Qwen3-VL-4B-Instruct
 config_yaml=./examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
@@ -128,7 +128,7 @@ accelerate launch \
   --datasets.vla_data.data_root_dir ${oxe_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.per_device_batch_size ${per_device_batch_size} \
-  --trainer.vla_data.video_backend torchvision_av \
+  --trainer.vla_data.video_backend pyav \
   --framework.qwenvl.attn_implementation ${attn_implementation} \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 100000 \

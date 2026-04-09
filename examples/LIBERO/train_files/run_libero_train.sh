@@ -61,7 +61,7 @@ run_id=0405_libero4in1_${Framework_name}
 ###########################################################################################
 
 
-# export WANDB_MODE=disabled
+export WANDB_MODE=disabled
 
 
 output_dir=${run_root_dir}/${run_id}

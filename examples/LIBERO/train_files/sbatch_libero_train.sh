@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=48:00:00
-#SBATCH --job-name=libero_train
+#SBATCH --job-name=libero_train_sbath
 #SBATCH --output=logs/train_%j.log
 #SBATCH --error=logs/train_%j.err
 #
@@ -72,7 +72,7 @@ config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
 libero_data_root=/home/jye624/Datasets/LIBERO
 data_mix=libero_all
 run_root_dir=./results/Checkpoints
-run_id=0405_libero4in1_${Framework_name}
+run_id=0407_libero4in1_${Framework_name}
 per_device_batch_size=8
 ###########################################################################################
 

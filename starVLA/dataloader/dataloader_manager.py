@@ -129,7 +129,7 @@ class DataLoaderManager:
             logger.info(f"DataLoaderManager: '{name}' epoch reset → epoch {self._epoch_counts[name]}")
             return next(self._iterators[name])
 
-    def get_next_batches(self) -> list[tuple[str, Any]]:
+    def get_next_batches(self, allowed_names: set[str] | None = None) -> list[tuple[str, Any]]:
         """Return ``[(name, batch), ...]`` for this training step.
 
         Each dataset is included based on its configured ratio (probability).
@@ -137,6 +137,8 @@ class DataLoaderManager:
         """
         batches: list[tuple[str, Any]] = []
         for name in self.dataloaders:
+            if allowed_names is not None and name not in allowed_names:
+                continue
             ratio = self.ratios.get(name, 1.0)
             if ratio < 1.0 and random.random() > ratio:
                 continue

@@ -61,7 +61,7 @@ run_id=0408_oxe_${data_mix}_${Framework_name}
 ###########################################################################################
 
 
-export WANDB_MODE=disabled
+# export WANDB_MODE=disabled
 
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
@@ -99,8 +99,8 @@ accelerate launch \
   --framework.qwenvl.base_vlm ${base_vlm} \
   --datasets.vla_data.data_root_dir ${oxe_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
-  --datasets.vla_data.per_device_batch_size 8 \
-  --trainer.vla_data.video_backend torchvision_av \
+  --datasets.vla_data.per_device_batch_size 12 \
+  --trainer.vla_data.video_backend pyav \
   --framework.qwenvl.attn_implementation ${attn_implementation} \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 100000 \
