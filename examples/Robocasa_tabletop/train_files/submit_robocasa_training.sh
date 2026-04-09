@@ -11,12 +11,12 @@
 
 #  6955707                 si     RoCaPI       reserved yejinhui       normal  R        9:14      4     gpu:32 SH-IDCA1404-10-140-54-[13,88-89,107]   
 
-# source ~/.bashrc     # 确保 conda 命令可用
+# source ~/.bashrc     # Ensure conda command is available
 # source ~/.zshrc
 # source ~/envs4jinhui.sh
 # proxy_on
 
-# conda activate llavavla310  # 替换为你的环境名
+# conda activate llavavla310  # Replace with your environment name
 
 # export task_id=31_32_33
 

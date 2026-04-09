@@ -92,13 +92,13 @@ class Fast_Action_Tokenizer(nn.Module):
         action_dataset,
         datasets_path="<your_local_path>",
     ):
-        # 如果 datasets_path 存在， 直接读取
+        # If datasets_path exists, load directly
         if os.path.exists(datasets_path):
 
             self.fast_tokenizer = AutoProcessor.from_pretrained(datasets_path, trust_remote_code=True)
             return
         else:
-            # 如果不存在，Fit the tokenizer on the new dataset
+            # If not found, Fit the tokenizer on the new dataset
             new_tokenizer = self.fast_tokenizer.tokenizer.fit(action_dataset)
             self.fast_tokenizer = new_tokenizer
 

@@ -130,7 +130,7 @@ class Qwenvl_OFT(baseframework):
         self.action_token = "🔍"  # TODO also can add spacail token to Qwen, but too complex
         self.action_token_id = self.qwen_vl_interface.processor.tokenizer("🔍", add_special_tokens=False)["input_ids"][0]
 
-        # L1 损失
+        # L1 loss
         self.l1_loss = nn.L1Loss()
 
     def forward(
@@ -139,7 +139,7 @@ class Qwenvl_OFT(baseframework):
         **kwargs,
     ) -> Tuple:
         """
-        训练前向：直接回归未来动作（无扩散）。
+        Training forward: directly regress future actions (no diffusion).
 
         Flow:
           1. Build QwenVL inputs (images + instruction tokens)
@@ -182,20 +182,20 @@ class Qwenvl_OFT(baseframework):
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
-            # 提取动作 token embedding 作为动作预测查询
+            # Extract action token embeddings as action prediction queries
             input_ids = qwen_inputs.get("input_ids", None)
             action_queries = self._gather_action_token_embeddings(
                 last_hidden, input_ids, action_token_id=self.action_token_id
             )  # [B, chunk_len, H]
             pred_actions = self.action_model.predict_action(action_queries)  # (B, chunk_len, action_dim)
 
-            # 标签对齐：取最后 chunk_len 段
+            # Label alignment: take the last chunk_len segment
             actions = torch.tensor(
                 np.array(actions), device=pred_actions.device, dtype=pred_actions.dtype
             )  # [B, T_full, action_dim]
             actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
 
-            # 计算 L1 损失
+            # Compute L1 loss
             action_loss = self.l1_loss(pred_actions, actions_target)
 
         return {"action_loss": action_loss}
@@ -247,7 +247,7 @@ class Qwenvl_OFT(baseframework):
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
-            # 提取动作 token embedding 作为动作预测查询
+            # Extract action token embeddings as action prediction queries
             input_ids = qwen_inputs.get("input_ids", None)
             action_queries = self._gather_action_token_embeddings(
                 last_hidden, input_ids, action_token_id=self.action_token_id
@@ -261,29 +261,29 @@ class Qwenvl_OFT(baseframework):
         self,
         last_hidden: torch.Tensor,  # [B, L, H]
         input_ids: torch.Tensor,  # [B, L]
-        action_token_id=None,  # 可为 int 或 List[int]
+        action_token_id=None,  # Can be int or List[int]
     ) -> torch.Tensor:
         """
-        向量化批量提取动作 token embedding:
-          - 不再逐样本 for 循环
-          - 取每个样本里最靠后的 chunk_len 个动作占位 token
+        Vectorized batch extraction of action token embeddings:
+          - No per-sample for loop
+          - Select the last chunk_len action placeholder tokens from each sample
         Args:
             last_hidden: [B, L, H]
             input_ids:   [B, L]
-            action_token_id: int 或 List[int]
+            action_token_id: int or List[int]
         Returns:
             action_queries: [B, chunk_len, H]
         """
         if action_token_id is None:
-            raise ValueError("action_token_id 不能为空")
+            raise ValueError("action_token_id must not be None")
 
         device = input_ids.device
         B, L, H = last_hidden.shape
 
-        # 支持多 id（如多个变体）
+        # Support multiple ids (e.g., multiple variants)
         if isinstance(action_token_id, (list, tuple, set)):
             id_list = torch.tensor(list(action_token_id), device=device, dtype=input_ids.dtype)
-            # torch.isin 需要 PyTorch >=1.10
+            # torch.isin requires PyTorch >=1.10
             mask = torch.isin(input_ids, id_list)
         else:
             mask = input_ids == action_token_id  # [B, L]
@@ -292,17 +292,17 @@ class Qwenvl_OFT(baseframework):
         if (counts < self.chunk_len).any():
             insufficient = (counts < self.chunk_len).nonzero(as_tuple=False).flatten().tolist()
             raise RuntimeError(
-                f"以下样本动作 token 数量不足 {self.chunk_len}: {insufficient} | counts={counts.tolist()}"
+                f"The following samples have insufficient action tokens (< {self.chunk_len}): {insufficient} | counts={counts.tolist()}"
             )
 
-        # 位置索引
+        # Position indices
         idx = torch.arange(L, device=device).unsqueeze(0).expand(B, L)  # [B, L]
-        masked_pos = torch.where(mask, idx, torch.full_like(idx, -1))  # 非动作位置置 -1
+        masked_pos = torch.where(mask, idx, torch.full_like(idx, -1))  # Set non-action positions to -1
 
-        # 取最后 chunk_len 个（索引大的在序列靠后）
-        # 注意: 已确保数量足够，不会出现 -1 被错误选中的问题
-        topk_pos = masked_pos.topk(k=self.chunk_len, dim=-1).values  # [B, chunk_len] 未排序
-        # 时间顺序排序
+        # Take the last chunk_len positions (higher indices = later in sequence)
+        # Note: count sufficiency already verified, so -1 won't be incorrectly selected
+        topk_pos = masked_pos.topk(k=self.chunk_len, dim=-1).values  # [B, chunk_len] unsorted
+        # Sort in temporal order
         selected_pos = topk_pos.sort(dim=-1).values  # [B, chunk_len]
 
         # Gather

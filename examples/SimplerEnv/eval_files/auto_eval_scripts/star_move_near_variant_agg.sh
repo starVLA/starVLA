@@ -102,8 +102,8 @@ env_name=MoveNearGoogleInScene-v0
 scene_name=google_pick_coke_can_1_v4
 
 for ckpt_path in "${arr[@]}"; do
-  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-  # 启动服务并获取服务进程的 PID
+  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
+  # Start server and get its PID
   port=$((base_port + run_count))
   start_service ${gpu_id} ${ckpt_path} ${port}
 
@@ -120,8 +120,8 @@ done
 
 # distractor
 for ckpt_path in "${arr[@]}"; do
-  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-  # 启动服务并获取服务进程的 PID
+  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
+  # Start server and get its PID
   port=$((base_port + run_count))
   start_service ${gpu_id} ${ckpt_path} ${port}
   CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py --ckpt-path ${ckpt_path} \
@@ -142,8 +142,8 @@ declare -a scene_arr=("google_pick_coke_can_1_v4_alt_background" \
                       "google_pick_coke_can_1_v4_alt_background_2")
 for scene_name in "${scene_arr[@]}"; do
   for ckpt_path in "${arr[@]}"; do
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-    # 启动服务并获取服务进程的 PID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
+    # Start server and get its PID
     port=$((base_port + run_count))
     start_service ${gpu_id} ${ckpt_path} ${port}
       
@@ -166,8 +166,8 @@ scene_name=google_pick_coke_can_1_v4
 
 for ckpt_path in "${arr[@]}"; do
   # Slightly darker
-  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-  # 启动服务并获取服务进程的 PID
+  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
+  # Start server and get its PID
   port=$((base_port + run_count))
   start_service ${gpu_id} ${ckpt_path} ${port}
   CUDA_VISIBLE_DEVICES=${gpu_id} ${sim_python} examples/SimplerEnv/eval_files/start_simpler_env.py --ckpt-path ${ckpt_path} \
@@ -183,8 +183,8 @@ for ckpt_path in "${arr[@]}"; do
   run_count=$((run_count + 1))
 
   # Slightly brighter
-  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
-  # 启动服务并获取服务进程的 PID
+  gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
+  # Start server and get its PID
   port=$((base_port + run_count))
   start_service ${gpu_id} ${ckpt_path} ${port}
 

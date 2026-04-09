@@ -55,7 +55,7 @@ class _Florence_Interface(nn.Module):
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id, torch_dtype=torch_dtype, trust_remote_code=True, attn_implementation="eager"
-        )  # 强制使用 eager 注意力
+        )  # Force eager attention
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
 
         self.processor._construct_prompts = _construct_prompts

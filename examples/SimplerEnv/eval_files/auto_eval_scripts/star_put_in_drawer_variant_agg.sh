@@ -154,13 +154,13 @@ scene_name=frl_apartment_stage_simple
 for ckpt_path in "${ckpt_paths[@]}"; do
   for env_name in "${env_names[@]}"; do
     EXTRA_ARGS="--additional-env-build-kwargs shader_dir=rt light_mode=brighter model_ids=apple"
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
     EvalSim &
     eval_pids+=($!)
     run_count=$((run_count + 1))
 
     EXTRA_ARGS="--additional-env-build-kwargs shader_dir=rt light_mode=darker model_ids=apple"
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
     EvalSim &
     eval_pids+=($!)
     run_count=$((run_count + 1))
@@ -173,13 +173,13 @@ scene_name=frl_apartment_stage_simple
 for ckpt_path in "${ckpt_paths[@]}"; do
   for env_name in "${env_names[@]}"; do
     EXTRA_ARGS="--additional-env-build-kwargs shader_dir=rt station_name=mk_station2 model_ids=apple"
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
     EvalSim &
     eval_pids+=($!)
     run_count=$((run_count + 1))
 
     EXTRA_ARGS="--additional-env-build-kwargs shader_dir=rt station_name=mk_station3 model_ids=apple"
-    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # 映射到 CUDA_VISIBLE_DEVICES 中的 GPU ID
+    gpu_id=${CUDA_DEVICES[$((run_count % NUM_GPUS))]}  # Map to GPU ID in CUDA_VISIBLE_DEVICES
     EvalSim &
     eval_pids+=($!)
     run_count=$((run_count + 1))

@@ -188,8 +188,8 @@ class BasicTransformerBlock(nn.Module):
 class DiT(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = True
 
-    # register_to_config 的作用是创建类的时候会自动把传入的参数注册到 config 中，这样后续调用的时候可以通过 self.config.xxx 调用 还不是 self.xxx
-    @register_to_config  # 去看一下这个的作用 --> 将传入的参数注册到配置中 TODO 改为我们的单例模式, 写一个 能够merge 的 @merge_pram_config
+    # register_to_config auto-registers constructor params into config, enabling access via self.config.xxx instead of self.xxx
+    @register_to_config  # Registers passed params to config. TODO: replace with our singleton pattern, implement a mergeable @merge_param_config
     def __init__(
         self,
         num_attention_heads: int = 8,
@@ -218,10 +218,10 @@ class DiT(ModelMixin, ConfigMixin):
         self.gradient_checkpointing = False
 
         # Timestep encoder
-        #  self.config.compute_dtype 可能不存在，要提前处理
+        #  self.config.compute_dtype may not exist, handle it in advance
         compute_dtype = getattr(self.config, "compute_dtype", torch.float32)
         self.timestep_encoder = (
-            TimestepEncoder(  # TODO BUG, train 的时候 self.config.compute_dtype 不会报错， 但是 eval 的时候会
+            TimestepEncoder(  # TODO BUG: self.config.compute_dtype doesn't error during training but fails at eval
                 embedding_dim=self.inner_dim, compute_dtype=compute_dtype
             )
         )

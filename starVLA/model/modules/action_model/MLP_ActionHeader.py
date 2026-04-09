@@ -76,7 +76,7 @@ class L1RegressionActionHead(nn.Module):
     def predict_action(self, actions_hidden_states):
         """
         actions_hidden_states: (B, chunk_len, hidden_dim)
-        返回: (B, chunk_len, action_dim)
+        Returns: (B, chunk_len, action_dim)
         """
         batch_size, chunk_len, hidden_dim = actions_hidden_states.shape
         x = actions_hidden_states.reshape(batch_size * chunk_len, hidden_dim)

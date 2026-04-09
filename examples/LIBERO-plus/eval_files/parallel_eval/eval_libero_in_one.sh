@@ -64,7 +64,7 @@ done
 
 wait
 
-# # =============== 聚合结果 ===============
+# # =============== Aggregate results ===============
 # echo "All tasks completed. Aggregating results..."
 # export LOG_DIR="${LOG_DIR}"
 # python ./examples/LIBERO-plus/eval_files/aggregate_results.py

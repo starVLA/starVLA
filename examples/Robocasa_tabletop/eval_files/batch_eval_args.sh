@@ -56,7 +56,7 @@ EvalEnv() {
     local N_ENVS=$7
     local MAX_EPISODE_STEPS=$8
     local N_ACTION_STEPS=$9
-    # save root CKPT_PATH 的 parent 文件夹
+    # Save root: parent directory of CKPT_PATH
     local SAVE_ROOT=$(dirname "$(dirname "$CKPT_PATH")")
     local ckpt_name=$(basename "$CKPT_PATH" .pt)
     local VIDEO_OUT_PATH="${SAVE_ROOT}/videos/${ckpt_name}/n_action_steps_${N_ACTION_STEPS}_max_episode_steps_${MAX_EPISODE_STEPS}_n_envs_${N_ENVS}_${ENV_NAME}"
@@ -172,7 +172,7 @@ done
 # Step 3: Cleanup
 # ============================================================
 
-# 判断是否还有 examples/Robocasa_tabletop/eval_files/simulation_env.py
+# Check if there are still evaluation sim processes running
 while pgrep -f "examples/Robocasa_tabletop/eval_files/simulation_env.py" > /dev/null; do
     echo "Waiting for all evaluation environments to finish..."
     sleep 30

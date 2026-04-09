@@ -29,7 +29,7 @@ CUDA_VISIBLE_DEVICES=$gpu_id ${starVLA_python} deployment/model_server/server_po
     --use_bf16 &
 
 
-# 获取服务的 PID
+# Get the server PID
 server_pid=$!
 
 

@@ -139,7 +139,7 @@ class UnifiedTrainer(TrainerUtils):
             )
 
         self.total_batch_size = self._calculate_total_batch_size()
-        # @JinhuiYE 我发现uinified trainer 并不是一个乐观的事情，TODO 重新思考 封装边界
+        # @JinhuiYE The unified trainer is not as straightforward as expected. TODO: rethink encapsulation boundaries
         # Convenience flags derived from compatible dataloaders only
         self.has_vla = "vla" in self.supported_tags
         self.has_vlm = "vlm" in self.supported_tags

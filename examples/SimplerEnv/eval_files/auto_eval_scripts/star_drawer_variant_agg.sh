@@ -226,7 +226,7 @@ done
 # echo "✅ All evaluations completed"
 
 
-# 判断是否还有 评测的sim 在跑
+# Check if there are still evaluation sims running
 while pgrep -f "examples/SimplerEnv/eval_files/start_simpler_env.py" > /dev/null; do
     echo "Waiting for all evaluation environments to finish..."
     sleep 300

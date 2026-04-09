@@ -216,7 +216,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         action_config = global_config.framework.action_model
         diffusion_model_cfg = action_config.diffusion_model_cfg
 
-        # 更新 DiTConfig 到 diffusion_model_cfg
+        # Update DiTConfig into diffusion_model_cfg
         DiTConfig["num_layers"] = global_config.framework.qwenvl.num_vl_layers
         DiTConfig["input_embedding_dim"] = global_config.framework.qwenvl.vl_hidden_dim
         DiTConfig["num_attention_heads"] = DiTConfig["input_embedding_dim"] // DiTConfig["attention_head_dim"]

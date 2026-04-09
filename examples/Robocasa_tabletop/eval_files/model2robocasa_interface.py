@@ -77,10 +77,10 @@ class PolicyWarper:
 
     def step(self, observations, **kwargs) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         """
-        执行一步推理
-        :param image: 输入图像 (H, W, 3) uint8格式
-        :param task_description: 任务描述文本
-        :return: (原始动作, 处理后的动作)
+        Execute one inference step.
+        :param image: Input image (H, W, 3) in uint8 format
+        :param task_description: Task description text
+        :return: (raw_actions, processed_actions)
         """
 
         task_description = observations["annotation.human.coarse_action"][0]  # tuple
@@ -139,7 +139,7 @@ class PolicyWarper:
 
         # raw_actions shape: (B, chunk, D)
         if self.action_ensemble:
-            # 对batch中的每个样本进行ensemble
+            # Ensemble each sample in the batch
             batch_size = raw_actions.shape[0]
             ensembled_actions = []
             for b in range(batch_size):

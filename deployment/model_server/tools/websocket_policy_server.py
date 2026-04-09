@@ -25,7 +25,7 @@ class WebsocketPolicyServer:
         policy,
         host: str = "0.0.0.0",
         port: int = 10093,
-        idle_timeout: int = -1,  # 新增参数，单位秒，-1表示永不关闭
+        idle_timeout: int = -1,  # Idle timeout in seconds, -1 means never auto-close
         metadata: dict | None = None,
     ) -> None:
         self._policy = policy  #
@@ -53,7 +53,7 @@ class WebsocketPolicyServer:
                 await server.serve_forever()
 
     async def _idle_watchdog(self, server):
-        """监控空闲时间，超时则关闭服务器"""
+        """Monitor idle time and shut down the server on timeout."""
         while True:
             await asyncio.sleep(5)
             if time.time() - self._last_active > self._idle_timeout:
@@ -71,7 +71,7 @@ class WebsocketPolicyServer:
         while True:
             try:
                 msg = msgpack_numpy.unpackb(await websocket.recv())
-                self._last_active = time.time()  # 每次收到消息刷新活跃时间
+                self._last_active = time.time()  # Refresh active time on each received message
                 ret = self._route_message(msg)  # route message
                 await websocket.send(packer.pack(ret))
             except websockets.ConnectionClosed:

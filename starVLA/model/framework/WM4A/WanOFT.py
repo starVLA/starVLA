@@ -101,7 +101,7 @@ class Wan_OFT(baseframework):
         self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
-        self.action_query_proj = nn.Linear(wm_hidden, self.chunk_len * wm_hidden) # 变成两层MLP
+        self.action_query_proj = nn.Linear(wm_hidden, self.chunk_len * wm_hidden) # Project into a two-layer MLP
 
         self.l1_loss = nn.L1Loss()
 

@@ -228,7 +228,7 @@ class _CosmoPredict2_Interface(nn.Module):
             # e.g. 5 frames → 2 latent frames, 9 frames → 3 latent frames
             latents = self.vae.encode(video).latent_dist.sample()  # [B, 16, T_latent, H/8, W/8]
 
-        # Normalize latents (matches official pipeline: prepare_latents) # TODO 去检查是否真的要做这个？
+        # Normalize latents (matches official pipeline: prepare_latents) # TODO check if this normalization is actually needed
         if self.vae.config.latents_mean is not None:
             latents_mean = (
                 torch.tensor(self.vae.config.latents_mean)

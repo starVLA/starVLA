@@ -109,22 +109,6 @@ def discover_and_merge() -> None:
                     DATASET_NAMED_MIXTURES.update(mod.DATASET_NAMED_MIXTURES)
                     logger.info(f"[registry] Loaded mixtures from {bench_name} (data_config): {list(mod.DATASET_NAMED_MIXTURES.keys())}")
 
-        # # --- embodiment_tags.py ---
-        # tag_file = registry_dir / "embodiment_tags.py"
-        # if tag_file.is_file():
-        #     mod = _load_module_from_path(f"{prefix}.embodiment_tags", tag_file)
-        #     if mod and hasattr(mod, "ROBOT_TYPE_TO_EMBODIMENT_TAG"):
-        #         ROBOT_TYPE_TO_EMBODIMENT_TAG.update(mod.ROBOT_TYPE_TO_EMBODIMENT_TAG)
-        #         logger.info(f"[registry] Loaded embodiment_tags from {bench_name}: {list(mod.ROBOT_TYPE_TO_EMBODIMENT_TAG.keys())}")
-
-        # # --- mixtures.py ---
-        # mix_file = registry_dir / "mixtures.py"
-        # if mix_file.is_file():
-        #     mod = _load_module_from_path(f"{prefix}.mixtures", mix_file)
-        #     if mod and hasattr(mod, "DATASET_NAMED_MIXTURES"):
-        #         DATASET_NAMED_MIXTURES.update(mod.DATASET_NAMED_MIXTURES)
-        #         logger.info(f"[registry] Loaded mixtures from {bench_name}: {list(mod.DATASET_NAMED_MIXTURES.keys())}")
-
 
 # Run discovery on first import
 discover_and_merge()

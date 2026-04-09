@@ -360,7 +360,7 @@ class InternVLA_M1(baseframework):
         processor = getattr(self.qwen_vl_interface, "processor", None)
         model = getattr(self.qwen_vl_interface, "model", None)
         # if processor is None or model is None:
-        #     raise RuntimeError("qwen_vl_interface 缺少 processor 或 model。")
+        #     raise RuntimeError("qwen_vl_interface is missing processor or model.")
 
         messages0 = [
             {

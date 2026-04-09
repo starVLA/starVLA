@@ -121,7 +121,7 @@ class QwenGR00TDefaultConfig:
     # === Observation image size (optional resize before encoding) ===
     obs_image_size: Optional[list] = None
 
-    # # === Training precision flag === 这个是不需要的，没有用的参数
+    # # === Training precision flag === This is unnecessary, unused parameter
     # reduce_in_full_precision: bool = True
 
 

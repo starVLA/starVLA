@@ -33,8 +33,8 @@ framework:
     num_timestep_buckets: 1000
     num_inference_timesteps: 4
     num_target_vision_tokens: 32
-    diffusion_model_cfg:    # DiT Transformers 的参数
-      cross_attention_dim: 2048 # VLM 的 dim
+    diffusion_model_cfg:    # DiT Transformer parameters
+      cross_attention_dim: 2048 # VLM hidden dim
       dropout: 0.2
       final_dropout: true
       interleave_self_attention: true

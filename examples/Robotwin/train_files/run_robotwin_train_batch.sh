@@ -11,16 +11,16 @@
 
 set -e
 
-# -------------------- NCCL / 网络 --------------------
+# -------------------- NCCL / Networking --------------------
 export NCCL_SOCKET_IFNAME=bond0
-# 两节点一般把所有可用 mlx5 都列上更稳（按你集群实际改）
+# For multi-node, list all available mlx5 interfaces for stability (adjust for your cluster)
 export NCCL_IB_HCA=mlx5_2,mlx5_3,mlx5_4,mlx5_5
 
 export NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=3600
 
-# -------------------- 分布式必要环境 --------------------
+# -------------------- Required distributed environment --------------------
 export GPUS_PER_NODE=8
 export TOTAL_GPUS=$((GPUS_PER_NODE * SLURM_NNODES))
 
@@ -30,7 +30,7 @@ export MASTER_PORT=$((20000 + RANDOM % 10000))
 echo "SLURM_NNODES=$SLURM_NNODES  GPUS_PER_NODE=$GPUS_PER_NODE  TOTAL_GPUS=$TOTAL_GPUS"
 echo "MASTER_ADDR=$MASTER_ADDR  MASTER_PORT=$MASTER_PORT"
 
-# -------------------- 你的原始配置 --------------------
+# -------------------- Your original config --------------------
 Framework_name=QwenOFT
 freeze_module_list=''
 base_vlm=playground/Pretrained_models/Qwen3-VL-4B-Instruct
@@ -48,7 +48,7 @@ cp "$0" "${output_dir}/"
 source /mnt/petrelfs/gaoning/miniconda3/bin/activate
 conda activate starvla
 
-# -------------------- 关键：每个节点启动一次 accelerate --------------------
+# -------------------- Key: launch accelerate once per node --------------------
 srun --jobid "$SLURM_JOBID" bash -c '
   set -e
   echo "Host=$(hostname)  SLURM_PROCID=$SLURM_PROCID"

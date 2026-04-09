@@ -4,10 +4,10 @@
 # export NCCL_SOCKET_IFNAME=bond0
 # export NCCL_IB_HCA=mlx5_2,mlx5_3
 
-# # 用于check save 的时候的通信
+# # For checkpoint save communication
 # export NCCL_BLOCKING_WAIT=1
 # export NCCL_ASYNC_ERROR_HANDLING=1
-# export NCCL_TIMEOUT=1000  # 超时时间设为 1 小时（单位：秒）
+# export NCCL_TIMEOUT=1000  # Timeout set to 1 hour (unit: seconds)
 MODEL_PATH=/workspace/model/models--Qwen--Qwen2.5-VL-3B-Instruct/snapshots/66285546d2b821cf421d4f5eb2576359d3770cd3 # must be a local path, due to simpler will run in other
 data_root_dir=/workspace/dataset/libero_goal_no_noops_1.0.0_lerobot/datasets--IPEC-COMMUNITY--libero_goal_no_noops_1.0.0_lerobot/snapshots
 run_root_dir=./playground/Checkpoints

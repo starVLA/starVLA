@@ -149,7 +149,7 @@ class Qwen_Dual(baseframework):
         **kwargs,
     ) -> Tuple:
         """
-        训练前向：直接回归未来动作（无扩散）。
+        Training forward: directly regress future actions (no diffusion).
 
         Flow:
           1. Build QwenVL inputs (images + instruction tokens)
@@ -203,7 +203,7 @@ class Qwen_Dual(baseframework):
         **kwargs: str,
     ) -> np.ndarray:
         """
-        推理：单次前向直接回归未来动作（无扩散采样）。
+        Inference: single forward pass to directly regress future actions (no diffusion sampling).
 
         Steps:
           1. Resize images to training resolution (if specified)

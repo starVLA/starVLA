@@ -61,7 +61,7 @@ LE_ROBOT_INFO_FILENAME = "meta/info.json"
 LE_ROBOT_STATS_FILENAME = "meta/stats_gr00t.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 LE_ROBOT_STEPS_FILENAME = "meta/steps.pkl"
-LE_ROBOT_STATS_FORMAT_VERSION = 3
+LE_ROBOT_STATS_FORMAT_VERSION = 2
 EPSILON = 5e-4
 
 #  LeRobot v3.0 dataset file names
@@ -69,35 +69,15 @@ LE_ROBOT3_TASKS_FILENAME = "meta/tasks.parquet"
 LE_ROBOT3_EPISODE_FILENAME = "meta/episodes/*/*.parquet"
 
 
-def detect_lerobot_version(dataset_path: Path) -> str | None:
-    """Auto-detect LeRobot dataset version from file structure.
-
-    Checks for version-specific marker files:
-    - v3.0: meta/tasks.parquet (checked first as the newer format)
-    - v2.0: meta/episodes.jsonl
-
-    Returns:
-        "v3.0", "v2.0", or None if version cannot be determined.
-    """
-    if (Path(dataset_path) / LE_ROBOT3_TASKS_FILENAME).exists():
-        return "v3.0"
-    if (Path(dataset_path) / LE_ROBOT_EPISODE_FILENAME).exists():
-        return "v2.0"
-    return None
-
-
 def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
-    """Calculate per-column normalization statistics using streaming computation.
-
-    Uses Welford's online algorithm for mean/std, running min/max, and
-    t-digest for q01/q99 quantile estimation. Memory is bounded to one
-    batch at a time regardless of total dataset size.
-    """
-    accumulators: dict[str, StreamingStatsAccumulator] = {}
-
+    """Calculate the dataset statistics of all columns for a list of parquet files."""
+    # Dataset statistics
+    all_low_dim_data_list = []
+    # Collect all the data
+    # parquet_paths = parquet_paths[:3]
     for parquet_path in tqdm(
         sorted(list(parquet_paths)),
-        desc="Computing dataset statistics...",
+        desc="Collecting all parquet files...",
     ):
         # Load the parquet file
         parquet_data = pd.read_parquet(parquet_path)
@@ -112,14 +92,22 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
         if "task_info" in le_modality:
             continue
         print(f"Computing statistics for {le_modality}...")
-        # 检查数据是否为空或无效
+        # Check if data is empty or invalid
         try:
             np_data = np.vstack([np.asarray(x, dtype=np.float32) for x in all_low_dim_data[le_modality]])
         except Exception as e:
             print(f"Warning: Failed to process modality {le_modality} due to error: {e}")
             continue
 
-    return {name: acc.finalize() for name, acc in accumulators.items() if acc.count > 0}
+        dataset_statistics[le_modality] = {
+            "mean": np.mean(np_data, axis=0).tolist(),
+            "std": np.std(np_data, axis=0).tolist(),
+            "min": np.min(np_data, axis=0).tolist(),
+            "max": np.max(np_data, axis=0).tolist(),
+            "q01": np.quantile(np_data, 0.01, axis=0).tolist(),
+            "q99": np.quantile(np_data, 0.99, axis=0).tolist(),
+        }
+    return dataset_statistics
 
 
 def _normalize_action_mode(mode: str) -> str:
@@ -408,8 +396,8 @@ def calculate_delta_action_statistics(
                 raise ValueError(f"Invalid padding strategy: {padding_strategy}")
         return output
 
-    accumulators: dict[str, StreamingStatsAccumulator] = {}
-    for parquet_path in tqdm(sorted(list(parquet_paths)), desc="Computing delta action stats"):
+    accum: dict[str, list[np.ndarray]] = {col: [] for col in action_col_slices.keys()}
+    for parquet_path in tqdm(sorted(list(parquet_paths)), desc="Collecting delta action stats"):
         data = pd.read_parquet(parquet_path)
         trajectory_length = len(data)
         for action_col, slice_list in action_col_slices.items():
@@ -440,14 +428,21 @@ def calculate_delta_action_statistics(
                     out[0] = action_part_chunk[0] - state_chunk[0]
                     action_chunk_full[:, a_slice[0] : a_slice[1]] = out
 
-                if action_col not in accumulators:
-                    accumulators[action_col] = StreamingStatsAccumulator()
-                accumulators[action_col].update(action_chunk_full)
+                accum[action_col].append(action_chunk_full)
 
     delta_stats = copy.deepcopy(base_stats)
-    for action_col, acc in accumulators.items():
-        if acc.count > 0:
-            delta_stats[action_col] = acc.finalize()
+    for action_col, series_list in accum.items():
+        if not series_list:
+            continue
+        all_values = np.concatenate(series_list, axis=0).astype(np.float32)
+        delta_stats[action_col] = {
+            "mean": np.mean(all_values, axis=0).tolist(),
+            "std": np.std(all_values, axis=0).tolist(),
+            "min": np.min(all_values, axis=0).tolist(),
+            "max": np.max(all_values, axis=0).tolist(),
+            "q01": np.quantile(all_values, 0.01, axis=0).tolist(),
+            "q99": np.quantile(all_values, 0.99, axis=0).tolist(),
+        }
     return delta_stats
 
 
@@ -499,8 +494,8 @@ def calculate_rel_action_statistics(
                 raise ValueError(f"Invalid padding strategy: {padding_strategy}")
         return output
 
-    accumulators: dict[str, StreamingStatsAccumulator] = {}
-    for parquet_path in tqdm(sorted(list(parquet_paths)), desc="Computing rel action stats"):
+    accum: dict[str, list[np.ndarray]] = {col: [] for col in action_col_slices.keys()}
+    for parquet_path in tqdm(sorted(list(parquet_paths)), desc="Collecting rel action stats"):
         data = pd.read_parquet(parquet_path)
         trajectory_length = len(data)
         for action_col, slice_list in action_col_slices.items():
@@ -528,14 +523,21 @@ def calculate_rel_action_statistics(
                     out = action_part_chunk - state_chunk[0]
                     action_chunk_full[:, a_slice[0] : a_slice[1]] = out
 
-                if action_col not in accumulators:
-                    accumulators[action_col] = StreamingStatsAccumulator()
-                accumulators[action_col].update(action_chunk_full)
+                accum[action_col].append(action_chunk_full)
 
     rel_stats = copy.deepcopy(base_stats)
-    for action_col, acc in accumulators.items():
-        if acc.count > 0:
-            rel_stats[action_col] = acc.finalize()
+    for action_col, series_list in accum.items():
+        if not series_list:
+            continue
+        all_values = np.concatenate(series_list, axis=0).astype(np.float32)
+        rel_stats[action_col] = {
+            "mean": np.mean(all_values, axis=0).tolist(),
+            "std": np.std(all_values, axis=0).tolist(),
+            "min": np.min(all_values, axis=0).tolist(),
+            "max": np.max(all_values, axis=0).tolist(),
+            "q01": np.quantile(all_values, 0.01, axis=0).tolist(),
+            "q99": np.quantile(all_values, 0.99, axis=0).tolist(),
+        }
     return rel_stats
 
 
@@ -767,13 +769,9 @@ class LeRobotSingleDataset(Dataset):
                 channels = le_video_meta["shape"][le_video_meta["names"].index("channel")]
                 fps = le_video_meta["video_info"]["video.fps"]
             except (ValueError, KeyError):
-                try:
-                    channels = le_video_meta["info"]["video.channels"]
-                    fps = le_video_meta["info"]["video.fps"]
-                except (ValueError, KeyError):
-                    # Fallback for image-only datasets (e.g. VLA-Arena) that lack video_info
-                    channels = 3
-                    fps = le_info.get("fps", 30)
+                # channels = le_video_meta["shape"][le_video_meta["names"].index("channels")]
+                channels = le_video_meta["info"]["video.channels"]
+                fps = le_video_meta["info"]["video.fps"]
             simplified_modality_meta["video"][new_key] = {
                 "resolution": [width, height],
                 "channels": channels,
@@ -917,7 +915,7 @@ class LeRobotSingleDataset(Dataset):
                     }
                     self.trajectory_ids_to_metadata[trajectory_ids[-1]] = episode_meta
 
-            # 这里应该可以直接读取到 save index 信息
+            # Should be able to read the saved index info directly here
             return np.array(trajectory_ids), np.array(trajectory_lengths)
 
     def _get_all_steps(self) -> list[tuple[int, int]]:
@@ -981,7 +979,6 @@ class LeRobotSingleDataset(Dataset):
         config_dict = {
             "delete_pause_frame": self.delete_pause_frame,
             "dataset_name": self.dataset_name,
-            "lerobot_version": self._lerobot_version,
         }
         # Create a hash of the configuration
         config_str = str(sorted(config_dict.items()))
@@ -1266,9 +1263,9 @@ class LeRobotSingleDataset(Dataset):
         elif self._lerobot_version == "v3.0":
             tasks_path = self.dataset_path / LE_ROBOT3_TASKS_FILENAME
             df = pd.read_parquet(tasks_path)
-            df = df.reset_index()  # 把索引变成一列，列名通常为 'index'
-            df = df.rename(columns={"index": "task"})  # 把 'index' 列重命名为 'task'
-            df = df[["task_index", "task"]]  # 调整列顺序
+            df = df.reset_index()  # Convert the index into a column (typically named 'index')
+            df = df.rename(columns={"index": "task"})  # Rename the 'index' column to 'task'
+            df = df[["task_index", "task"]]  # Reorder columns
             return df
 
     def _check_integrity(self):
@@ -1550,43 +1547,6 @@ class LeRobotSingleDataset(Dataset):
         assert key.startswith("video."), f"Video key must start with 'video.', got {key}"
         # Get the sub-key
         key = key.replace("video.", "")
-
-        # Image-only LeRobot datasets (e.g. VLA-Arena) may store frames directly
-        # in parquet columns and have total_videos == 0 (no mp4 files). In this
-        # case, load frames from the original image column and pad by step indices.
-        original_key = self.lerobot_modality_meta.video[key].original_key
-        if original_key is None:
-            original_key = key
-        if self.curr_traj_data is not None and original_key in self.curr_traj_data.columns:
-            image_entries = self.curr_traj_data[original_key].tolist()
-
-            def _decode_image_entry(entry):
-                if isinstance(entry, np.ndarray):
-                    return entry
-                if isinstance(entry, Image.Image):
-                    return np.array(entry)
-                if isinstance(entry, dict):
-                    img_bytes = entry.get("bytes", None)
-                    img_path = entry.get("path", None)
-
-                    if img_bytes is not None:
-                        return np.array(Image.open(io.BytesIO(img_bytes)).convert("RGB"))
-
-                    if img_path is not None:
-                        path_obj = Path(img_path)
-                        if not path_obj.is_absolute():
-                            path_obj = self.dataset_path / path_obj
-                        return np.array(Image.open(path_obj).convert("RGB"))
-
-                raise TypeError(f"Unsupported image entry type: {type(entry)}")
-
-            frames = []
-            for idx in step_indices:
-                safe_idx = int(min(max(idx, 0), len(image_entries) - 1))
-                frames.append(_decode_image_entry(image_entries[safe_idx]))
-
-            return np.stack(frames)
-
         video_path = self.get_video_path(trajectory_id, key)
         # Get the action/state timestamps for each frame in the video
         assert self.curr_traj_data is not None, f"No data found for {trajectory_id=}"
@@ -2285,12 +2245,6 @@ class LeRobotMixtureDataset(Dataset):
             try:
                 while True:  # @DUG
                     dataset, trajectory_id, step = self.sample_step(index)
-                    # If dataset has no physical videos (e.g., image frames in parquet
-                    # for VLA-Arena), do not gate sampling on mp4 existence.
-                    total_videos = int(dataset.lerobot_info_meta.get("total_videos", 0))
-                    if total_videos == 0:
-                        break
-
                     key = dataset.modality_keys["video"][0].replace("video.", "")
                     video_path = dataset.get_video_path(trajectory_id, key)
                     if os.path.exists(video_path):
