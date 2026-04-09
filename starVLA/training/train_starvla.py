@@ -345,7 +345,14 @@ class VLATrainer(TrainerUtils):
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            self.lr_scheduler.step()
+            # Only step the scheduler when an actual optimizer update occurs.
+            # Inside accelerator.accumulate(), optimizer.step() is a no-op on
+            # non-sync micro-steps, but lr_scheduler.step() always advances
+            # the internal counter.  This caused the scheduler to advance
+            # gradient_accumulation_steps times faster than intended, leading
+            # to premature LR decay and incorrect LR on resume (#204).
+            if self.accelerator.sync_gradients:
+                self.lr_scheduler.step()
 
         return {
             "action_dit_loss": action_loss.item(),
