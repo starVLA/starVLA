@@ -40,16 +40,28 @@ def build_dataloader(
 ):  # TODO now here only is get dataset, we need mv dataloader to here
 
     if dataset_py == "lerobot_datasets":
-        from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+        from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset, make_padding_collate_fn
 
         vla_dataset_cfg = cfg.datasets.vla_data
 
         vla_dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
 
+        # Use padding collate_fn when action_dim / action_horizon are configured
+        action_model_cfg = getattr(getattr(cfg, "framework", None), "action_model", None)
+        if action_model_cfg is not None and hasattr(action_model_cfg, "action_dim") and hasattr(action_model_cfg, "action_horizon"):
+            state_dim = getattr(action_model_cfg, "state_dim", None)
+            chosen_collate_fn = make_padding_collate_fn(
+                action_dim=action_model_cfg.action_dim,
+                action_horizon=action_model_cfg.action_horizon,
+                state_dim=state_dim,
+            )
+        else:
+            chosen_collate_fn = collate_fn
+
         vla_train_dataloader = DataLoader(
             vla_dataset,
             batch_size=cfg.datasets.vla_data.per_device_batch_size,
-            collate_fn=collate_fn,
+            collate_fn=chosen_collate_fn,
             num_workers=4,
             # shuffle=True
         )

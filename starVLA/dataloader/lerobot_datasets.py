@@ -6,6 +6,7 @@
 
 from pathlib import Path
 
+import numpy as np
 from omegaconf import OmegaConf
 
 from starVLA.dataloader.gr00t_lerobot.data_config import ROBOT_TYPE_CONFIG_MAP
@@ -16,6 +17,49 @@ from starVLA.dataloader.gr00t_lerobot.mixtures import DATASET_NAMED_MIXTURES
 
 def collate_fn(batch):
     return batch
+
+
+def make_padding_collate_fn(action_dim: int, action_horizon: int, state_dim: int | None = None):
+    """Create a collate_fn that pads action (and optionally state) to uniform dimensions.
+
+    Pads with zeros on the dim axis (right) and chunk/time axis (end).
+    Raises ValueError if the source dimensions exceed the target dimensions.
+
+    Args:
+        action_dim: Target action dimension (second axis).
+        action_horizon: Target action chunk length (first axis).
+        state_dim: Target state dimension. If None, state is not padded.
+    """
+
+    def _pad_array(arr: np.ndarray, target_time: int, target_dim: int, name: str) -> np.ndarray:
+        """Pad a [T, D] array to [target_time, target_dim] with zeros."""
+        t, d = arr.shape
+        if d > target_dim:
+            raise ValueError(
+                f"{name} dim ({d}) exceeds target dim ({target_dim}). "
+                f"Check your config or dataset — source data should not be wider than the target."
+            )
+        if t > target_time:
+            raise ValueError(
+                f"{name} chunk length ({t}) exceeds target chunk length ({target_time}). "
+                f"Check your config or dataset — source data should not be longer than the target."
+            )
+        if t == target_time and d == target_dim:
+            return arr
+        padded = np.zeros((target_time, target_dim), dtype=arr.dtype)
+        padded[:t, :d] = arr
+        return padded
+
+    def padding_collate_fn(batch):
+        for sample in batch:
+            if "action" in sample:
+                sample["action"] = _pad_array(sample["action"], action_horizon, action_dim, "action")
+            if state_dim is not None and "state" in sample:
+                state_time = sample["state"].shape[0]  # keep original time dim for state
+                sample["state"] = _pad_array(sample["state"], state_time, state_dim, "state")
+        return batch
+
+    return padding_collate_fn
 
 
 def make_LeRobotSingleDataset(
