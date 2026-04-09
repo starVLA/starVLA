@@ -65,6 +65,12 @@ def build_param_lr_groups(model, cfg):
     base_lr = lr_cfg.get("base", 1e-4)  # default base learning rate
 
     freeze_modules = cfg.trainer.get("freeze_modules", "")
+    # Normalize: bool ``true`` from YAML should be treated as empty (no freeze);
+    # list/tuple values are joined into a comma-separated string.
+    if isinstance(freeze_modules, bool):
+        freeze_modules = ""
+    if isinstance(freeze_modules, (list, tuple)):
+        freeze_modules = ",".join(str(m) for m in freeze_modules)
     if not isinstance(freeze_modules, str):
         freeze_modules = ""
     freeze_patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()]
@@ -167,7 +173,14 @@ class TrainerUtils:
         frozen = []
         print("#"*30)
         print(freeze_modules)
-        if freeze_modules and type(freeze_modules) == str:
+        # Normalize freeze_modules: accept str, list, or bool.
+        # A bare ``True`` (e.g. from YAML ``freeze_modules: true``) is
+        # silently ignored so that it does not accidentally skip freezing.
+        if isinstance(freeze_modules, bool):
+            freeze_modules = ""
+        if isinstance(freeze_modules, (list, tuple)):
+            freeze_modules = ",".join(str(m) for m in freeze_modules)
+        if freeze_modules and isinstance(freeze_modules, str):
             # split and remove whitespace
             patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()] if freeze_modules else []
 
@@ -188,7 +201,7 @@ class TrainerUtils:
                     continue
 
         # accelerator.wait_for_everyone()  # synchronize when distributed training
-        if dist.get_rank == 0:
+        if dist.is_initialized() and dist.get_rank() == 0:
             print(f"🔒 Frozen modules with re pattern: {frozen}")
         return model
 
