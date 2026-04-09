@@ -1,0 +1,92 @@
+{
+    "state": {
+        "x": {
+            "original_key": "state",
+            "start": 0,
+            "end": 1
+        },
+        "y": {
+            "original_key": "state",
+            "start": 1,
+            "end": 2
+        },
+        "z": {
+            "original_key": "state",
+            "start": 2,
+            "end": 3
+        },
+        "roll": {
+            "original_key": "state",
+            "start": 3,
+            "end": 4
+        },
+        "pitch": {
+            "original_key": "state",
+            "start": 4,
+            "end": 5
+        },
+        "yaw": {
+            "original_key": "state",
+            "start": 5,
+            "end": 6
+        },
+        "pad": {
+            "original_key": "state",
+            "start": 6,
+            "end": 7
+        },
+        "gripper": {
+            "original_key": "state",
+            "start": 7,
+            "end": 8
+        }
+    },
+    "action": {
+        "x": {
+            "original_key": "actions",
+            "start": 0,
+            "end": 1
+        },
+        "y": {
+            "original_key": "actions",
+            "start": 1,
+            "end": 2
+        },
+        "z": {
+            "original_key": "actions",
+            "start": 2,
+            "end": 3
+        },
+        "roll": {
+            "original_key": "actions",
+            "start": 3,
+            "end": 4
+        },
+        "pitch": {
+            "original_key": "actions",
+            "start": 4,
+            "end": 5
+        },
+        "yaw": {
+            "original_key": "actions",
+            "start": 5,
+            "end": 6
+        },
+        "gripper": {
+            "original_key": "actions",
+            "start": 6,
+            "end": 7
+        }
+    },
+    "video": {
+        "primary_image": {
+            "original_key": "image"
+        },
+        "wrist_image": {
+            "original_key": "wrist_image"
+        }
+    },
+    "annotation": {
+        "human.action.task_description": {"original_key": "task_index"}
+    }
+}
