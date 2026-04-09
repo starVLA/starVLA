@@ -1366,16 +1366,11 @@ class LeRobotSingleDataset(Dataset):
 
     def _pack_sample(self, data: dict) -> dict:
         """Pack transformed modality data into training sample format."""
-        prim_images = []
-        wrist_views = []
+        all_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
             image = Image.fromarray(image).resize((224, 224))
-            if "wrist" not in video_key:
-                prim_images.append(image)
-            else:
-                wrist_views.append(image)
-        all_images = prim_images + wrist_views
+            all_images.append(image)
 
         language = data[self.modality_keys["language"][0]][0]
         action = []
