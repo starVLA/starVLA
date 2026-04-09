@@ -8,7 +8,7 @@
 <p align="center">
 <a href="https://starvla.github.io/"><img src="https://img.shields.io/badge/Project%20Page-starvla.github.io-blue?style=for-the-badge&logo=github" alt="Project Page"></a>
 <a href="https://huggingface.co/StarVLA"><img src="https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface" alt="Model & Data on Hugging Face"></a>
-<a href=""><img src="https://img.shields.io/badge/Report-Coming%20Soon-red?style=for-the-badge&logo=arxiv" alt="Report"></a>
+<a href="https://arxiv.org/abs/2604.05014"><img src="https://img.shields.io/badge/arXiv-2604.05014-red?style=for-the-badge&logo=arxiv" alt="Technical Report"></a>
 <a href="https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845"><img src="https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat" alt="WeChat"></a>
 </p>
 
@@ -322,14 +322,14 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on reporting bug
 StarVLA is released under the MIT License, which permits commercial use, modification, distribution, and private use. Rebases are allowed for forks and feature branches; when rebasing from upstream StarVLA, use descriptive commit messages (e.g., "chore: rebase from StarVLA") and keep at least the two latest upstream commits as separate. See [License](LICENSE) for details.
 
 ```
-@misc{starvla2025,
-  title        = {StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
-  author       = {starVLA Contributors},
-  year         = {2025},
-  url          = {https://github.com/starVLA/starVLA},
-  doi          = {10.5281/zenodo.18264214},
-  howpublished = {GitHub repository},
-  publisher    = {GitHub}
+@misc{starvla,
+      title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
+      author={StarVLA Community},
+      year={2026},
+      eprint={2604.05014},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2604.05014},
 }
 ```
 
