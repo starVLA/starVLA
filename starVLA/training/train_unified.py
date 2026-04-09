@@ -65,6 +65,11 @@ def setup_directories(cfg) -> Path:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(output_dir / "checkpoints", exist_ok=True)
 
+        # Save full config (all parameters) immediately
+        if isinstance(cfg, AccessTrackedConfig):
+            cfg.save_full_config(output_dir / "config.full.yaml")
+            logger.info(f"📋 Full configuration saved to {output_dir / 'config.full.yaml'}")
+
     return output_dir
 
 
@@ -251,11 +256,7 @@ class UnifiedTrainer(TrainerUtils):
                 f.write(json.dumps(summary_data) + "\n")
             self.accelerator.print(f"✅ Checkpoint saved at {checkpoint_path}")
 
-            if isinstance(self.config, AccessTrackedConfig):
-                logger.info("📊 Saving accessed configuration...")
-                output_dir = Path(self.config.output_dir)
-                self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
-                logger.info("✅ Configuration files saved")
+            self._save_config_snapshot()
 
         self.accelerator.wait_for_everyone()
 
@@ -304,6 +305,13 @@ class UnifiedTrainer(TrainerUtils):
             logger.info(f"  Total optimization steps = {self.config.trainer.max_train_steps}")
             logger.info(f"  Total batch size = {self.total_batch_size}")
             logger.info(f"  Gradient accumulation steps = {self.config.trainer.gradient_accumulation_steps}")
+
+    def _save_config_snapshot(self):
+        """Save accessed config snapshot. Called at train start and each checkpoint."""
+        if self.accelerator.is_main_process and isinstance(self.config, AccessTrackedConfig):
+            output_dir = Path(self.config.output_dir)
+            self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+            logger.info(f"📊 Accessed config snapshot saved to {output_dir / 'config.yaml'}")
 
     # ------------------------------------------------------------------
     # Core training
@@ -364,6 +372,7 @@ class UnifiedTrainer(TrainerUtils):
     def train(self):
         """Execute the main training loop."""
         self._log_training_config()
+        self._save_config_snapshot()
         self.data_manager.reset()
         progress_bar = tqdm(
             range(self.config.trainer.max_train_steps), disable=not self.accelerator.is_local_main_process
@@ -430,7 +439,7 @@ def main(cfg) -> None:
     logger.info("Unified Training :: Warming Up")
     logger.info(f"  Detected datasets: {list(cfg.datasets.keys())}")
 
-    cfg = wrap_config(cfg)
+    cfg = wrap_config(cfg)  # Idempotent — no-op if already wrapped
     logger.info("✅ Configuration wrapped for access tracking")
 
     output_dir = setup_directories(cfg=cfg)
@@ -470,6 +479,9 @@ if __name__ == "__main__":
     dotlist = normalize_dotlist_args(clipargs)
     cli_cfg = OmegaConf.from_dotlist(dotlist)
     cfg = OmegaConf.merge(cfg, cli_cfg)
+
+    # Wrap immediately so ALL subsequent accesses (including is_debug) are tracked.
+    cfg = wrap_config(cfg, cli_overrides=dotlist)
 
     if cfg.is_debug and dist.is_initialized() and dist.get_rank() == 0:
         import debugpy

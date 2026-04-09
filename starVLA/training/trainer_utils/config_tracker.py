@@ -9,11 +9,25 @@ class AccessTrackedConfig:
     """
     Wrapper for OmegaConf to track accessed parameters.
     Only saves configuration items that were actually accessed during execution.
+
+    Tracking rules:
+      - __getattr__ / __getitem__ / get()  →  marks key as accessed (leaf read)
+      - __setattr__ / __setitem__ / update()  →  marks key as accessed (write)
+      - __iter__ on DictConfig / keys()  →  does NOT mark (navigation only)
+      - __contains__  →  does NOT mark (existence check)
+      - OmegaConf.to_container()  →  marks entire subtree (bulk consumption)
     """
 
     _original_cfg_snapshot: Optional[OmegaConf] = None
+    _cli_overrides: list = []  # CLI override dotlist (e.g. ["framework.name=X"])
 
-    def __init__(self, cfg: Union[DictConfig, ListConfig], parent: "AccessTrackedConfig" = None, key_path: str = ""):
+    def __init__(
+        self,
+        cfg: Union[DictConfig, ListConfig],
+        parent: "AccessTrackedConfig" = None,
+        key_path: str = "",
+        cli_overrides: list = None,
+    ):
         object.__setattr__(self, "_cfg", cfg)
         object.__setattr__(self, "_parent", parent)
         object.__setattr__(self, "_key_path", key_path)
@@ -22,6 +36,7 @@ class AccessTrackedConfig:
 
         if parent is None:
             AccessTrackedConfig._original_cfg_snapshot = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
+            AccessTrackedConfig._cli_overrides = list(cli_overrides) if cli_overrides else []
 
     def _is_list_config(self) -> bool:
         """Check if underlying config is a ListConfig"""
@@ -35,12 +50,15 @@ class AccessTrackedConfig:
         if name.startswith("_"):
             return object.__getattribute__(self, name)
 
-        self._local_accessed.add(name)
-        # Use safe access: for hasattr() semantics, raise AttributeError on missing keys
+        # Access underlying config first — raise AttributeError on missing keys
+        # so hasattr() works correctly WITHOUT marking non-existent keys.
         try:
             value = self._cfg[name]
         except Exception:
             raise AttributeError(f"Config has no attribute '{name}'")
+
+        # Mark AFTER successful access so only existing & read keys are tracked.
+        self._local_accessed.add(name)
 
         if OmegaConf.is_config(value):
             new_path = f"{self._key_path}.{name}" if self._key_path else name
@@ -92,11 +110,7 @@ class AccessTrackedConfig:
                 del self._children[key]
 
     def __contains__(self, key) -> bool:
-        """Support 'in' operator - tracks the key check as an access"""
-        if isinstance(key, int):
-            self._local_accessed.add(f"[{key}]")
-        else:
-            self._local_accessed.add(key)
+        """Support 'in' operator — does NOT mark as accessed (existence check only)."""
         return key in self._cfg
 
     def __len__(self) -> int:
@@ -104,16 +118,20 @@ class AccessTrackedConfig:
         return len(self._cfg)
 
     def __iter__(self):
-        """Support iteration for both DictConfig and ListConfig"""
+        """Support iteration for both DictConfig and ListConfig.
+
+        DictConfig: yields key names only — does NOT mark as accessed.
+            Keys are marked later when their values are actually read
+            via __getattr__ / __getitem__.
+        ListConfig: yields element values — marks all indices as accessed
+            because the caller is consuming every element.
+        """
         if self._is_list_config():
-            # For ListConfig, iterate over indices and return values
             for i in range(len(self._cfg)):
                 self._local_accessed.add(f"[{i}]")
             return iter(self._cfg)
         else:
-            # For DictConfig, iterate over keys
-            for key in self._cfg.keys():
-                self._local_accessed.add(key)
+            # Navigation only — don't mark
             return iter(self._cfg)
 
     def __repr__(self) -> str:
@@ -141,33 +159,29 @@ class AccessTrackedConfig:
         return False
 
     def keys(self):
-        """Return config keys (required for dict unpacking)
-        Tracks all keys as accessed. Only works for DictConfig.
+        """Return config keys — does NOT mark as accessed (navigation only).
+        Keys are tracked when their values are actually consumed via __getattr__ etc.
         """
         if self._is_list_config():
             raise TypeError("ListConfig does not support keys()")
-        for key in self._cfg.keys():
-            self._local_accessed.add(key)
         return self._cfg.keys()
 
     def values(self):
-        """Return config values (tracks all keys as accessed)"""
+        """Return config values — marks via get()/getitem() when yielded."""
         if self._is_list_config():
             for i in range(len(self._cfg)):
                 self._local_accessed.add(f"[{i}]")
                 yield self[i]
         else:
             for key in self._cfg.keys():
-                self._local_accessed.add(key)
-                yield self.get(key)
+                yield self.get(key)  # get() marks the key
 
     def items(self):
-        """Return config items (tracks all keys as accessed)"""
+        """Return config items — marks via get() when yielded."""
         if self._is_list_config():
             raise TypeError("ListConfig does not support items()")
         for key in self._cfg.keys():
-            self._local_accessed.add(key)
-            yield key, self.get(key)
+            yield key, self.get(key)  # get() marks the key
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get value with default fallback"""
@@ -299,6 +313,33 @@ class AccessTrackedConfig:
             current = current._parent
         return current
 
+    def _mark_all_accessed(self):
+        """Recursively mark every key/index in this subtree as accessed.
+
+        Called automatically by the patched ``OmegaConf.to_container()`` so that
+        bulk-consumption patterns like ``OmegaConf.to_container(cfg.trainer.loss_scale)``
+        correctly record all leaf parameters.
+        """
+        if self._is_dict_config():
+            for key in self._cfg.keys():
+                self._local_accessed.add(key)
+                value = self._cfg[key]
+                if OmegaConf.is_config(value):
+                    new_path = f"{self._key_path}.{key}" if self._key_path else key
+                    if key not in self._children:
+                        self._children[key] = AccessTrackedConfig(value, parent=self, key_path=new_path)
+                    self._children[key]._mark_all_accessed()
+        elif self._is_list_config():
+            for i in range(len(self._cfg)):
+                cache_key = f"[{i}]"
+                self._local_accessed.add(cache_key)
+                value = self._cfg[i]
+                if OmegaConf.is_config(value):
+                    new_path = f"{self._key_path}{cache_key}" if self._key_path else cache_key
+                    if cache_key not in self._children:
+                        self._children[cache_key] = AccessTrackedConfig(value, parent=self, key_path=new_path)
+                    self._children[cache_key]._mark_all_accessed()
+
     def _collect_all_paths(self, node: "AccessTrackedConfig" = None, prefix: str = "") -> Set[str]:
         """Recursively collect all accessed paths"""
         if node is None:
@@ -415,9 +456,22 @@ class AccessTrackedConfig:
             d[last_part] = value
 
     def export_accessed_config(self, use_original_values: bool = True) -> dict:
-        """Export accessed configuration as dictionary (only leaf values)"""
+        """Export accessed configuration as dictionary (only leaf values).
+
+        Includes:
+        - All leaf parameters that were read via __getattr__ / __getitem__ / get()
+        - All leaf parameters inside subtrees consumed via OmegaConf.to_container()
+        - All CLI override paths (always included regardless of access tracking)
+        """
         all_paths = self._collect_all_paths()
         leaf_paths = self._filter_leaf_paths(all_paths)
+
+        # Always include CLI-overridden parameters
+        for override in AccessTrackedConfig._cli_overrides:
+            if "=" in override:
+                path = override.split("=", 1)[0]
+                leaf_paths.add(path)
+
         source_cfg = AccessTrackedConfig._original_cfg_snapshot if use_original_values else self.get_root()._cfg
 
         result = {}
@@ -449,6 +503,21 @@ class AccessTrackedConfig:
             else:
                 raise ValueError(f"Unsupported file format: {filepath.suffix}")
 
+    def save_full_config(self, filepath: Path):
+        """Save the complete configuration (all parameters) to file."""
+        filepath = Path(filepath)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        source = AccessTrackedConfig._original_cfg_snapshot
+        if source is None:
+            source = self.get_root()._cfg
+        with open(filepath, "w") as f:
+            if filepath.suffix == ".json":
+                json.dump(_original_to_container(source, resolve=True), f, indent=2)
+            elif filepath.suffix in (".yaml", ".yml"):
+                _original_save(source, f, resolve=True)
+            else:
+                raise ValueError(f"Unsupported file format: {filepath.suffix}")
+
     def get_access_summary(self) -> dict:
         """Get summary of accessed configuration"""
         all_paths = self._collect_all_paths()
@@ -476,9 +545,17 @@ class AccessTrackedConfig:
         print(f"{'='*60}\n")
 
 
-def wrap_config(cfg: OmegaConf) -> AccessTrackedConfig:
-    """Wrap OmegaConf configuration to enable access tracking"""
-    return AccessTrackedConfig(cfg)
+def wrap_config(cfg: OmegaConf, cli_overrides: list = None) -> AccessTrackedConfig:
+    """Wrap OmegaConf configuration to enable access tracking.
+
+    Args:
+        cfg: The OmegaConf config (already merged with CLI overrides).
+        cli_overrides: Optional list of CLI dotlist strings (e.g. ["framework.name=X"]).
+            These paths are always included in the exported snapshot.
+    """
+    if isinstance(cfg, AccessTrackedConfig):
+        return cfg  # Already wrapped — idempotent
+    return AccessTrackedConfig(cfg, cli_overrides=cli_overrides)
 
 
 def unwrap_config(cfg) -> OmegaConf:
@@ -496,8 +573,13 @@ _original_merge = OmegaConf.merge
 
 
 def _patched_to_container(cfg, resolve=True, enum_to_str=False, structured_config_mode=None):
-    """Patched OmegaConf.to_container that handles AccessTrackedConfig"""
+    """Patched OmegaConf.to_container that handles AccessTrackedConfig.
+
+    When called on a tracked config, marks the entire subtree as accessed
+    because to_container consumes all values (e.g. for passing to external code).
+    """
     if isinstance(cfg, AccessTrackedConfig):
+        cfg._mark_all_accessed()
         cfg = cfg.unwrap()
 
     try:
