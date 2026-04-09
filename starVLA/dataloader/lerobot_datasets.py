@@ -9,10 +9,13 @@ from pathlib import Path
 import numpy as np
 from omegaconf import OmegaConf
 
-from starVLA.dataloader.gr00t_lerobot.data_config import ROBOT_TYPE_CONFIG_MAP
+from starVLA.dataloader.gr00t_lerobot.registry import (
+    ROBOT_TYPE_CONFIG_MAP,
+    ROBOT_TYPE_TO_EMBODIMENT_TAG,
+    DATASET_NAMED_MIXTURES,
+)
 from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotMixtureDataset, LeRobotSingleDataset
-from starVLA.dataloader.gr00t_lerobot.embodiment_tags import ROBOT_TYPE_TO_EMBODIMENT_TAG, EmbodimentTag
-from starVLA.dataloader.gr00t_lerobot.mixtures import DATASET_NAMED_MIXTURES
+from starVLA.dataloader.gr00t_lerobot.embodiment_tags import EmbodimentTag
 
 
 def collate_fn(batch):
@@ -159,24 +162,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_behavior.yaml",
+        default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
+    )
+    parser.add_argument(
+        "--data_mix",
+        type=str,
+        default=None,
+        help="Override data_mix in config (e.g. libero_goal)",
     )
     args, clipargs = parser.parse_known_args()
 
     # debugpy.listen(("0.0.0.0", 10092))
     # print("🔍 Rank 0 waiting for debugger attach on port 10092...")
     # debugpy.wait_for_client()
-    args.config_yaml = "./examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
+    args.config_yaml = args.config_yaml  # use CLI arg or default
     cfg = OmegaConf.load(args.config_yaml)
-    # cfg.datasets.vla_data.data_mix = "robotwin"
     vla_dataset_cfg = cfg.datasets.vla_data
-    # cfg.datasets.vla_data.include_state = True
-    vla_dataset_cfg.task_id = 1
-    for task_id in ["all"]:
-        vla_dataset_cfg.task_id = task_id
-        print(f"Testing Task ID: {task_id}")
-        dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    if hasattr(args, 'data_mix') and args.data_mix:
+        vla_dataset_cfg.data_mix = args.data_mix
+    vla_dataset_cfg.task_id = "all"
+    print(f"Config: {args.config_yaml}")
+    print(f"Data mix: {vla_dataset_cfg.data_mix}")
+    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
         # dataset
     from torch.utils.data import DataLoader
 

@@ -61,7 +61,7 @@ run_id=0408_oxe_${data_mix}_${Framework_name}
 ###########################################################################################
 
 
-# export WANDB_MODE=disabled
+export WANDB_MODE=disabled
 
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}

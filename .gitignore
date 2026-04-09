@@ -236,6 +236,7 @@ tmp
 **/*.parquet
 
 */**/*.md
+*/*.md
 
 
 logs/*
