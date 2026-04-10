@@ -8,6 +8,8 @@ The evaluation process consists of two main parts:
 
 We have verified that this workflow runs successfully on both **NVIDIA A100** and **RTX 4090** GPUs.  
 
+> 💡 **AMD GPU Support:** Community members have verified that starVLA also works on **AMD Instinct MI300X** GPUs with ROCm 6.4 — with zero source code changes. The only modification needed is setting `--framework.qwenvl.attn_implementation sdpa`. For a detailed setup guide and benchmark results, see [Issue #254](https://github.com/starVLA/starVLA/issues/254).
+
 ---
 
 
