@@ -305,7 +305,7 @@ See [docs/faq.md](docs/faq.md) for common questions on configuration, freezing, 
 
 ## Contributing
 
-Community contributors are the driving force behind StarVLA's growing ecosystem. We deeply appreciate every PR, bug fix, and piece of feedback from the open-source community — your efforts keep StarVLA evolving rapidly. A full, continuously updated contributor list is maintained at [starvla.github.io/contributors](https://starvla.github.io/contributors).
+StarVLA was co-founded by [Jinhui Ye](https://jhuiye.com/) and [Weiyu Guo](https://weiyuguo.com/), and has been gradually expanded by community contributors. Community contributors are the driving force behind StarVLA's growing ecosystem. We deeply appreciate every PR, bug fix, and piece of feedback from the open-source community — your efforts keep StarVLA evolving rapidly. A full, continuously updated contributor list is maintained at [starvla.github.io/contributors](https://starvla.github.io/contributors).
 
 Thanks to all the people who have contributed to StarVLA:
 
