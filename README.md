@@ -12,7 +12,7 @@
 <a href="https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845"><img src="https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat" alt="WeChat"></a>
 </p>
 
-> **📢 Citation Update:** Our technical report is now on arXiv ([2604.05014](https://arxiv.org/abs/2604.05014)). Please use the updated BibTeX below for ongoing and future citations. If you have already published work citing StarVLA, we kindly encourage you to update the citation entry in your camera-ready or future versions. Thank you for your support! 🙏
+> **📢 Citation Update:** Our technical report is now on arXiv ([2604.05014](https://arxiv.org/abs/2604.05014)). We kindly invite you to use the [updated BibTeX](#citation) for any ongoing or future citations. If you have already cited StarVLA in a previous version of your work, we would greatly appreciate it if you could update the citation entry in your camera-ready or future revisions. Thank you for your understanding and support! 🙏
 
 ---
 
@@ -407,6 +407,8 @@ Note: To ensure better compatibility with already released checkpoints, we are c
 </details>
 
 
+
+<a id="citation"></a>
 
 ## ✍️ Citation & Copyright
 
