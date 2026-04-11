@@ -12,6 +12,7 @@
 <a href="https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845"><img src="https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat" alt="WeChat"></a>
 </p>
 
+> **📢 Citation Update:** Our technical report is now on arXiv ([2604.05014](https://arxiv.org/abs/2604.05014)). We kindly invite you to use the [updated BibTeX](#citation) for any ongoing or future citations. If you have already cited StarVLA in a previous version of your work, we would greatly appreciate it if you could update the citation entry in your camera-ready or future revisions. Thank you for your understanding and support! 🙏
 
 ---
 
@@ -407,16 +408,16 @@ Note: To ensure better compatibility with already released checkpoints, we are c
 
 
 
-## ✍️ Citation & Copyright
+<a id="citation"></a>
 
-## Citation & Copyright
+## ✍️ Citation & Copyright
 
 StarVLA is released under the MIT License, which permits commercial use, modification, distribution, and private use. Rebases are allowed for forks and feature branches; when rebasing from upstream StarVLA, use descriptive commit messages (e.g., "chore: rebase from StarVLA") and keep at least the two latest upstream commits as separate. See [License](LICENSE) for details.
 
-```
-@article{starvla2025,
+```bibtex
+@article{community2026starvla,
   title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
-  author={StarVLA Community},
+  author={Community, StarVLA},
   journal={arXiv preprint arXiv:2604.05014},
   year={2026}
 }
