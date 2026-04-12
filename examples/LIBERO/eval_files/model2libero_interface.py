@@ -1,184 +1,159 @@
-from collections import deque
-from pathlib import Path
-from typing import Dict, Optional, Sequence
+# Copyright 2026 starVLA community. All rights reserved.
+# Licensed under the MIT License, Version 1.0 (the "License");
 
-import cv2 as cv
+"""LIBERO benchmark model client.
+
+Inherits shared inference logic from :class:`BaseModelClient` and adds
+LIBERO-specific action formatting (7-DoF single-arm with binary gripper).
+"""
+
+from typing import Optional, Sequence
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
-from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
-from starVLA.model.tools import read_mode_config
+from deployment.model_server.base_model_client import BaseModelClient
 
 
-class ModelClient:
+class ModelClient(BaseModelClient):
+    """Model client for the LIBERO benchmark family.
+
+    Expected *example* dict layout::
+
+        {
+            "image": [primary_img, wrist_img],  # list[np.ndarray], uint8
+            "lang":  "task description",
+        }
+    """
+
+    # Gripper is the last (7th) column for LIBERO's single-arm Franka
+    _GRIPPER_INDICES = [6]
+
     def __init__(
         self,
-        policy_ckpt_path,
+        policy_ckpt_path: str,
         unnorm_key: Optional[str] = None,
         policy_setup: str = "franka",
-        horizon: int = 0,
-        action_ensemble=True,
-        action_ensemble_horizon: Optional[int] = 3,  # different cross sim
-        image_size: list[int] = [224, 224],
+        image_size: list[int] | None = None,
         use_ddim: bool = True,
         num_ddim_steps: int = 10,
-        adaptive_ensemble_alpha=0.1,
-        host="0.0.0.0",
-        port=10095,
+        action_ensemble: bool = True,
+        action_ensemble_horizon: Optional[int] = 3,
+        adaptive_ensemble_alpha: float = 0.1,
+        host: str = "0.0.0.0",
+        port: int = 10095,
+        # Legacy kwargs accepted for backward compatibility
+        **kwargs,
     ) -> None:
-
-        # build client to connect server policy
-        self.client = WebsocketClientPolicy(host, port)
-        self.policy_setup = policy_setup
-        self.unnorm_key = unnorm_key
-
-        print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key} ***")
-        self.use_ddim = use_ddim
-        self.num_ddim_steps = num_ddim_steps
-        self.image_size = image_size
-        self.horizon = horizon  # 0
-        self.action_ensemble = action_ensemble
-        self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
-        self.action_ensemble_horizon = action_ensemble_horizon
-        self.sticky_action_is_on = False
-        self.gripper_action_repeat = 0
-        self.sticky_gripper_action = 0.0
-        self.previous_gripper_action = None
-
-        self.task_description = None
-        self.image_history = deque(maxlen=self.horizon)
-        if self.action_ensemble:
-            self.action_ensembler = AdaptiveEnsembler(self.action_ensemble_horizon, self.adaptive_ensemble_alpha)
-        else:
-            self.action_ensembler = None
-        self.num_image_history = 0
-
-        self.action_norm_stats = self.get_action_stats(self.unnorm_key, policy_ckpt_path=policy_ckpt_path)
-        self.action_chunk_size = self.get_action_chunk_size(policy_ckpt_path=policy_ckpt_path)
-
-    def _add_image_to_history(self, image: np.ndarray) -> None:
-        self.image_history.append(image)
-        self.num_image_history = min(self.num_image_history + 1, self.horizon)
-
-    def reset(self, task_description: str) -> None:
-        self.task_description = task_description
-        self.image_history.clear()
-        if self.action_ensemble:
-            self.action_ensembler.reset()
-        self.num_image_history = 0
-
-        self.sticky_action_is_on = False
-        self.gripper_action_repeat = 0
-        self.sticky_gripper_action = 0.0
-        self.previous_gripper_action = None
-
-    def step(self, example: dict, step: int = 0, **kwargs) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-        """
-        Perform one step of inference
-        :param image: Input image in the format (H, W, 3), type uint8
-        :param task_description: Task description text
-        :return: (raw action, processed action)
-        """
-
-        task_description = example.get("lang", None)
-        images = example["image"]  # list of images for history
-
-        if example is not None:
-            if task_description != self.task_description:
-                self.reset(task_description)
-
-        images = [self._resize_image(image) for image in images]
-        example["image"] = images
-        vla_input = {
-            "examples": [example],
-            "do_sample": False,
-            "use_ddim": self.use_ddim,
-            "num_ddim_steps": self.num_ddim_steps,
-        }
-
-        action_chunk_size = self.action_chunk_size
-        if step % action_chunk_size == 0:
-            response = self.client.predict_action(vla_input)
-            try:
-                normalized_actions = response["data"]["normalized_actions"]  # B, chunk, D
-            except KeyError:
-                print(f"Response data: {response}")
-                raise KeyError(f"Key 'normalized_actions' not found in response data: {response['data'].keys()}")
-
-            normalized_actions = normalized_actions[0]
-            self.raw_actions = self.unnormalize_actions(
-                normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats
-            )
-
-        raw_actions = self.raw_actions[step % action_chunk_size][None]
-
-        raw_action = {
-            "world_vector": np.array(raw_actions[0, :3]),
-            "rotation_delta": np.array(raw_actions[0, 3:6]),
-            "open_gripper": np.array(raw_actions[0, 6:7]),  # range [0, 1]; 1 = open; 0 = close
-        }
-
-        return {"raw_action": raw_action}
-
-    @staticmethod
-    def unnormalize_actions(normalized_actions: np.ndarray, action_norm_stats: Dict[str, np.ndarray]) -> np.ndarray:
-        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
-        action_high, action_low = np.array(action_norm_stats["max"]), np.array(action_norm_stats["min"])
-        normalized_actions = np.clip(normalized_actions, -1, 1)
-        normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, 0, 1)
-        actions = np.where(
-            mask,
-            0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
-            normalized_actions,
+        if image_size is None:
+            image_size = [224, 224]
+        super().__init__(
+            policy_ckpt_path=policy_ckpt_path,
+            unnorm_key=unnorm_key,
+            image_size=image_size,
+            use_ddim=use_ddim,
+            num_ddim_steps=num_ddim_steps,
+            normalization_mode="min_max",
+            action_ensemble=action_ensemble,
+            action_ensemble_horizon=action_ensemble_horizon,
+            adaptive_ensemble_alpha=adaptive_ensemble_alpha,
+            host=host,
+            port=port,
         )
+        self.policy_setup = policy_setup
+        print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key} ***")
 
-        return actions
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def step(
+        self,
+        example: dict,
+        step: int = 0,
+        **kwargs,
+    ) -> dict[str, dict[str, np.ndarray]]:
+        """Run one inference step and return the raw 7-DoF action.
+
+        Returns:
+            ``{"raw_action": {"world_vector": (3,), "rotation_delta": (3,),
+            "open_gripper": (1,)}}``
+        """
+        task_description = example.get("lang", None)
+        if task_description != self.task_description:
+            self.reset(task_description)
+
+        # Resize images in-place
+        example["image"] = [self.resize_image(img) for img in example["image"]]
+
+        # Fetch (or reuse cached) un-normalized action
+        raw_action_vec = self.get_actions_for_step(example, step)
+
+        return {"raw_action": self._format_raw_action(raw_action_vec)}
+
+    # ------------------------------------------------------------------
+    # Overrides
+    # ------------------------------------------------------------------
+    def get_actions_for_step(self, example: dict, step: int) -> np.ndarray:
+        """Override to use LIBERO-specific gripper binarization."""
+        if step % self.action_chunk_size == 0 or self._cached_actions is None:
+            normalized = self.predict_normalized_actions(example)
+            self._cached_actions = self.unnormalize_actions(
+                normalized,
+                self.action_norm_stats,
+                normalization_mode=self.normalization_mode,
+                gripper_indices=self._GRIPPER_INDICES,
+            )
+        return self._cached_actions[step % self.action_chunk_size]
 
     @staticmethod
-    def get_action_stats(unnorm_key: str, policy_ckpt_path) -> dict:
-        """
-        Duplicate stats accessor (retained for backward compatibility).
-        """
-        policy_ckpt_path = Path(policy_ckpt_path)
-        model_config, norm_stats = read_mode_config(policy_ckpt_path)  # read config and norm_stats
+    def _format_raw_action(action: np.ndarray) -> dict[str, np.ndarray]:
+        """Split a flat 7-D action into the named dict expected by LIBERO."""
+        return {
+            "world_vector": action[:3],
+            "rotation_delta": action[3:6],
+            "open_gripper": action[6:7],  # range [0, 1]; 1 = open, 0 = close
+        }
 
-        unnorm_key = ModelClient._check_unnorm_key(norm_stats, unnorm_key)
-        return norm_stats[unnorm_key]["action"]
+    # ------------------------------------------------------------------
+    # Backward-compatible static helpers  (deprecated – prefer base class)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def get_action_stats(unnorm_key, policy_ckpt_path, **kwargs):
+        return BaseModelClient.load_action_stats(unnorm_key, policy_ckpt_path)
 
     @staticmethod
     def get_action_chunk_size(policy_ckpt_path):
-        model_config, _ = read_mode_config(policy_ckpt_path)  # read config and norm_stats
-        # import ipdb; ipdb.set_trace()
-        return model_config["framework"]["action_model"]["future_action_window_size"] + 1
+        return BaseModelClient.load_action_chunk_size(policy_ckpt_path)
 
-    def _resize_image(self, image: np.ndarray) -> np.ndarray:
-        image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)
-        return image
-
+    # ------------------------------------------------------------------
+    # Visualisation
+    # ------------------------------------------------------------------
     def visualize_epoch(
-        self, predicted_raw_actions: Sequence[np.ndarray], images: Sequence[np.ndarray], save_path: str
+        self,
+        predicted_raw_actions: Sequence[np.ndarray],
+        images: Sequence[np.ndarray],
+        save_path: str,
     ) -> None:
-        images = [self._resize_image(image) for image in images]
+        images = [self.resize_image(img) for img in images]
         ACTION_DIM_LABELS = ["x", "y", "z", "roll", "pitch", "yaw", "grasp"]
 
         img_strip = np.concatenate(np.array(images[::3]), axis=1)
 
-        # set up plt figure
         figure_layout = [["image"] * len(ACTION_DIM_LABELS), ACTION_DIM_LABELS]
         plt.rcParams.update({"font.size": 12})
         fig, axs = plt.subplot_mosaic(figure_layout)
         fig.set_size_inches([45, 10])
 
-        # plot actions
         pred_actions = np.array(
             [
-                np.concatenate([a["world_vector"], a["rotation_delta"], a["open_gripper"]], axis=-1)
+                np.concatenate(
+                    [a["world_vector"], a["rotation_delta"], a["open_gripper"]],
+                    axis=-1,
+                )
                 for a in predicted_raw_actions
             ]
         )
         for action_dim, action_label in enumerate(ACTION_DIM_LABELS):
-            # actions have batch, horizon, dim, in this example we just take the first action for simplicity
             axs[action_label].plot(pred_actions[:, action_dim], label="predicted action")
             axs[action_label].set_title(action_label)
             axs[action_label].set_xlabel("Time in one episode")
@@ -187,23 +162,3 @@ class ModelClient:
         axs["image"].set_xlabel("Time in one episode (subsampled)")
         plt.legend()
         plt.savefig(save_path)
-
-    @staticmethod
-    def _check_unnorm_key(norm_stats, unnorm_key):
-        """
-        Duplicate helper (retained for backward compatibility).
-        See primary _check_unnorm_key above.
-        """
-        if unnorm_key is None:
-            assert len(norm_stats) == 1, (
-                f"Your model was trained on more than one dataset, "
-                f"please pass a `unnorm_key` from the following options to choose the statistics "
-                f"used for un-normalizing actions: {norm_stats.keys()}"
-            )
-            unnorm_key = next(iter(norm_stats.keys()))
-
-        assert unnorm_key in norm_stats, (
-            f"The `unnorm_key` you chose is not in the set of available dataset statistics, "
-            f"please choose from: {norm_stats.keys()}"
-        )
-        return unnorm_key
