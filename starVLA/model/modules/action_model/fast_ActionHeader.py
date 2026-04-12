@@ -13,11 +13,12 @@ Overview:
     leveraging their language modeling capabilities for action prediction.
 """
 
+import json
 import os
 
 import numpy as np
 import torch.nn as nn
-from transformers import AutoProcessor
+from transformers import AutoProcessor, PreTrainedTokenizerFast
 
 
 class Fast_Action_Tokenizer(nn.Module):
@@ -106,7 +107,7 @@ if __name__ == "__main__":
     decoded_actions = tokenizer.decode(tokens)
 
     # self func test
-    vlm_tokens = fast_tokenizer.encoder_action2vlmtoken(raw_actions)
+    vlm_tokens = fast_tokenizer.encoder_action2fastoken(raw_actions)
     print(vlm_tokens)
     pred_actions = fast_tokenizer.decoder_action(np.array([12, 3, 45, 87]))
     print(pred_actions)
