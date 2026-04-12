@@ -15,10 +15,15 @@ This document describes how to **train and evaluate StarVLA models on the Calvin
 | **PI0.5***                                | 3.885       | 92.5%  | 84.0%  | 76.6%  | 71.0%  | 64.4%  |
 | qwenpi (qwen2.5-vl-3B-instruct-action)    | 3.576       | 90.9%  | 79.5%  | 69.6%  | 62.2%  | 55.4%  |
 | qwenpi (qwen3-vl-4B-instruct)             | 3.472       | 87.7%  | 75.2%  | 67.4%  | 61.8%  | 55.1%  |
+| qwenoft (qwen3-vl-4B-instruct)            | 3.364       | 87.7%  | 75.7%  | 66.3%  | 56.9%  | 49.8%  |
+| qwenoft (qwen3-vl-4B-instruct, noprompt)  | 3.522       | 88.6%  | 76.5%  | 68.7%  | 62.2%  | 56.2%  |
 | qwengr00t (qwen2.5-vl-3B-instruct)        | 3.697       | 91.7%  | 81.9%  | 72.7%  | 65.3%  | 58.1%  |
 | qwengr00t (qwen2.5-vl-3B-instruct-action) | 3.786       | 92.5%  | 83.9%  | 74.4%  | 67.9%  | 59.9%  |
 | qwengr00t (qwen3-vl-4B-instruct)          | 3.645       | 89.8%  | 79.9%  | 71.8%  | 64.9%  | 58.1%  |
+| qwengr00t (qwen3-vl-4B-instruct, noprompt) | 3.776      | 90.9%  | 80.8%  | 74.9%  | 68.9%  | 62.1%  |
+| qwengr00t (qwen3-vl-4B-instruct, freezevisual) | 3.516   | 91.0%  | 79.0%  | 68.6%  | 60.9%  | 52.1%  |
 | qwengr00t (qwen3-vl-4B-instruct-action)   | 3.757       | 91.1%  | 81.8%  | 74.1%  | 67.6%  | 61.1%  |
+| qwengr00t (qwen3-vl-4B-instruct-action, noprompt) | 3.859 | 91.8%  | 83.5%  | 76.5%  | 70.4%  | 63.7%  |
 
 
 * **Models marked with `*` are trained by us.**
