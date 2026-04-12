@@ -1322,13 +1322,12 @@ class LeRobotSingleDataset(Dataset):
 
     def _pack_sample(self, data: dict) -> dict:
         """Pack transformed modality data into training sample format."""
-        images = []
+        all_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0] # TODO let resize image in framwork
-            image = Image.fromarray(image)
-            images.append(np.array(image))
-        
-
+            image = Image.fromarray(image).resize((224,224))
+            all_images.append(image)
+    
         language = data[self.modality_keys["language"][0]][0]
         action = []
         for action_key in self.modality_keys["action"]:
@@ -1337,7 +1336,7 @@ class LeRobotSingleDataset(Dataset):
 
         sample = {
             "action": action,
-            "image": images,
+            "image": all_images,
             "lang": language,
             "language": language,
         }

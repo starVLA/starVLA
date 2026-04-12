@@ -2,19 +2,20 @@
 
 echo `which python`
 
-export sim_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/dinoact/bin/python
-export SimplerEnv_PATH=/mnt/petrelfs/share/yejinhui/Projects/SimplerEnv
+cd /home/jye624/Projcets/starVLA
+export star_vla_python=/home/jye624/.conda/envs/starVLA/bin/python
+export sim_python=/home/jye624/.conda/envs/simpler_env/bin/python
+export SimplerEnv_PATH=/project/vonneumann1/jye624/Projcets/SimplerEnv
 export PYTHONPATH=$(pwd):${PYTHONPATH}
-#### set environment variables #####
+export LD_LIBRARY_PATH=/home/jye624/.conda/envs/simpler_env/lib:${LD_LIBRARY_PATH}
+port=6678 
+gpu_id=2
 
-#### get parameters #####
-if [ -n "$1" ]; then
-  MODEL_PATH="$1" # model path indict the output tree
-else
-  MODEL_PATH=./results/Checkpoints/1208_bridge_rt_1_Qwen3PI/final_model/pytorch_model.pt
-fi
 
-port=${2:-6678} # connect to your policy server port
+your_ckpt=./playground/Pretrained_models/StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
+
+MODEL_PATH=${1:-"${your_ckpt}"}
+port=${2:-"${port}"}
 
 
 #### build output directory #####
@@ -116,8 +117,8 @@ for i in "${!ENV_NAMES_V2[@]}"; do
       --obj-variation-mode episode \
       --obj-episode-range 0 24 \
       --robot-init-rot-quat-center 0 0 0 1 \
-      --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
-      > "${task_log}" 2>&1 &
+      --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1
+      # > "${task_log}" 2>&1 &
 
     sleep 6
   done

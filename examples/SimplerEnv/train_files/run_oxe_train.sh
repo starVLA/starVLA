@@ -38,7 +38,7 @@ accelerate launch \
   --config_yaml ${config_yaml} \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
-  --datasets.vla_data.data_root_dir ${oxe_data_root}\
+  --datasets.vla_data.data_root_dir ${oxe_data_root} \
   --datasets.vla_data.data_mix ${data_mix} \
   --datasets.vla_data.per_device_batch_size 16 \
   --trainer.freeze_modules ${freeze_module_list} \

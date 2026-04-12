@@ -1,14 +1,16 @@
 
 
-cd /mnt/petrelfs/yejinhui/Projects/starVLA
+# Environment setup
+cd /home/jye624/Projcets/starVLA
+export star_vla_python=/home/jye624/.conda/envs/starVLA/bin/python
+export sim_python=/home/jye624/.conda/envs/simpler_env/bin/python
+export SimplerEnv_PATH=/project/vonneumann1/jye624/Projcets/SimplerEnv
 export PYTHONPATH=$(pwd):${PYTHONPATH}
-
-port=6678
+export LD_LIBRARY_PATH=/home/jye624/.conda/envs/simpler_env/lib:${LD_LIBRARY_PATH}
+port=6678 
 gpu_id=2
-# export DEBUG=true
-export star_vla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
 
-your_ckpt=./results/Checkpoints/1208_bridge_rt_1_Qwen3PI/final_model/pytorch_model.pt
+your_ckpt=./playground/Pretrained_models/StarVLA/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt
 
 #### build output directory #####
 ckpt_dir=$(dirname "${your_ckpt}")
