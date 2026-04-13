@@ -1,6 +1,6 @@
 # Copyright 2025 starVLA community. All rights reserved.
 # Licensed under the MIT License, Version 1.0 (the "License");
-# Implemented by [Jinhui YE / HKUST University] in [2025]. 
+# Implemented by [Jinhui YE / HKUST University] in [2025].
 
 """
 Qwen-Fast Framework
@@ -17,20 +17,17 @@ Note: How to add special tokens to Qwen2.5:
   download our model checkpoint with special tokens added: https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action
 """
 
-from typing import List
-from tqdm import tqdm
-from typing import List, Optional, Tuple, Any
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from dataclasses import dataclass, field
+from typing import Any, List, Optional, Tuple
+
 import numpy as np
+import torch
 from PIL import Image
-from qwen_vl_utils import process_vision_info
+from tqdm import tqdm
 
-
-from starVLA.training.trainer_utils import initialize_overwatch
-from starVLA.model.tools import FRAMEWORK_REGISTRY
 from deployment.model_server.tools.image_tools import to_pil_preserve
+from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
 
@@ -38,20 +35,61 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.modules.vlm import get_vlm_model
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.fast_ActionHeader import get_action_model
+from starVLA.model.modules.vlm import get_vlm_model
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenFast
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenFastDefaultConfig:
+    """QwenFast framework default parameters.
+
+    Autoregressive discrete action prediction via FAST tokenizer.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "QwenFast"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL with action special tokens) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        # Path to base VLM checkpoint (must include FAST action tokens)
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === Action head (FAST tokenizer — discrete next-token prediction) ===
+    action_model: dict = field(default_factory=lambda: {
+        # Action head architecture type
+        "action_model_type": "FAST",
+        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+        "action_dim": 7,
+        # How many future steps to predict
+        "future_action_window_size": 15,
+        # How many past steps included in action chunk (usually 0)
+        "past_action_window_size": 0,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
 
 
 @FRAMEWORK_REGISTRY.register("QwenFast")
 class Qwenvl_Fast(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (FAST variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
-      - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
-      - DiT diffusion head for future action sequence modeling
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - FAST tokenizer for discretized / symbolized continuous action encoding
+      - Autoregressive next-token prediction over action tokens
 
     Focus: Predict future continuous actions conditioned on images + instruction.
     """
@@ -69,19 +107,18 @@ class Qwenvl_Fast(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenFastDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.action_model = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
         # self.hidden_dim = config.framework.action_model.action_hidden_dim
-        
+
         self.action_model.fast_tokenizer.time_horizon = self.future_action_window_size + 1
         self.action_model.fast_tokenizer.action_dim = self.config.framework.action_model.action_dim
-
-        
 
     def forward(
         self,
@@ -110,7 +147,7 @@ class Qwenvl_Fast(baseframework):
         batch_images = [example["image"] for example in examples]  #  [B, [PIL]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         actions = [example["action"] for example in examples]  # label [B, len, 7]
-        
+
         # step 0: map_raw_action_to_vlm_action
         batch_fast_tokens = self.action_model.encoder_action2fastoken(actions)  # List[str]
 
@@ -118,8 +155,10 @@ class Qwenvl_Fast(baseframework):
         vlm_action_tokens = [self.map_fast_token_to_vlm_action(fast_tokens) for fast_tokens in batch_fast_tokens]
 
         # Step 1: QWenVL input format
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions, solutions=vlm_action_tokens)
-        
+        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+            images=batch_images, instructions=instructions, solutions=vlm_action_tokens
+        )
+
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -127,9 +166,9 @@ class Qwenvl_Fast(baseframework):
                 output_hidden_states=False,
                 return_dict=True,
             )
-        
+
         vlm_action_loss = qwenvl_outputs.loss
-        if vlm_action_loss is None or torch.isnan(vlm_action_loss): 
+        if vlm_action_loss is None or torch.isnan(vlm_action_loss):
             vlm_action_loss = torch.tensor(0.0, device=self.qwen_vl_interface.model.device)
 
         return {"action_loss": vlm_action_loss}
@@ -156,12 +195,11 @@ class Qwenvl_Fast(baseframework):
             examples = [examples]
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-    
+
         # train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
         # if train_obs_image_size:
         #     batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         instructions = [instruction for instruction in instructions]
-
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
@@ -217,29 +255,42 @@ class Qwenvl_Fast(baseframework):
                 batch_fast_token_ids.append(None)
                 continue
             fast_ids = [t - act_min for t in seq]
-            
+
             batch_fast_token_ids.append(fast_ids)
-        
+
         return batch_fast_token_ids
 
     def map_fast_token_to_vlm_action(self, tokens) -> str:
         """Maps fast action tokens to the VLM action format.
-        Action token 0 is mapped to the string <robot_action_0>  ... and so on 
+        Action token 0 is mapped to the string <robot_action_0>  ... and so on
         """
-        return ''.join([f"<robot_action_{token}>" for token in tokens]) # you should add <robot_action_{token}> to VLM as special tokens, 
+        return "".join(
+            [f"<robot_action_{token}>" for token in tokens]
+        )  # you should add <robot_action_{token}> to VLM as special tokens,
 
 
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
+
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
+
     args.config_yaml = "./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action"
@@ -248,60 +299,48 @@ if __name__ == "__main__":
     model = Qwenvl_Fast(cfg)
     print(model)
 
-    # fake sample 
+    # fake sample
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
+        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image, image],  # two views
         "lang": "This is a fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
     sample2 = {
-        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
+        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image, image],  # two views
         "lang": "The fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
-    batch  = [sample, sample2]  # batch size 2
+    batch = [sample, sample2]  # batch size 2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     forward_output = model(batch)
-    action_loss = forward_output['action_loss']
+    action_loss = forward_output["action_loss"]
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action. for new model, it didn't learn to predict action token, so you would meet empty action
     predict_output = model.predict_action([sample])
-    normalized_actions = predict_output['normalized_actions']
+    normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
-
-
-
 
     # # test with dataloader
     # # can be fake sample， but here get from dataloader for simpler
-    from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
-
-    vla_dataset_cfg = cfg.datasets.vla_data
-    vla_dataset_cfg.video_backend = "torchvision_av"
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
-    from torch.utils.data import DataLoader
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,  # For Debug
-        collate_fn=collate_fn,
-    )
-    
-    for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        batch
-        break
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    model(batch)
-    pass
-    action = model.predict_action(batch[0])
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # vla_dataset_cfg.video_backend = "torchvision_av"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # from torch.utils.data import DataLoader
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     batch
+    #     break
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = model.to(device)
+    # model(batch)
+    # action = model.predict_action(batch[0])
+    print("Finished")

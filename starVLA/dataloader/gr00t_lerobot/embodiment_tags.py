@@ -47,7 +47,7 @@ class EmbodimentTag(Enum):
     Any new embodiment for finetuning.
     """
 
-    FRANKA = 'franka'
+    FRANKA = "franka"
     """
     The Franka Emika Panda robot.
     """

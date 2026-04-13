@@ -39,7 +39,7 @@ The configuration is read from `config_yaml` and converted into an `OmegaConf Di
 Conventions:
 1. Use `OmegaConf.load(args.config_yaml)` as the single configuration entry; standalone debugging also uses `args.config_yaml`.
 2. Parameters may be intentionally redundant; you can freely add or override them via the CLI. Example:
-`--framework.framework_py Qwen-OFT` to overwite and  `--framework.action_model.new_arg ${action_type}` for adding new arg.
+`--framework.name QwenOFT` to overwite and  `--framework.action_model.new_arg ${action_type}` for adding new arg.
 3. Config snapshot: save the unified config in the output directory so experiments can be restarted quickly.
 
 </details>

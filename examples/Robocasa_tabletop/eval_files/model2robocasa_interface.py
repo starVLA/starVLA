@@ -1,21 +1,14 @@
 from collections import deque
-from typing import Optional, Sequence
-import os
+from pathlib import Path
+from typing import Dict, Optional, Sequence
+
 import cv2 as cv
 import matplotlib.pyplot as plt
 import numpy as np
 
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
-
 from examples.Robocasa_tabletop.eval_files.adaptive_ensemble import AdaptiveEnsembler
-from typing import Dict
-import numpy as np
-from pathlib import Path
-
-
-
 from starVLA.model.framework.share_tools import read_mode_config
-
 
 
 class PolicyWarper:
@@ -25,17 +18,17 @@ class PolicyWarper:
         unnorm_key: Optional[str] = None,
         policy_setup: str = "franka",
         horizon: int = 0,
-        action_ensemble = False, # @Jinhui
-        action_ensemble_horizon: Optional[int] = 3, # different cross sim
+        action_ensemble=False,  # @Jinhui
+        action_ensemble_horizon: Optional[int] = 3,  # different cross sim
         image_size: list[int] = [224, 224],
         use_ddim: bool = True,
         num_ddim_steps: int = 10,
-        adaptive_ensemble_alpha = 0.1,
+        adaptive_ensemble_alpha=0.1,
         host="0.0.0.0",
         port=10095,
         n_action_steps=2,
     ) -> None:
-        
+
         # build client to connect server policy
         self.client = WebsocketClientPolicy(host, port)
         self.policy_setup = policy_setup
@@ -45,7 +38,7 @@ class PolicyWarper:
         self.use_ddim = use_ddim
         self.num_ddim_steps = num_ddim_steps
         self.image_size = image_size
-        self.horizon = horizon #0
+        self.horizon = horizon  # 0
         self.action_ensemble = action_ensemble
         self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
         self.action_ensemble_horizon = action_ensemble_horizon
@@ -64,14 +57,13 @@ class PolicyWarper:
         self.num_image_history = 0
 
         self.action_norm_stats = self.get_action_stats(self.unnorm_key, policy_ckpt_path=policy_ckpt_path)
-        
 
     def _add_image_to_history(self, image: np.ndarray) -> None:
         self.image_history.append(image)
         self.num_image_history = min(self.num_image_history + 1, self.horizon)
 
     def reset(self, task_description: str or tuple) -> None:
-       
+
         self.task_description = task_description
         self.image_history.clear()
         if self.action_ensemble:
@@ -83,12 +75,7 @@ class PolicyWarper:
         self.sticky_gripper_action = 0.0
         self.previous_gripper_action = None
 
-
-    def step(
-        self, 
-        observations,
-        **kwargs
-    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    def step(self, observations, **kwargs) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         """
         执行一步推理
         :param image: 输入图像 (H, W, 3) uint8格式
@@ -96,16 +83,15 @@ class PolicyWarper:
         :return: (原始动作, 处理后的动作)
         """
 
-        task_description = observations['annotation.human.coarse_action'][0] # tuple       
-        ego_view = observations['video.ego_view']  # (N, 1, H, W, 3)
+        task_description = observations["annotation.human.coarse_action"][0]  # tuple
+        ego_view = observations["video.ego_view"]  # (N, 1, H, W, 3)
         images = ego_view
         state = {}
-        state['left_arm'] = observations['state.left_arm']     
-        state['right_arm'] = observations['state.right_arm']             # (N, 1, 7)
-        state['left_hand'] = observations['state.left_hand']              # (N, 1, 6)
-        state['right_hand'] = observations['state.right_hand']            # (N, 1, 6)
-        state['waist'] = observations['state.waist']                      # (N, 1, 3)
-        
+        state["left_arm"] = observations["state.left_arm"]
+        state["right_arm"] = observations["state.right_arm"]  # (N, 1, 7)
+        state["left_hand"] = observations["state.left_hand"]  # (N, 1, 6)
+        state["right_hand"] = observations["state.right_hand"]  # (N, 1, 6)
+        state["waist"] = observations["state.waist"]  # (N, 1, 3)
 
         state = self.normalize_state(state)
         input_state = []
@@ -119,8 +105,8 @@ class PolicyWarper:
 
         # image: Image.Image = Image.fromarray(image)
 
-        images = [[self._resize_image(img) for img in sample] for sample in images] # (B, N_view, H, W, 3)
-        input_state = [input_s for input_s in input_state] # B, state_dim*(sin, cos)
+        images = [[self._resize_image(img) for img in sample] for sample in images]  # (B, N_view, H, W, 3)
+        input_state = [input_s for input_s in input_state]  # B, state_dim*(sin, cos)
 
         # prepare vla input
         examples = []
@@ -133,23 +119,24 @@ class PolicyWarper:
                 "state": input_state[b],  # N_history, 58 #Hack BUG
             }
             examples.append(example)
-        
+
         vla_input = {
             "examples": examples,
             "do_sample": False,
             "use_ddim": self.use_ddim,
             "num_ddim_steps": self.num_ddim_steps,
         }
-        
+
         response = self.client.predict_action(vla_input)
-        
-        
+
         # unnormalize the action
-        normalized_actions = response["data"]["normalized_actions"] # B, chunk, D        
-        
+        normalized_actions = response["data"]["normalized_actions"]  # B, chunk, D
+
         # unnormalize actions in batch form
-        raw_actions = self.unnormalize_actions(normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats)
-        
+        raw_actions = self.unnormalize_actions(
+            normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats
+        )
+
         # raw_actions shape: (B, chunk, D)
         if self.action_ensemble:
             # 对batch中的每个样本进行ensemble
@@ -161,11 +148,11 @@ class PolicyWarper:
             raw_actions = np.stack(ensembled_actions, axis=0)  # (B, 1, D)
 
         raw_action = {
-            "action.left_arm": raw_actions[:, :self.n_action_steps, :7],      # (B, n_action_steps, 7)
-            "action.right_arm": raw_actions[:, :self.n_action_steps, 7:14],   # (B, n_action_steps, 7)
-            "action.left_hand": raw_actions[:, :self.n_action_steps, 14:20],  # (B, n_action_steps, 6)
-            "action.right_hand": raw_actions[:, :self.n_action_steps, 20:26], # (B, n_action_steps, 6)
-            "action.waist": raw_actions[:, :self.n_action_steps, 26:29],      # (B, n_action_steps, 3)
+            "action.left_arm": raw_actions[:, : self.n_action_steps, :7],  # (B, n_action_steps, 7)
+            "action.right_arm": raw_actions[:, : self.n_action_steps, 7:14],  # (B, n_action_steps, 7)
+            "action.left_hand": raw_actions[:, : self.n_action_steps, 14:20],  # (B, n_action_steps, 6)
+            "action.right_hand": raw_actions[:, : self.n_action_steps, 20:26],  # (B, n_action_steps, 6)
+            "action.waist": raw_actions[:, : self.n_action_steps, 26:29],  # (B, n_action_steps, 3)
         }
 
         return {"actions": raw_action}
@@ -181,15 +168,15 @@ class PolicyWarper:
         """
         mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
         action_high, action_low = np.array(action_norm_stats["max"]), np.array(action_norm_stats["min"])
-        
+
         normalized_actions = np.clip(normalized_actions, -1, 1)
-        
+
         actions = np.where(
             mask,
             (normalized_actions + 1) / 2 * (action_high - action_low) + action_low,
             normalized_actions,
         )
-        
+
         return actions
 
     @staticmethod
@@ -202,8 +189,6 @@ class PolicyWarper:
 
         unnorm_key = PolicyWarper._check_unnorm_key(norm_stats, unnorm_key)
         return norm_stats[unnorm_key]["action"]
-
-
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
         image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)
@@ -240,7 +225,7 @@ class PolicyWarper:
         axs["image"].set_xlabel("Time in one episode (subsampled)")
         plt.legend()
         plt.savefig(save_path)
-    
+
     @staticmethod
     def _check_unnorm_key(norm_stats, unnorm_key):
         """
@@ -260,7 +245,7 @@ class PolicyWarper:
             f"please choose from: {norm_stats.keys()}"
         )
         return unnorm_key
-    
+
     def normalize_state(self, state: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """
         Normalize the state
@@ -270,5 +255,3 @@ class PolicyWarper:
             cos_state = np.cos(state[key])
             state[key] = np.concatenate([sin_state, cos_state], axis=-1)
         return state
-    
-    

@@ -1,17 +1,21 @@
 # Copyright 2025 starVLA community. All rights reserved.
-# Licensed under the MIT License, Version 1.0 (the "License"); 
+# Licensed under the MIT License, Version 1.0 (the "License");
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
 
 import argparse
 import json
 import os
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, Qwen2_5_VLForConditionalGeneration, AutoProcessor
-from transformers import Qwen3VLForConditionalGeneration
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    Qwen3VLForConditionalGeneration,
+)
+
 
 def add_new_tokens(
     model,
@@ -19,7 +23,7 @@ def add_new_tokens(
     new_tokens: List[str],
     init_strategy: str = "avg",
     as_special: bool = True,
-        ) -> Tuple[Dict[str, int], int, int, int]:
+) -> Tuple[Dict[str, int], int, int, int]:
     """
     Add new tokens into the model and tokenizer (if they don't already exist).
     init_strategy: avg / normal / zero
@@ -78,7 +82,15 @@ def add_new_tokens(
     mapping = {t: tokenizer.convert_tokens_to_ids(t) for t in new_tokens}
     return mapping, added_now, action_token_start_idx, action_token_end_idx
 
-def save_bundle(model, tokenizer, mapping: Dict[str, int], save_dir: str, processor_src: str | None = None, padding_side: str | None = None):
+
+def save_bundle(
+    model,
+    tokenizer,
+    mapping: Dict[str, int],
+    save_dir: str,
+    processor_src: str | None = None,
+    padding_side: str | None = None,
+):
     os.makedirs(save_dir, exist_ok=True)
     model.save_pretrained(save_dir)
     tokenizer.save_pretrained(save_dir)
@@ -90,12 +102,13 @@ def save_bundle(model, tokenizer, mapping: Dict[str, int], save_dir: str, proces
     try:
         src = processor_src or save_dir
         processor = AutoProcessor.from_pretrained(src, trust_remote_code=True)
-        # Sync processor.tokenizer 
+        # Sync processor.tokenizer
         processor.tokenizer = tokenizer
         processor.save_pretrained(save_dir)
         print(f"[OK] AutoProcessor saved to: {save_dir}")
     except Exception as e:
         print(f"[WARN] Failed to save AutoProcessor: {e}")
+
 
 def reload_and_check(save_dir: str, tokens: List[str]) -> bool:
     tok = AutoTokenizer.from_pretrained(save_dir, trust_remote_code=True)
@@ -106,6 +119,7 @@ def reload_and_check(save_dir: str, tokens: List[str]) -> bool:
         return False
     print("[OK] Reload check passed, all tokens exist.")
     return True
+
 
 def parse_tokens(args) -> List[str]:
     tokens: List[str] = []
@@ -126,15 +140,19 @@ def parse_tokens(args) -> List[str]:
             ordered.append(t)
     return ordered
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Add special tokens to Qwen2.5-VL model and save to local directory."
-    )
+    parser = argparse.ArgumentParser(description="Add special tokens to Qwen2.5-VL model and save to local directory.")
     parser.add_argument("--model-id", default="Qwen/Qwen2.5-VL-3B-Instruct", help="HF Hub model ID or local path")
     parser.add_argument("--save-dir", required=True, help="Output directory to save")
     parser.add_argument("--tokens", default="", help="Comma-separated tokens, e.g., <loc_x>,<loc_y>")
     parser.add_argument("--tokens-file", help="Text file containing tokens to add (one per line)")
-    parser.add_argument("--init-strategy", default="avg", choices=["avg", "normal", "zero"], help="Initialization strategy for newly added embeddings")
+    parser.add_argument(
+        "--init-strategy",
+        default="avg",
+        choices=["avg", "normal", "zero"],
+        help="Initialization strategy for newly added embeddings",
+    )
     parser.add_argument("--as-special", action="store_true", help="Whether to add as special tokens")
     parser.add_argument("--no-as-special", dest="as_special", action="store_false")
     parser.set_defaults(as_special=True)
@@ -168,10 +186,9 @@ def main():
     processor = AutoProcessor.from_pretrained(args.model_id, trust_remote_code=True)
     processor.tokenizer.padding_side = "left"
 
-
     # Print sizes for diagnosis
-    base_tok_size = tokenizer.vocab_size                  # base vocab size
-    total_tok_size = len(tokenizer)                       # total vocab size
+    base_tok_size = tokenizer.vocab_size  # base vocab size
+    total_tok_size = len(tokenizer)  # total vocab size
     model_embed_size = model.get_input_embeddings().weight.shape[0]  # current model embedding size
     print(f"[DEBUG] tokenizer.vocab_size(base) = {base_tok_size}")
     print(f"[DEBUG] len(tokenizer)(total)     = {total_tok_size}")
@@ -198,16 +215,17 @@ def main():
     print(f"[DEBUG] model.embed_size(after)   = {new_model_embed_size}")
 
 
-
 def start_debugpy_once():
     """start debugpy once"""
     import debugpy
+
     if getattr(start_debugpy_once, "_started", False):
         return
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Waiting for VSCode attach on 0.0.0.0:10092 ...")
     debugpy.wait_for_client()
     start_debugpy_once._started = True
+
 
 if __name__ == "__main__":
     start_debugpy_once()

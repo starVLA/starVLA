@@ -1,8 +1,9 @@
 # Copyright 2025 starVLA community. All rights reserved.
-# Licensed under the MIT License, Version 1.0 (the "License"); 
+# Licensed under the MIT License, Version 1.0 (the "License");
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
 """Implementations of various action heads, which serve as alternatives to VLM sequential token prediction."""
+
 "this file is adap from https://github.com/moojink/openvla-oft/blob/main/prismatic/models/action_heads.py"
 
 import torch.nn as nn
@@ -10,6 +11,7 @@ import torch.nn as nn
 
 class MLPResNetBlock(nn.Module):
     """One MLP ResNet block with a residual connection."""
+
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -31,6 +33,7 @@ class MLPResNetBlock(nn.Module):
 
 class MLPResNet(nn.Module):
     """MLP with residual connection blocks."""
+
     def __init__(self, num_blocks, input_dim, hidden_dim, output_dim):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(input_dim)
@@ -56,6 +59,7 @@ class MLPResNet(nn.Module):
 
 class L1RegressionActionHead(nn.Module):
     """Simple MLP-based action head that generates continuous actions via L1 regression."""
+
     def __init__(
         self,
         input_dim=2048,
@@ -67,10 +71,7 @@ class L1RegressionActionHead(nn.Module):
         self.action_dim = action_dim
         self.NUM_ACTIONS_CHUNK = NUM_ACTIONS_CHUNK
 
-        
-        self.model = MLPResNet(
-            num_blocks=2, input_dim=input_dim , hidden_dim=hidden_dim, output_dim=action_dim
-        )
+        self.model = MLPResNet(num_blocks=2, input_dim=input_dim, hidden_dim=hidden_dim, output_dim=action_dim)
 
     def predict_action(self, actions_hidden_states):
         """
@@ -105,9 +106,9 @@ def get_action_model(config=None):
 
     action_model = L1RegressionActionHead(
         input_dim=action_hidden_dim,
-        hidden_dim=action_hidden_dim*2,
+        hidden_dim=action_hidden_dim * 2,
         action_dim=action_dim,
-        NUM_ACTIONS_CHUNK=past_action_window_size+1+future_action_window_size,
+        NUM_ACTIONS_CHUNK=past_action_window_size + 1 + future_action_window_size,
     )
 
     return action_model

@@ -1,19 +1,16 @@
-from collections import deque
-from typing import Optional, Sequence
 import os
+from collections import deque
+from pathlib import Path
+from typing import Dict, Optional, Sequence
+
 import cv2 as cv
 import matplotlib.pyplot as plt
 import numpy as np
 from transforms3d.euler import euler2axangle
-from typing import Dict
-import numpy as np
-from pathlib import Path
-
 
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 from starVLA.model.tools import read_mode_config
-
 
 
 class ModelClient:
@@ -29,12 +26,12 @@ class ModelClient:
         cfg_scale: float = 1.5,
         use_ddim: bool = True,
         num_ddim_steps: int = 10,
-        action_ensemble = True,
-        adaptive_ensemble_alpha = 0.1,
+        action_ensemble=True,
+        adaptive_ensemble_alpha=0.1,
         host="0.0.0.0",
         port=10093,
     ) -> None:
-        
+
         # build client to connect server policy
         self.client = WebsocketClientPolicy(host, port)
 
@@ -66,12 +63,11 @@ class ModelClient:
         self.use_ddim = use_ddim
         self.num_ddim_steps = num_ddim_steps
 
-
-        self.cfg_scale = cfg_scale # 1.5
+        self.cfg_scale = cfg_scale  # 1.5
 
         self.image_size = image_size
-        self.action_scale = action_scale # 1.0
-        self.horizon = horizon #0
+        self.action_scale = action_scale  # 1.0
+        self.horizon = horizon  # 0
         self.action_ensemble = action_ensemble
         self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
         self.action_ensemble_horizon = action_ensemble_horizon
@@ -89,7 +85,6 @@ class ModelClient:
         self.num_image_history = 0
 
         self.action_norm_stats = self.get_action_stats(self.unnorm_key, policy_ckpt_path=policy_ckpt_path)
-        
 
     def _add_image_to_history(self, image: np.ndarray) -> None:
         self.image_history.append(image)
@@ -135,7 +130,7 @@ class ModelClient:
             "image": [image],
             "lang": self.task_description,
         }
-        
+
         vla_input = {
             "examples": [example],
             "do_sample": False,
@@ -150,18 +145,17 @@ class ModelClient:
             "use_ddim": self.use_ddim,
             "num_ddim_steps": self.num_ddim_steps,
         }
-        
-   
+
         response = self.client.predict_action(vla_input)
-        
-        
+
         # unnormalize the action
-        normalized_actions = response["data"]["normalized_actions"] # B, chunk, D        
+        normalized_actions = response["data"]["normalized_actions"]  # B, chunk, D
         normalized_actions = normalized_actions[0]
-        
-        
-        raw_actions = self.unnormalize_actions(normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats)
-        
+
+        raw_actions = self.unnormalize_actions(
+            normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats
+        )
+
         if self.action_ensemble:
             raw_actions = self.action_ensembler.ensemble_action(raw_actions)[None]
 
@@ -210,7 +204,7 @@ class ModelClient:
 
         elif self.policy_setup == "widowx_bridge":
             action["gripper"] = 2.0 * (raw_action["open_gripper"] > 0.5) - 1.0
-        
+
         action["terminate_episode"] = np.array([0.0])
         return raw_action, action
 
@@ -219,13 +213,13 @@ class ModelClient:
         mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
         action_high, action_low = np.array(action_norm_stats["q99"]), np.array(action_norm_stats["q01"])
         normalized_actions = np.clip(normalized_actions, -1, 1)
-        normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, 0, 1) 
+        normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, 0, 1)
         actions = np.where(
             mask,
             0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
             normalized_actions,
         )
-        
+
         return actions
 
     @staticmethod
@@ -238,8 +232,6 @@ class ModelClient:
 
         # unnorm_key = baseframework._check_unnorm_key(norm_stats, unnorm_key) # 其实也是很环境 specific 的
         return norm_stats[unnorm_key]["action"]
-
-
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
         image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)

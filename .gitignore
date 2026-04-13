@@ -223,3 +223,16 @@ MUJOCO_LOG.TXT
 examples/MultiRobot/*
 
 AGENTS.md
+
+temp
+temp/*
+
+tmp
+
+
+**/*.pt
+**/*.mp4
+**/*.npy
+**/*.parquet
+
+

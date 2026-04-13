@@ -1,32 +1,32 @@
-from collections import deque
-from typing import Optional, Sequence, Dict, Any
 import os
+from collections import deque
+from pathlib import Path
+from typing import Any, Dict, Optional, Sequence
+
 import cv2 as cv
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from datetime import datetime
-
-from transforms3d.euler import euler2axangle
-from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
-
-from examples.Behavior.adaptive_ensemble import AdaptiveEnsembler, ChunkedAdaptiveEnsembler
-from pathlib import Path
-
-from starVLA.model.tools import read_mode_config 
 
 # Import BEHAVIOR-specific utilities
-from omnigibson.learning.utils.eval_utils import ROBOT_CAMERA_NAMES, PROPRIOCEPTION_INDICES
+from omnigibson.learning.utils.eval_utils import PROPRIOCEPTION_INDICES, ROBOT_CAMERA_NAMES
+
+from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
+from examples.Behavior.adaptive_ensemble import AdaptiveEnsembler, ChunkedAdaptiveEnsembler
+from starVLA.model.tools import read_mode_config
+
 
 def start_debugpy_once():
     """start debugpy once"""
     import debugpy
+
     if getattr(start_debugpy_once, "_started", False):
         return
     debugpy.listen(("0.0.0.0", 10092))
     print("🔍 Waiting for VSCode attach on 0.0.0.0:10092 ...")
     debugpy.wait_for_client()
     start_debugpy_once._started = True
+
 
 class M1Inference:
     def __init__(
@@ -47,25 +47,23 @@ class M1Inference:
         task_description: str = None,
         use_state: bool = False,
     ) -> None:
-        
+
         # build client to connect server policy
         self.client = WebsocketClientPolicy(host, port)
 
         action_ensemble = True
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        
+
         # Robot type for BEHAVIOR
         if policy_setup == "R1Pro":
-            unnorm_key = "R1Pro" 
+            unnorm_key = "R1Pro"
             if action_ensemble_horizon is None:
-                action_ensemble_horizon = 5  
+                action_ensemble_horizon = 5
             self.sticky_gripper_num_repeat = 3
         else:
-            raise NotImplementedError(
-                f"Policy setup {policy_setup} not supported for BEHAVIOR models."
-            )
-        
+            raise NotImplementedError(f"Policy setup {policy_setup} not supported for BEHAVIOR models.")
+
         self.policy_setup = policy_setup
         self.unnorm_key = unnorm_key
         self.action_ensemble = action_ensemble
@@ -80,7 +78,7 @@ class M1Inference:
         self.image_size = image_size
         self.action_scale = action_scale
         self.horizon = horizon
-        
+
         # Gripper control state
         self.sticky_action_is_on = False
         self.gripper_action_repeat = 0
@@ -96,7 +94,9 @@ class M1Inference:
         self.image_history = deque(maxlen=self.horizon)
         if self.action_ensemble:
             if self.action_chunk_size > 1:
-                self.action_ensembler = ChunkedAdaptiveEnsembler(self.action_ensemble_horizon, self.action_chunk_size, self.adaptive_ensemble_alpha)
+                self.action_ensembler = ChunkedAdaptiveEnsembler(
+                    self.action_ensemble_horizon, self.action_chunk_size, self.adaptive_ensemble_alpha
+                )
             else:
                 self.action_ensembler = AdaptiveEnsembler(self.action_ensemble_horizon, self.adaptive_ensemble_alpha)
         else:
@@ -105,7 +105,7 @@ class M1Inference:
 
         # Load action normalization stats
         self.action_norm_stats = self.get_action_stats(self.unnorm_key, policy_ckpt_path=policy_ckpt_path)
-        
+
         self.use_state = use_state
 
         # If want to debug, uncomment the following line
@@ -125,12 +125,12 @@ class M1Inference:
         self.current_step = 0
 
     def _generate_prop_state(self, proprio: np.ndarray) -> np.ndarray:
-        """Generate proprioceptive state for R1Pro robot.""" 
+        """Generate proprioceptive state for R1Pro robot."""
         idx = PROPRIOCEPTION_INDICES[self.policy_setup]
         qpos_list = [
             proprio[idx["joint_qpos_sin"]][6:],  # First 6 are base joints, which is NOT allowed in standard track
             proprio[idx["joint_qpos_cos"]][6:],  # First 6 are base joints, which is NOT allowed in standard track
-        ] 
+        ]
         assert qpos_list[0].shape == (22,)
         assert qpos_list[1].shape == (22,)
         return np.concatenate(qpos_list, axis=0)
@@ -142,23 +142,22 @@ class M1Inference:
             head_camera_key = ROBOT_CAMERA_NAMES[self.policy_setup]["head"] + "::rgb"
             left_wrist_camera_key = ROBOT_CAMERA_NAMES[self.policy_setup]["left_wrist"] + "::rgb"
             right_wrist_camera_key = ROBOT_CAMERA_NAMES[self.policy_setup]["right_wrist"] + "::rgb"
-            
+
             full_image = obs[head_camera_key][:, :, :3]  # [224, 224, 3]
             left_wrist_image = obs[left_wrist_camera_key][:, :, :3]  # [224, 224, 3]
             right_wrist_image = obs[right_wrist_camera_key][:, :, :3]  # [224, 224, 3]
-            prop_state = self._generate_prop_state(obs["robot_r1::proprio"])  
-                        
+            prop_state = self._generate_prop_state(obs["robot_r1::proprio"])
+
         except KeyError as e:
             print(f"Error extracting observations: {e}")
             print(f"Available keys in obs: {list(obs.keys())}")
             raise
-        
+
         # Resize images to policy input size
         full_image = self._resize_image(full_image)
         left_wrist_image = self._resize_image(left_wrist_image)
         right_wrist_image = self._resize_image(right_wrist_image)
-        
-        
+
         return {
             "full_image": full_image,
             "left_wrist_image": left_wrist_image,
@@ -169,17 +168,17 @@ class M1Inference:
     def forward(self, obs: Dict[str, Any]) -> torch.Tensor:
         """
         Forward pass for BEHAVIOR environment.
-        
+
         Args:
             obs: Dictionary containing observations from BEHAVIOR environment
-            
+
         Returns:
             torch.Tensor: Action tensor for the robot
         """
         # Process observations to extract images and proprioception
         processed_obs = self._process_behavior_obs(obs)
-        
-        # Use the head camera image as the primary input 
+
+        # Use the head camera image as the primary input
         primary_image = processed_obs["full_image"]
         left_wrist_image = processed_obs["left_wrist_image"]
         right_wrist_image = processed_obs["right_wrist_image"]
@@ -189,55 +188,55 @@ class M1Inference:
         else:
             image_input = [primary_image, left_wrist_image, right_wrist_image]
             wrist_image_input = None
-        
+
         # Get task description from environment if not already set
         if self.task_description is None:
             # Try to get task description from the environment
             # This assumes the environment has a task attribute with show_instruction method
-            print(f"Warning: Could not get task description")
+            print("Warning: Could not get task description")
             self.task_description = "Turn on the radio receiver that's on the table in the living room."
-        
+
         # Prepare proprioceptive state.
         # GR00T action header expects state tensor to have shape (B, T_s, state_dim)
         # so that after the MLP it becomes (B, T_s, hidden).  If we pass a simple
         # 1-D vector the downstream `torch.cat` fails because the ranks differ.
         # Therefore, when state is enabled we reshape it to (1, 1, state_dim).
-        
+
         if self.use_state:
             raw_state = processed_obs["state"]  # shape (state_dim,)
-            state = raw_state[None, :]     # → (1, state_dim)
+            state = raw_state[None, :]  # → (1, state_dim)
             example = {
                 "image": image_input,
                 "wrist_views": wrist_image_input,
                 "state": state,
-                "lang": self.task_description, 
+                "lang": self.task_description,
             }
         else:
             example = {
                 "image": image_input,
                 "wrist_views": wrist_image_input,
-                "lang": self.task_description, 
+                "lang": self.task_description,
             }
-        
+
         vla_input = {
             "examples": [example],
         }
-        
+
         # Get action from websocket server
         action_chunk_size = self.action_chunk_size
         if self.current_step % action_chunk_size == 0:
             if self.current_step % 100 == 0:
-                print('Step:', self.current_step)
+                print("Step:", self.current_step)
             response = self.client.infer(vla_input)
-            
+
             # Check if the response indicates an error
             if response.get("ok", True) == False or response.get("status") == "error":
                 error_info = response.get("error", {})
-                print(f"Websocket server returned an error:")
+                print("Websocket server returned an error:")
                 print(f"Status: {response.get('status')}")
                 print(f"Error details: {error_info}")
                 raise RuntimeError(f"Websocket server error: {error_info}")
-            
+
             # Extract and unnormalize actions
             try:
                 normalized_actions = response["data"]["normalized_actions"]  # B, chunk, D
@@ -251,14 +250,13 @@ class M1Inference:
             normalized_actions = normalized_actions[0]
             # Un-normalize to get real-valued actions. Still shape (T, D)
             self.raw_actions = self.unnormalize_actions(
-                normalized_actions=normalized_actions, 
-                action_norm_stats=self.action_norm_stats
+                normalized_actions=normalized_actions, action_norm_stats=self.action_norm_stats
             )
 
             # Apply action ensembling if enabled
             if self.action_ensemble and action_chunk_size > 1:
                 self.action_ensembler.ensemble_action(self.raw_actions)
-            
+
         if self.action_ensemble:
             if action_chunk_size == 1:
                 raw_actions = self.action_ensembler.ensemble_action(self.raw_actions)[None]
@@ -270,17 +268,17 @@ class M1Inference:
 
         # Process raw actions for BEHAVIOR environment
         raw_action = {
-            "base_pose": np.array(raw_actions[0,:3]),
-            "torso_pose": np.array(raw_actions[0,3:7]),
-            "left_arm_pose": np.array(raw_actions[0,7:14]),
-            "left_gripper_pose": np.array(raw_actions[0,14:15]),
-            "right_arm_pose": np.array(raw_actions[0,15:22]),
-            "right_gripper_pose": np.array(raw_actions[0,22:23]),
-        } 
-        
+            "base_pose": np.array(raw_actions[0, :3]),
+            "torso_pose": np.array(raw_actions[0, 3:7]),
+            "left_arm_pose": np.array(raw_actions[0, 7:14]),
+            "left_gripper_pose": np.array(raw_actions[0, 14:15]),
+            "right_arm_pose": np.array(raw_actions[0, 15:22]),
+            "right_gripper_pose": np.array(raw_actions[0, 22:23]),
+        }
+
         # Convert to BEHAVIOR action format
         action = self._process_action_for_behavior(raw_action)
-        
+
         return torch.from_numpy(action).float()
 
     def _process_action_for_behavior(self, raw_action: Dict[str, np.ndarray]) -> np.ndarray:
@@ -294,23 +292,24 @@ class M1Inference:
         # Process gripper action
         left_gripper_pose = self._process_gripper_action(raw_action["left_gripper_pose"])
         right_gripper_pose = self._process_gripper_action(raw_action["right_gripper_pose"])
-        
+
         # Combine all actions into a single array
         # BEHAVIOR expects "ACTION_DIM": 23
         # See the following files:
         # - ACTION_QPOS_INDICES in omnigibson/learning/utils/eval_utils.py
         # - action_keys in omnigibson/learning/configs/robot/r1pro.yaml
-        action = np.concatenate([
-            base_pose,                      # indices 0:3   (3 dims)
-            torso_pose,                     # indices 3:7   (4 dims)
-            left_arm_pose,                  # indices 7:14  (7 dims)
-            np.array([left_gripper_pose]),  # index  14:15  (1 dim)
-            right_arm_pose,                 # indices 15:22 (7 dims)
-            np.array([right_gripper_pose]), # index  22:23  (1 dim)
-        ])
-        
-        return action
+        action = np.concatenate(
+            [
+                base_pose,  # indices 0:3   (3 dims)
+                torso_pose,  # indices 3:7   (4 dims)
+                left_arm_pose,  # indices 7:14  (7 dims)
+                np.array([left_gripper_pose]),  # index  14:15  (1 dim)
+                right_arm_pose,  # indices 15:22 (7 dims)
+                np.array([right_gripper_pose]),  # index  22:23  (1 dim)
+            ]
+        )
 
+        return action
 
     def _process_gripper_action(self, open_gripper: np.ndarray) -> float:
         """Process gripper action with sticky behavior for BEHAVIOR environment."""
@@ -325,13 +324,13 @@ class M1Inference:
         mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
         action_high, action_low = np.array(action_norm_stats["max"]), np.array(action_norm_stats["min"])
         normalized_actions = np.clip(normalized_actions, -1, 1)
-                
+
         actions = np.where(
             mask,
             0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
             normalized_actions,
         )
-        
+
         return actions
 
     @staticmethod
@@ -339,14 +338,14 @@ class M1Inference:
         """Load action normalization statistics from checkpoint."""
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)
-        
+
         return norm_stats[unnorm_key]["action"]
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
         """Resize image to policy input size."""
-        
+
         image = image.numpy()
-                                        
+
         image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)
         return image
 

@@ -1,9 +1,8 @@
-from huggingface_hub import list_repo_files, hf_hub_download
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
-import time
 import random
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from huggingface_hub import hf_hub_download, list_repo_files
 
 REPO_ID = "nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim"
 REPO_TYPE = "dataset"
@@ -64,11 +63,7 @@ def download_with_retry(
             return True
         except Exception as exc:
             wait_time = random.uniform(1.0, 5.0) * attempt / 10.0
-            print(
-                f"[{attempt}/{max_retries}] "
-                f"Download failed: {filename} ({exc}); "
-                f"retrying in {wait_time:.1f}s"
-            )
+            print(f"[{attempt}/{max_retries}] " f"Download failed: {filename} ({exc}); " f"retrying in {wait_time:.1f}s")
             time.sleep(wait_time)
 
     print(f"Giving up after {max_retries} retries: {filename}")
@@ -79,11 +74,7 @@ def main() -> None:
     print("Listing all files in the repository...")
     all_files = list_repo_files(repo_id=REPO_ID, repo_type=REPO_TYPE)
 
-    target_files = [
-        f
-        for f in all_files
-        if any(f.startswith(folder + "/") for folder in FOLDERS)
-    ]
+    target_files = [f for f in all_files if any(f.startswith(folder + "/") for folder in FOLDERS)]
 
     print(f"Found {len(target_files)} matching files to download.\n")
 
@@ -93,10 +84,7 @@ def main() -> None:
     failed_files: list[str] = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(download_with_retry, filename): filename
-            for filename in target_files
-        }
+        futures = {executor.submit(download_with_retry, filename): filename for filename in target_files}
 
         for idx, future in enumerate(as_completed(futures), start=1):
             filename = futures[future]

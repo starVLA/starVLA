@@ -1,4 +1,4 @@
-# copy from SimplerEnv/simpler_env/evaluation/argparse.py 
+# copy from SimplerEnv/simpler_env/evaluation/argparse.py
 
 import argparse
 
@@ -21,7 +21,7 @@ def get_args():
     parser.add_argument("--policy-setup", type=str, default="R1Pro", help="Policy setup")
     parser.add_argument("--ckpt-path", type=str, default=None)
 
-    parser.add_argument("--eval-on-train-instances", type=lambda x: x.lower() == "true",default=True)
+    parser.add_argument("--eval-on-train-instances", type=lambda x: x.lower() == "true", default=True)
     parser.add_argument("--logging-dir", type=str, default="./results")
     parser.add_argument("--tf-memory-limit", type=int, default=3072, help="Tensorflow memory limit")
     parser.add_argument("--async-freq", type=int, default=1)
@@ -30,14 +30,45 @@ def get_args():
     parser.add_argument("--headless", type=bool, default=True, help="Whether to run in headless mode (no GUI)")
     parser.add_argument("--write-video", type=bool, default=True, help="Whether to save videos of the evaluation")
     parser.add_argument("--task-name", type=str, required=True, help="Task name")
-    parser.add_argument("--eval-instance-ids", type=str, default=None, help="Instance ids to evaluate on, if None, evaluate on all instances")
+    parser.add_argument(
+        "--eval-instance-ids",
+        type=str,
+        default=None,
+        help="Instance ids to evaluate on, if None, evaluate on all instances",
+    )
     parser.add_argument("--behavior-tasks-jsonl-path", type=str, required=True, help="behavior tasks jsonl path")
-    parser.add_argument("--behavior-asset-path", type=str, required=True, help="parent path of 2025-challenge-task-instances data path (default to be BEHAVIOR-1k/datasets)")
-    parser.add_argument("--partial-scene-load", type=bool, default=False, help="Whether to only load task-relevant rooms for a specific task")
-    parser.add_argument("--wrappers", type=str, default="RGBLowResWrapper",choices=["RGBLowResWrapper", "DefaultWrapper", "RichObservationWrapper"], help="List of wrappers to apply to the environment")
-    parser.add_argument("--max-steps", type=int, default=None, help="Max steps per rollout episode, setting to null will use the default value (2 x average human demo completion steps)")
-    parser.add_argument("--use-state", default=False, type=lambda x: x.lower() == "true",help="Whether to use state as part of the observation")
-    
+    parser.add_argument(
+        "--behavior-asset-path",
+        type=str,
+        required=True,
+        help="parent path of 2025-challenge-task-instances data path (default to be BEHAVIOR-1k/datasets)",
+    )
+    parser.add_argument(
+        "--partial-scene-load",
+        type=bool,
+        default=False,
+        help="Whether to only load task-relevant rooms for a specific task",
+    )
+    parser.add_argument(
+        "--wrappers",
+        type=str,
+        default="RGBLowResWrapper",
+        choices=["RGBLowResWrapper", "DefaultWrapper", "RichObservationWrapper"],
+        help="List of wrappers to apply to the environment",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=None,
+        help="Max steps per rollout episode, setting to null will use the default value (2 x average human demo completion steps)",
+    )
+    parser.add_argument(
+        "--use-state",
+        default=False,
+        type=lambda x: x.lower() == "true",
+        help="Whether to use state as part of the observation",
+    )
+
     args = parser.parse_args()
 
     return args

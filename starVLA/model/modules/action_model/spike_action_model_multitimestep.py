@@ -8,9 +8,10 @@ This module implements action prediction using spiking neural networks with:
 """
 
 import math
+
+import snntorch as snn
 import torch
 import torch.nn as nn
-import snntorch as snn
 from snntorch import surrogate
 
 
@@ -18,7 +19,7 @@ def _reset_snn_states(module: nn.Module):
     """Reset all SNN neuron states in the module."""
     for m in module.modules():
         if isinstance(m, snn.Leaky):
-            if hasattr(m, "reset_state") and callable(getattr(m, "reset_state")):
+            if hasattr(m, "reset_state") and callable(m.reset_state):
                 m.reset_state()
             else:
                 for attr in ("mem", "spk", "syn", "state"):
@@ -58,7 +59,6 @@ class SinusoidalPositionalEncoding(nn.Module):
         emb = x[:, None] * emb[None, :]
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
-
 
 
 class MLPResNetBlock(nn.Module):
@@ -109,10 +109,7 @@ class MLPResNet(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dim)
 
         # Input LIF layer with learnable parameters
-        self.lif_in = snn.Leaky(
-            beta=beta_in, threshold=thr_in, learn_beta=True,
-            spike_grad=spike_grad, init_hidden=True
-        )
+        self.lif_in = snn.Leaky(beta=beta_in, threshold=thr_in, learn_beta=True, spike_grad=spike_grad, init_hidden=True)
 
         # Residual blocks
         self.mlp_resnet_blocks = nn.ModuleList()
@@ -124,8 +121,12 @@ class MLPResNet(nn.Module):
 
         # Output LIF layer (no reset, accumulates membrane potential)
         self.li_out = snn.Leaky(
-            beta=beta_out, threshold=1.0, learn_beta=True,
-            spike_grad=spike_grad, reset_mechanism="none", init_hidden=True
+            beta=beta_out,
+            threshold=1.0,
+            learn_beta=True,
+            spike_grad=spike_grad,
+            reset_mechanism="none",
+            init_hidden=True,
         )
 
         self.fc3 = nn.Linear(hidden_dim, output_dim)
@@ -190,9 +191,7 @@ class L1RegressionActionHead(nn.Module):
     ):
         super().__init__()
         self.action_dim = action_dim
-        self.model = MLPResNet(
-            num_blocks=2, input_dim=input_dim, hidden_dim=hidden_dim, output_dim=action_dim
-        )
+        self.model = MLPResNet(num_blocks=2, input_dim=input_dim, hidden_dim=hidden_dim, output_dim=action_dim)
 
     def predict_action(self, actions_hidden_states):
         """
@@ -205,9 +204,7 @@ class L1RegressionActionHead(nn.Module):
             Predicted actions of shape (batch_size, seq_len, action_dim)
         """
         batch_size = actions_hidden_states.shape[0]
-        rearranged_actions_hidden_states = actions_hidden_states.reshape(
-            batch_size, actions_hidden_states.shape[1], -1
-        )
+        rearranged_actions_hidden_states = actions_hidden_states.reshape(batch_size, actions_hidden_states.shape[1], -1)
         action = self.model(rearranged_actions_hidden_states)
         return action
 
@@ -224,9 +221,7 @@ def get_action_model(input_dim=768, hidden_dim=768, action_dim=7):
     Returns:
         L1RegressionActionHead instance
     """
-    action_head = L1RegressionActionHead(
-        input_dim=input_dim, hidden_dim=hidden_dim, action_dim=action_dim
-    )
+    action_head = L1RegressionActionHead(input_dim=input_dim, hidden_dim=hidden_dim, action_dim=action_dim)
     return action_head
 
 
@@ -299,9 +294,7 @@ def get_edit_model(input_dim=768, hidden_dim=768, robot_state_dim=8):
         FiLMedActionStateModulator instance
     """
     edit_head = FiLMedActionStateModulator(
-        action_hidden_dim=input_dim,
-        robot_state_dim=robot_state_dim,
-        projector_hidden_dim=hidden_dim
+        action_hidden_dim=input_dim, robot_state_dim=robot_state_dim, projector_hidden_dim=hidden_dim
     )
     return edit_head
 
@@ -346,10 +339,7 @@ class GRU_GatedFiLModulator(nn.Module):
         )
 
         # Gating mechanism
-        self.gate_projector = nn.Sequential(
-            nn.Linear(projector_hidden_dim, projector_hidden_dim),
-            nn.Sigmoid()
-        )
+        self.gate_projector = nn.Sequential(nn.Linear(projector_hidden_dim, projector_hidden_dim), nn.Sigmoid())
 
         # FiLM parameter generators
         fused_input_dim = projector_hidden_dim + projector_hidden_dim
@@ -368,11 +358,7 @@ class GRU_GatedFiLModulator(nn.Module):
             nn.Linear(projector_hidden_dim, action_hidden_dim),
         )
 
-    def forward(
-        self,
-        actions_hidden_states: torch.Tensor,
-        robot_states: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, actions_hidden_states: torch.Tensor, robot_states: torch.Tensor) -> torch.Tensor:
         """
         Apply GRU-gated FiLM modulation.
 
@@ -439,12 +425,9 @@ def get_gruedit_model(input_dim=768, hidden_dim=768, robot_state_dim=8):
         GRU_GatedFiLModulator instance
     """
     edit_head = GRU_GatedFiLModulator(
-        action_hidden_dim=input_dim,
-        robot_state_dim=robot_state_dim,
-        projector_hidden_dim=hidden_dim
+        action_hidden_dim=input_dim, robot_state_dim=robot_state_dim, projector_hidden_dim=hidden_dim
     )
     return edit_head
-
 
 
 if __name__ == "__main__":
@@ -485,11 +468,7 @@ if __name__ == "__main__":
     print("\n" + "-" * 50)
     print("Test 1: Action Prediction Model")
     print("-" * 50)
-    action_model = get_action_model(
-        input_dim=hidden_dim,
-        hidden_dim=hidden_dim * 2,
-        action_dim=action_dim
-    ).to(device)
+    action_model = get_action_model(input_dim=hidden_dim, hidden_dim=hidden_dim * 2, action_dim=action_dim).to(device)
 
     with torch.no_grad():
         predicted_actions = action_model.predict_action(test_hidden_states)
@@ -500,11 +479,7 @@ if __name__ == "__main__":
     print("\n" + "-" * 50)
     print("Test 2: FiLM Edit Model")
     print("-" * 50)
-    edit_model = get_edit_model(
-        input_dim=hidden_dim,
-        hidden_dim=256,
-        robot_state_dim=robot_state_dim
-    ).to(device)
+    edit_model = get_edit_model(input_dim=hidden_dim, hidden_dim=256, robot_state_dim=robot_state_dim).to(device)
 
     with torch.no_grad():
         modulated_features = edit_model(test_hidden_states, test_robot_states)
@@ -515,11 +490,7 @@ if __name__ == "__main__":
     print("\n" + "-" * 50)
     print("Test 3: GRU-Gated FiLM Edit Model")
     print("-" * 50)
-    gru_edit_model = get_gruedit_model(
-        input_dim=hidden_dim,
-        hidden_dim=256,
-        robot_state_dim=robot_state_dim
-    ).to(device)
+    gru_edit_model = get_gruedit_model(input_dim=hidden_dim, hidden_dim=256, robot_state_dim=robot_state_dim).to(device)
 
     with torch.no_grad():
         gru_modulated_features = gru_edit_model(test_hidden_states, test_robot_states)

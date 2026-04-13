@@ -1,0 +1,16 @@
+PyYAML
+mujoco
+robosuite==1.4.1
+bddl
+tyro
+matplotlib
+mediapy
+websockets
+msgpack
+msgpack-numpy
+numpy==1.24.4
+scipy
+h5py
+Pillow
+opencv-python
+tqdm

@@ -57,7 +57,10 @@ def _resize_with_pad_pil(image: Image.Image, height: int, width: int, method: in
     assert zero_image.size == (width, height)
     return zero_image
 
-from typing import Sequence, Union, List, Tuple, Any
+
+from typing import Any
+
+
 def to_pil_preserve(images: Any, scale_float: bool = True):
     """
     Convert (possibly nested) numpy image arrays back to PIL.Image WITHOUT changing spatial shape
@@ -79,10 +82,11 @@ def to_pil_preserve(images: Any, scale_float: bool = True):
     Returns:
       Mirrored structure with all leaf nodes as PIL.Image.Image
     """
+
     def _convert(obj):
         # Nested containers
         if isinstance(obj, list):
-            return [ _convert(x) for x in obj ]
+            return [_convert(x) for x in obj]
         if isinstance(obj, tuple):
             return tuple(_convert(x) for x in obj)
 
@@ -95,7 +99,7 @@ def to_pil_preserve(images: Any, scale_float: bool = True):
             arr = obj
             if arr.ndim != 3:
                 raise ValueError(f"Expected 3D array (H,W,C), got shape={arr.shape}")
-            if arr.shape[2] not in (1,3,4):
+            if arr.shape[2] not in (1, 3, 4):
                 raise ValueError(f"Channel count must be 1/3/4, got {arr.shape[2]}")
             if np.issubdtype(arr.dtype, np.floating):
                 if scale_float:

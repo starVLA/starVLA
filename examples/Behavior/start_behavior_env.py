@@ -1,18 +1,17 @@
+import csv
+import json
+import logging
 import os
+from pathlib import Path
+
+from omegaconf import OmegaConf
+from omnigibson.learning.eval import Evaluator
+from omnigibson.learning.utils.eval_utils import TASK_NAMES_TO_INDICES
+from omnigibson.learning.utils.obs_utils import create_video_writer
+from omnigibson.macros import gm
 
 from examples.Behavior.custom_argparse import get_args
 from examples.Behavior.model2behavior_interface import M1Inference
-
-from omnigibson.learning.eval import Evaluator
-from omnigibson.macros import gm
-from omnigibson.learning.utils.eval_utils import TASK_NAMES_TO_INDICES
-from omnigibson.learning.utils.obs_utils import create_video_writer
-from omegaconf import DictConfig, OmegaConf
-import numpy as np
-import logging
-from pathlib import Path
-import json
-import csv
 
 
 def load_task_description(task_name: str, tasks_jsonl_path: Path = None) -> str:
@@ -25,19 +24,20 @@ def load_task_description(task_name: str, tasks_jsonl_path: Path = None) -> str:
         for line in f:
             task_data = json.loads(line)
             task_name_to_description[task_data["task_name"]] = task_data["task"]
-    
+
     if task_name not in task_name_to_description:
         raise KeyError(
             f"Task name '{task_name}' not found in tasks.jsonl. "
             f"Available tasks: {list(task_name_to_description.keys())}"
         )
-    
+
     return task_name_to_description[task_name]
+
 
 # Module-specific constants
 NUM_EVAL_EPISODES = 1
-NUM_TRAIN_INSTANCES = 200 # 200 human-collected demonstrations
-NUM_EVAL_INSTANCES = 10 # 20 extra configuration instances
+NUM_TRAIN_INSTANCES = 200  # 200 human-collected demonstrations
+NUM_EVAL_INSTANCES = 10  # 20 extra configuration instances
 
 # set global variables to boost performance
 gm.ENABLE_FLATCACHE = True
@@ -58,11 +58,11 @@ if __name__ == "__main__":
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
     # Load task description from tasks.jsonl using task_name
-    task_description = load_task_description(args.task_name,tasks_jsonl_path=args.behavior_tasks_jsonl_path)
+    task_description = load_task_description(args.task_name, tasks_jsonl_path=args.behavior_tasks_jsonl_path)
     logger.info(f"Loaded task description for '{args.task_name}': {task_description}")
 
     model = M1Inference(
-        policy_ckpt_path=args.ckpt_path, # to get unnormalization stats
+        policy_ckpt_path=args.ckpt_path,  # to get unnormalization stats
         policy_setup=args.policy_setup,
         port=args.port,
         task_description=task_description,
@@ -81,9 +81,7 @@ if __name__ == "__main__":
         video_path.mkdir(parents=True, exist_ok=True)
     # get run instances
     if args.eval_on_train_instances:
-        logger.info(
-            "You are evaluating on training instances, set eval_on_train_instances to False for test instances."
-        )
+        logger.info("You are evaluating on training instances, set eval_on_train_instances to False for test instances.")
         task_idx = TASK_NAMES_TO_INDICES[args.task_name]
         with open(os.path.join(gm.DATA_PATH, "2025-challenge-task-instances", "metadata", "episodes.jsonl"), "r") as f:
             episodes = [json.loads(line) for line in f]
@@ -105,7 +103,7 @@ if __name__ == "__main__":
         ), f"eval instance ids must be in range({NUM_EVAL_INSTANCES})"
         # load csv file
         task_instance_csv_path = os.path.join(
-            gm.DATA_PATH, "2025-challenge-task-instances","metadata", "test_instances.csv"
+            gm.DATA_PATH, "2025-challenge-task-instances", "metadata", "test_instances.csv"
         )
         with open(task_instance_csv_path, "r") as f:
             lines = list(csv.reader(f))[1:]
@@ -122,24 +120,24 @@ if __name__ == "__main__":
     config_dict = {
         "env_wrapper": {"_target_": f"omnigibson.learning.wrappers.{args.wrappers}"},
         "task": {"name": args.task_name},
-        "robot": {"type": "R1Pro", "controllers": None}, # TODO: add controllers
-        "partial_scene_load": args.partial_scene_load, 
+        "robot": {"type": "R1Pro", "controllers": None},  # TODO: add controllers
+        "partial_scene_load": args.partial_scene_load,
         "max_steps": args.max_steps,
         "write_video": args.write_video,
         "model": {
-            "_target_": "examples.Behavior.model2behavior_interface.M1Inference", 
+            "_target_": "examples.Behavior.model2behavior_interface.M1Inference",
             "policy_ckpt_path": args.ckpt_path,
             "policy_setup": args.policy_setup,
             "port": args.port,
             "task_description": task_description,
             "use_state": args.use_state,
         },
-        "policy_name": args.policy_model, # It's just a name
+        "policy_name": args.policy_model,  # It's just a name
     }
-    
+
     # Convert dictionary to OmegaConf DictConfig to support attribute access
     config = OmegaConf.create(config_dict)
-    
+
     with Evaluator(cfg=config) as evaluator:
         logger.info("Starting evaluation...")
 
@@ -161,7 +159,7 @@ if __name__ == "__main__":
                     metric.start_callback(evaluator.env)
                 while not done:
                     terminated, truncated = evaluator.step()
-                    
+
                     if terminated or truncated:
                         done = True
                     if config.write_video:

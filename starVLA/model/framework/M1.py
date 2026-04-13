@@ -1,5 +1,5 @@
 # Copyright 2025 InternVLA-M1. All rights reserved.
-# Modified by [Jinhui YE/ HKUST University] in [2025]. 
+# Modified by [Jinhui YE/ HKUST University] in [2025].
 # Modification: [add fake sample and predict_action to match with starVLA].
 """
 InternVLA M1 framework:
@@ -11,19 +11,17 @@ Vision-Language-Action diffusion model integrating:
 Primary goal: predict continuous future actions conditioned on multi-view images + instruction.
 """
 
-from typing import List
-from tqdm import tqdm
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from PIL import Image
 from qwen_vl_utils import process_vision_info
 
-
-from starVLA.training.trainer_utils import initialize_overwatch
 from starVLA.model.tools import FRAMEWORK_REGISTRY
-
+from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
 
@@ -31,22 +29,72 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.modules.vlm import get_vlm_model
-from starVLA.model.modules.projector.QFormer import get_layerwise_qformer
+from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.DiTActionHeader import get_action_model
 from starVLA.model.modules.dino_model.dino import get_dino_model
+from starVLA.model.modules.projector.QFormer import get_layerwise_qformer
+from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.training.trainer_utils.trainer_tools import resize_images
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for InternVLA-M1
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class InternVLA_M1DefaultConfig:
+    """InternVLA-M1 framework default parameters.
+
+    VLM + Layer-wise QFormer + DINO + DiT diffusion head.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "InternVLA-M1"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === DINO encoder (multi-view spatial tokens) ===
+    dino: dict = field(default_factory=lambda: {
+        "dino_backbone": "dinov2_vits14",
+    })
+
+    # === Layer-wise QFormer (multi-layer feature aggregation) ===
+    layer_qformer: dict = field(default_factory=lambda: {
+        # Start layer index for QFormer (inclusive)
+        "qformer_start_layer": 20,
+        # End layer index for QFormer (exclusive)
+        "qformer_end_layer": 36,
+    })
+
+    # === Action head (DiT diffusion) ===
+    action_model: dict = field(default_factory=lambda: {
+        "action_model_type": "DiT-B",
+        "action_dim": 7,
+        "future_action_window_size": 15,
+        "past_action_window_size": 0,
+        "repeated_diffusion_steps": 4,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
 
 
 @FRAMEWORK_REGISTRY.register("InternVLA-M1")
 class InternVLA_M1(baseframework):
     """
-    Multimodal vision-language-action model.
+    Multimodal vision-language-action model (M1 variant).
 
     Components:
-      - Qwen2.5 VL interface for fused language/vision token embeddings
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
       - Layer-wise QFormer for multi-layer feature aggregation
-      - DINO encoder for dense multi-view spatial tokens
+      - DINOv2 encoder for dense multi-view spatial tokens
       - DiT diffusion head for future action sequence modeling
 
     Focus: Predict future continuous actions conditioned on images + instruction.
@@ -65,7 +113,8 @@ class InternVLA_M1(baseframework):
             **kwargs: Reserved for future overrides (unused).
         """
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(InternVLA_M1DefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.layer_qformer = get_layerwise_qformer(config=self.config)
         self.action_model = get_action_model(config=self.config)
@@ -76,8 +125,8 @@ class InternVLA_M1(baseframework):
             in_features=self.dino_encoder.num_channels, out_features=self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
 
     def forward(
         self,
@@ -153,7 +202,9 @@ class InternVLA_M1(baseframework):
 
             # tips: Repeat 'actions' 'repeated_diffusion_steps' times, resulting in [repeated_diffusion_steps*B, T, D]
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
             actions_repeated = actions_future.repeat(repeated_diffusion_steps, 1, 1)
             action_condition = action_condition.repeat(
@@ -171,14 +222,12 @@ class InternVLA_M1(baseframework):
     @torch.inference_mode()
     def predict_action(
         self,
-        batch_images: List[List[Image.Image]],  # B * List of PIL Image as [view1, view2]
-        instructions: List[str],
+        examples: List[dict],
         cfg_scale: float = 1.5,
         use_ddim: bool = True,
         num_ddim_steps: int = 5,
-        resize_image = [224, 224],
         **kwargs: str,
-    ) -> np.ndarray:
+    ) -> dict:
         """
         Inference: generate future normalized action sequence via diffusion sampling.
 
@@ -191,8 +240,7 @@ class InternVLA_M1(baseframework):
           6. Return normalized action trajectory
 
         Args:
-            batch_images: List of samples; each sample is List[PIL.Image] (multi-view).
-            instructions: List[str] natural language task instructions.
+            examples: List[dict], each dict has "image" (PIL.Image or list) and "lang" (str).
             cfg_scale: >1 enables classifier-free guidance (scales conditional vs unconditional).
             use_ddim: Whether to use DDIM deterministic sampling.
             num_ddim_steps: Number of DDIM steps if enabled.
@@ -202,8 +250,13 @@ class InternVLA_M1(baseframework):
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
-        # align obs and lang # is policy's duty to make sure the image size?
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        if not isinstance(examples, list):
+            examples = [examples]
+        batch_images = [example["image"] if isinstance(example["image"], list) else [example["image"]] for example in examples]
+        instructions = [example["lang"] for example in examples]
+
+        # align obs and lang
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         instructions = [instruction.lower() for instruction in instructions]
@@ -218,7 +271,7 @@ class InternVLA_M1(baseframework):
                 return_dict=True,
             )
 
-            B = len(batch_images) # dino don't have smart resize in processing
+            B = len(batch_images)  # dino don't have smart resize in processing
             image_tensors = self.dino_encoder.prepare_dino_input(batch_images)
             dino_features = self.dino_encoder(image_tensors)
 
@@ -291,11 +344,10 @@ class InternVLA_M1(baseframework):
             if using_cfg:
                 samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
             normalized_actions = samples.cpu().numpy()
-            
-            raw_actions = None
-     
-        return {"normalized_actions": normalized_actions}  # [B, T, action_dim]
 
+            raw_actions = None
+
+        return {"normalized_actions": normalized_actions}  # [B, T, action_dim]
 
     @torch.inference_mode()
     def chat_with_M1(
@@ -346,17 +398,28 @@ class InternVLA_M1(baseframework):
         )
         return outputs
 
+
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
+
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_oxe.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
 
     cfg = OmegaConf.load(args.config_yaml)
 
@@ -364,31 +427,27 @@ if __name__ == "__main__":
     model = InternVLA_M1(cfg)
     print(model)
 
-
-    # fake sample 
+    # fake sample
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16), # action_chunk, action_dim
-        "image": [image, image], # two views
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
+        "image": [image, image],  # two views
         "lang": "This is a fake instruction for testing.",
         # "state" : np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16), # chunk, state_dim
     }
 
-    batch  = [sample, sample]  # batch size 2
+    batch = [sample, sample]  # batch size 2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     forward_output = model(batch)
-    action_loss = forward_output['action_loss']
+    action_loss = forward_output["action_loss"]
     print(f"Action Loss: {action_loss.item()}")
 
     # test predict action
-    predict_output = model.predict_action(batch_images=[batch[0]["image"]], instructions=[batch[0]["lang"]])
-    normalized_actions = predict_output['normalized_actions']
+    predict_output = model.predict_action(examples=[batch[0]])
+    normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
-
-
-
 
     # model_path = "./results/Checkpoints/1_need/0906_bestvla_retrain_sota2/checkpoints/steps_50000_pytorch_model.pt"
     # state_dict = torch.load(model_path, map_location="cpu")
@@ -419,3 +478,4 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # model = model.to(device)
     # model(batch)
+    print("Finished")

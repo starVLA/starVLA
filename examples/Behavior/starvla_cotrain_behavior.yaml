@@ -90,7 +90,7 @@ trainer:
     vlm: 0.1
   # pretrained_checkpoint: /gpfs/wangzixuan/Jinhui/llavavla0/playground/Checkpoints/1031_BEHAVIOR_challenge_qwengroot/checkpoints/steps_5000_pytorch_model.pt
   # reload_modules: 'action_model,layer_qformer' # warning: this may cause model to not converge
-  repeated_diffusion_steps: 4
+  # repeated_diffusion_steps moved to framework.action_model.repeated_diffusion_steps
   max_grad_norm: 1.0
   warmup_ratio: 0.1
   weight_decay: 0.0

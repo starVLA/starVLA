@@ -8,7 +8,7 @@ help:
 	@echo "make check"
 	@echo "    Run code style and linting (black, ruff) *without* changing files!"
 	@echo "make autoformat"
-	@echo "    Run code styling (black, ruff) and update in place - committing with pre-commit also does this."
+	@echo "    Apply formatting in place with black and fixable Ruff edits without failing on existing lint backlog."
 
 clean:
 	find . -name "*.pyc" | xargs rm -f && \
@@ -20,4 +20,4 @@ check:
 
 autoformat:
 	black .
-	ruff check --fix --show-fixes .
+	ruff check --fix-only --show-fixes .

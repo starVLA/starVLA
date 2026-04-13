@@ -11,6 +11,7 @@ LangForceV5:
 (2) Hard-token LLR + Shortcut gate
 (3) Optional detach of prior condition to avoid pushing backbone to vision-only shortcut
 """
+
 import sys
 from pathlib import Path
 
@@ -19,16 +20,17 @@ _workspace_root = Path(__file__).parent.parent.parent.parent
 if str(_workspace_root) not in sys.path:
     sys.path.insert(0, str(_workspace_root))
 
-from typing import List, Optional, Tuple, Set
-from tqdm import tqdm
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from PIL import Image
+from dataclasses import dataclass, field
+from typing import List, Optional, Set
 
-from starVLA.training.trainer_utils import initialize_overwatch
+import numpy as np
+import torch
+import torch.nn.functional as F
+from PIL import Image
+from tqdm import tqdm
+
 from deployment.model_server.tools.image_tools import to_pil_preserve
+from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
 
@@ -37,24 +39,102 @@ IGNORE_INDEX = -100
 
 # ===== Qwen special tokens (you confirmed) =====
 VISION_START_TOKEN_INDEX = 151652  # <|vision_start|>
-VISION_END_TOKEN_INDEX   = 151654  # <|vision_end|>
-IMAGE_TOKEN_INDEX        = 151655  # <|image_pad|>
-VIDEO_TOKEN_INDEX        = 151656  # <|video_pad|>
-IM_START_TOKEN_INDEX     = 151644  # <|im_start|>
-IM_END_TOKEN_INDEX       = 151645  # <|im_end|>
+VISION_END_TOKEN_INDEX = 151654  # <|vision_end|>
+IMAGE_TOKEN_INDEX = 151655  # <|image_pad|>
+VIDEO_TOKEN_INDEX = 151656  # <|video_pad|>
+IM_START_TOKEN_INDEX = 151644  # <|im_start|>
+IM_END_TOKEN_INDEX = 151645  # <|im_end|>
 
 from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
+from starVLA.model.modules.action_model.GR00T_ActionHeader import FlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
-from starVLA.model.modules.action_model.GR00T_ActionHeader import get_action_model, FlowmatchingActionHead
-from starVLA.training.trainer_utils.trainer_tools import resize_images
 from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.training.trainer_utils.trainer_tools import resize_images
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for LangForce
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class LangForceDefaultConfig:
+    """LangForce framework default parameters.
+
+    Dual-branch VLA with Bayesian decomposition:
+      - Prior branch (V + A + L) and posterior branch (V + L + A)
+      - LLR regularizer with optional hard-token/gate mechanisms
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "LangForce"
+
+    # === VLM backbone (Qwen3-VL with latent action query tokens) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+        "attn_implementation": "flash_attention_2",
+        # Number of latent action query tokens injected
+        "num_latent_action_query": 32,
+    })
+
+    # === Action head (Flow-matching / DiT diffusion) ===
+    action_model: dict = field(default_factory=lambda: {
+        "action_model_type": "DiT-B",
+        "action_hidden_dim": 1024,
+        "hidden_size": 1024,
+        "add_pos_embed": True,
+        "max_seq_len": 1024,
+        "action_dim": 7,
+        "state_dim": 7,
+        "future_action_window_size": 7,
+        "action_horizon": 8,
+        "past_action_window_size": 0,
+        "repeated_diffusion_steps": 4,
+        "num_inference_timesteps": 4,
+        "diffusion_model_cfg": {
+            "cross_attention_dim": 2048,
+            "dropout": 0.2,
+            "final_dropout": True,
+            "interleave_self_attention": True,
+            "norm_type": "ada_norm",
+            "num_layers": 16,
+            "output_dim": 1024,
+            "positional_embeddings": None,
+        },
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+    # === LangForce-specific loss / regularizer weights ===
+    # KL weight: maximize LLR via -kl_weight * kl_loss
+    kl_weight: float = 0.1
+    # Weight for prior branch flow-matching loss
+    prior_loss_weight: float = 0.3
+    # Whether to assert language span token-level match between prior/post
+    assert_lang_span_match: bool = True
+    # Whether to detach prior condition (prevent vision-only drift)
+    detach_prior_cond: bool = True
+    # Hard-token LLR: use top-k hardest tokens under posterior
+    use_hard_token_llr: bool = False
+    hard_token_k: int = 16
+    # Shortcut gate: down-weight LLR when log p(L|V) is already low
+    use_kl_gate: bool = False
+    kl_gate_momentum: float = 0.99
+    kl_gate_temp: float = 0.5
+    kl_gate_tau_scale: float = 0.7
+    kl_gate_min: float = 0.0
+    kl_gate_max: float = 1.0
 
 
 @FRAMEWORK_REGISTRY.register("LangForce")
 class LangForce(baseframework):
     """
-    LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries (arxiv 2601.15197) 
-    
+    LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries (arxiv 2601.15197)
+
     Dual-branch VLA with:
       - Prior branch: (V + A + L) => proposal-like p(a|v) head
       - Posterior branch: (V + L + A) => pi(a|v,l)
@@ -67,7 +147,7 @@ class LangForce(baseframework):
     Additionally:
       - Training-time assertion: extracted language spans in prior/post must match exactly (token-level).
         If mismatch => raise AssertionError with decoded spans.
-      - LangForce utilizes Qwen3-VL and extends the vocabulary with specialized tokens that serve as Latent Action Queries. 
+      - LangForce utilizes Qwen3-VL and extends the vocabulary with specialized tokens that serve as Latent Action Queries.
         Run the provided example script add_token.py in https://github.com/ZGC-EmbodyAI/LangForce to update the tokenizer with these additional tokens.
     """
 
@@ -77,10 +157,11 @@ class LangForce(baseframework):
         **kwargs,
     ) -> None:
         super().__init__()
-        self.config = config
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(LangForceDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
 
-        # align dims --> should go into config ideally
+        # align cross_attention_dim to VLM hidden_size at runtime
         self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
             self.qwen_vl_interface.model.config.hidden_size
         )
@@ -91,8 +172,8 @@ class LangForce(baseframework):
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = config.framework.action_model.future_action_window_size
-        self.past_action_window_size = config.framework.action_model.past_action_window_size
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
         self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
 
         # ===== Loss weights =====
@@ -177,8 +258,8 @@ class LangForce(baseframework):
 
     def _extract_action_query_hidden_states(
         self,
-        hidden_states: torch.Tensor,   # [B, S, H]
-        input_ids: torch.Tensor,       # [B, S]
+        hidden_states: torch.Tensor,  # [B, S, H]
+        input_ids: torch.Tensor,  # [B, S]
         tokenizer,
         return_starts: bool = False,
     ):
@@ -204,8 +285,8 @@ class LangForce(baseframework):
     # ---------------------------------------------------------------------
     def _token_nll_span(
         self,
-        logits_1d: torch.Tensor,      # [S, V]
-        input_ids_1d: torch.Tensor,   # [S]
+        logits_1d: torch.Tensor,  # [S, V]
+        input_ids_1d: torch.Tensor,  # [S]
         start: int,
         end: int,
         ignore_ids: Optional[Set[int]] = None,
@@ -233,7 +314,7 @@ class LangForce(baseframework):
         if ignore_ids is not None and len(ignore_ids) > 0:
             keep = torch.ones_like(targets, dtype=torch.bool)
             for tid in ignore_ids:
-                keep &= (targets != int(tid))
+                keep &= targets != int(tid)
             j = j[keep]
             if j.numel() == 0:
                 return None, None
@@ -252,12 +333,12 @@ class LangForce(baseframework):
     # ---------------------------------------------------------------------
     def _compute_language_llr_from_boundaries(
         self,
-        priori_logits: torch.Tensor,            # [B, S, V]
-        posteriori_logits: torch.Tensor,        # [B, S, V] (detached)
-        priori_input_ids: torch.Tensor,         # [B, S]
-        posteriori_input_ids: torch.Tensor,     # [B, S]
-        priori_action_starts: torch.Tensor,     # [B]
-        posteriori_action_starts: torch.Tensor, # [B]
+        priori_logits: torch.Tensor,  # [B, S, V]
+        posteriori_logits: torch.Tensor,  # [B, S, V] (detached)
+        priori_input_ids: torch.Tensor,  # [B, S]
+        posteriori_input_ids: torch.Tensor,  # [B, S]
+        priori_action_starts: torch.Tensor,  # [B]
+        posteriori_action_starts: torch.Tensor,  # [B]
     ) -> torch.Tensor:
         tokenizer = self.qwen_vl_interface.processor.tokenizer
         self._ensure_im_end_id(tokenizer)
@@ -281,10 +362,10 @@ class LangForce(baseframework):
 
         for b in range(B):
             ids_prior = priori_input_ids[b]
-            ids_post  = posteriori_input_ids[b]
+            ids_post = posteriori_input_ids[b]
 
             a_start_prior = int(priori_action_starts[b].item())
-            a_start_post  = int(posteriori_action_starts[b].item())
+            a_start_post = int(posteriori_action_starts[b].item())
 
             # ===== prior language span: [action_end : im_end) =====
             lang_start_prior = a_start_prior + K
@@ -307,20 +388,20 @@ class LangForce(baseframework):
             # ===== (1) strict assertion: token-level equality =====
             if self.training and self.assert_lang_span_match:
                 prior_span_ids = ids_prior[lang_start_prior:lang_end_prior]
-                post_span_ids  = ids_post[lang_start_post:lang_end_post]
+                post_span_ids = ids_post[lang_start_post:lang_end_post]
 
                 if (prior_span_ids.numel() != post_span_ids.numel()) or (not torch.equal(prior_span_ids, post_span_ids)):
                     # decode for human-readable debugging
                     prior_text = tokenizer.decode(prior_span_ids.tolist())
-                    post_text  = tokenizer.decode(post_span_ids.tolist())
+                    post_text = tokenizer.decode(post_span_ids.tolist())
 
                     raise AssertionError(
                         "\n[LangForceV5] Language span mismatch detected!\n"
                         f"Sample b={b}\n"
                         f"PRIOR span idx: [{lang_start_prior}:{lang_end_prior}]  (len={prior_span_ids.numel()})\n"
                         f"POST  span idx: [{lang_start_post}:{lang_end_post}]  (len={post_span_ids.numel()})\n"
-                        f"PRIOR span: {repr(prior_text)}\n"
-                        f"POST  span: {repr(post_text)}\n"
+                        f"PRIOR span: {prior_text!r}\n"
+                        f"POST  span: {post_text!r}\n"
                         f"PRIOR token ids (first 50): {prior_span_ids[:50].tolist()}\n"
                         f"POST  token ids (first 50): {post_span_ids[:50].tolist()}\n"
                         "This indicates your boundary-based language extraction is inconsistent (likely prompt/template issue)."
@@ -351,9 +432,14 @@ class LangForce(baseframework):
             # logp_prior - logp_post = (-nll_prior) - (-nll_post) = nll_post - nll_prior
             if self.use_hard_token_llr:
                 # require same target token sequence
-                if tok_prior is None or tok_post is None or tok_prior.shape != tok_post.shape or (not torch.equal(tok_prior, tok_post)):
+                if (
+                    tok_prior is None
+                    or tok_post is None
+                    or tok_prior.shape != tok_post.shape
+                    or (not torch.equal(tok_prior, tok_post))
+                ):
                     # This should not happen if your spans match, but keep safe fallback.
-                    llr = (nll_post.mean() - nll_prior.mean())
+                    llr = nll_post.mean() - nll_prior.mean()
                 else:
                     k = min(self.hard_token_k, int(nll_post.numel()))
                     if k <= 0:
@@ -361,15 +447,15 @@ class LangForce(baseframework):
                     idx = torch.topk(nll_post.detach(), k=k, largest=True).indices
                     llr = (nll_post[idx] - nll_prior[idx]).mean()
             else:
-                llr = (nll_post.mean() - nll_prior.mean())
+                llr = nll_post.mean() - nll_prior.mean()
 
             llr_vals.append(llr)
 
         if len(llr_vals) == 0:
             return torch.tensor(0.0, device=priori_logits.device, dtype=torch.float32)
 
-        llr_vals_t = torch.stack(llr_vals).float()                 # [M]
-        post_nll_means_t = torch.stack(post_nll_means).float()     # [M]
+        llr_vals_t = torch.stack(llr_vals).float()  # [M]
+        post_nll_means_t = torch.stack(post_nll_means).float()  # [M]
 
         # ===== (2) shortcut gate: update EMA threshold =====
         if self.use_kl_gate and self.training:
@@ -384,7 +470,7 @@ class LangForce(baseframework):
 
         # ===== gate computation =====
         if self.use_kl_gate:
-            tau = (self.post_nll_ema.detach() * float(self.kl_gate_tau_scale))
+            tau = self.post_nll_ema.detach() * float(self.kl_gate_tau_scale)
             temp = max(float(self.kl_gate_temp), 1e-6)
             # high nll => log p(L|V) low => gate small
             g = torch.sigmoid((tau - post_nll_means_t) / temp)
@@ -406,7 +492,7 @@ class LangForce(baseframework):
         **kwargs,
     ) -> dict:
         batch_images = [example["image"] for example in examples]  # [B, [PIL...]]
-        instructions_priori = [self.latent_action_query + example["lang"] for example in examples]       # A + L
+        instructions_priori = [self.latent_action_query + example["lang"] for example in examples]  # A + L
         instructions_posteriori = [example["lang"] + self.latent_action_query for example in examples]  # L + A
 
         actions = [example["action"] for example in examples]
@@ -414,8 +500,7 @@ class LangForce(baseframework):
 
         # ===== Step 1: Priori Branch (V + A + L) =====
         qwen_inputs_priori = self.qwen_vl_interface.build_qwenvl_inputs(
-            images=batch_images,
-            instructions=instructions_priori
+            images=batch_images, instructions=instructions_priori
         )
 
         with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -431,14 +516,13 @@ class LangForce(baseframework):
                 priori_last_hidden,
                 qwen_inputs_priori["input_ids"],
                 self.qwen_vl_interface.processor.tokenizer,
-                return_starts=True
+                return_starts=True,
             )  # [B, K, H], [B]
             priori_logits = qwenvl_outputs_priori.logits  # [B, S, V]
 
         # ===== Step 2: Posteriori Branch (V + L + A) =====
         qwen_inputs_posteriori = self.qwen_vl_interface.build_qwenvl_inputs(
-            images=batch_images,
-            instructions=instructions_posteriori
+            images=batch_images, instructions=instructions_posteriori
         )
 
         with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -454,7 +538,7 @@ class LangForce(baseframework):
                 posteriori_last_hidden,
                 qwen_inputs_posteriori["input_ids"],
                 self.qwen_vl_interface.processor.tokenizer,
-                return_starts=True
+                return_starts=True,
             )  # [B, K, H], [B]
 
             # detach baseline logits: do not allow worsening log p(L|V) to inflate LLR
@@ -475,10 +559,12 @@ class LangForce(baseframework):
             actions_t = torch.tensor(
                 np.array(actions), device=priori_action_hidden.device, dtype=priori_action_hidden.dtype
             )
-            actions_target = actions_t[:, -(self.future_action_window_size + 1):, :]  # [B, chunk_len, action_dim]
+            actions_target = actions_t[:, -(self.future_action_window_size + 1) :, :]  # [B, chunk_len, action_dim]
 
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.framework.action_model.get("repeated_diffusion_steps", 4)
+                if self.config and hasattr(self.config, "framework")
+                else 4
             )
 
             state_tensor = None
@@ -504,9 +590,7 @@ class LangForce(baseframework):
 
         # ===== Step 5: Total loss (keep your preferred convex mixture) =====
         total_loss = (
-            (1.0 - self.prior_loss_weight) * main_loss
-            + self.prior_loss_weight * prior_loss
-            - self.kl_weight * kl_loss
+            (1.0 - self.prior_loss_weight) * main_loss + self.prior_loss_weight * prior_loss - self.kl_weight * kl_loss
         )
 
         return {
@@ -544,13 +628,12 @@ class LangForce(baseframework):
         instructions_posteriori = [ex["lang"] + self.latent_action_query for ex in examples]
         state = [ex["state"] for ex in examples] if "state" in examples[0] else None
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
-            images=batch_images,
-            instructions=instructions_posteriori
+            images=batch_images, instructions=instructions_posteriori
         )
 
         with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -564,10 +647,7 @@ class LangForce(baseframework):
 
             last_hidden = qwenvl_outputs.hidden_states[-1]
             action_hidden = self._extract_action_query_hidden_states(
-                last_hidden,
-                qwen_inputs["input_ids"],
-                self.qwen_vl_interface.processor.tokenizer,
-                return_starts=False
+                last_hidden, qwen_inputs["input_ids"], self.qwen_vl_interface.processor.tokenizer, return_starts=False
             )  # [B, K, H]
 
         state_tensor = None
@@ -581,19 +661,25 @@ class LangForce(baseframework):
 
 
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    import debugpy
     import argparse
 
+    from omegaconf import OmegaConf
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml")
+    parser.add_argument(
+        "--config_yaml", type=str, default="./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml"
+    )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    try:
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+    except (ImportError, RuntimeError):
+        pass
 
-    args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
+    # args.config_yaml = "examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
     cfg = OmegaConf.load(args.config_yaml)
 
     model: LangForce = LangForce(cfg)
@@ -611,7 +697,7 @@ if __name__ == "__main__":
         "lang": "Put all the toys in the child's room ... inside the toy box.",
     }
 
-    batch  = [sample, sample2]
+    batch = [sample, sample2]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
@@ -621,23 +707,14 @@ if __name__ == "__main__":
     pred = model.predict_action([sample])
     print("Pred shape:", pred["normalized_actions"].shape)
 
-    # optional dataloader test
-    vla_dataset_cfg = cfg.datasets.vla_data
-    from torch.utils.data import DataLoader
-    from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
-
-    cfg.datasets.vla_data.include_state = "False"
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-
-    train_dataloader = DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,
-        collate_fn=collate_fn,
-    )
-
-    for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        model(batch)
-        break
-
+    # # optional dataloader test (requires data)
+    # vla_dataset_cfg = cfg.datasets.vla_data
+    # from torch.utils.data import DataLoader
+    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
+    # cfg.datasets.vla_data.include_state = "False"
+    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
+    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
+    #     model(batch)
+    #     break
     print("Finished")

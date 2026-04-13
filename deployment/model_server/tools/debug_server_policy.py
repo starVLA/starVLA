@@ -17,9 +17,8 @@ Notes:
 
 import argparse
 import logging
+
 import numpy as np
-
-
 from tools.websocket_policy_client import WebsocketClientPolicy
 
 
@@ -67,11 +66,12 @@ def _main():
             image_path = "assets/table.jpeg"
             # read image as PIL
             from PIL import Image
+
             image_primary = Image.open(image_path).convert("RGB")
             # Convert PIL -> numpy uint8 (H,W,3)
             image_primary_np = np.asarray(image_primary, dtype=np.uint8)
 
-            instruction_lang="pick up the red block"
+            instruction_lang = "pick up the red block"
             obs = {
                 "request_id": "smoke-test",
                 "batch_images": [[image_primary_np]],

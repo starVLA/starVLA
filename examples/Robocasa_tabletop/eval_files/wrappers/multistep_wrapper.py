@@ -157,13 +157,9 @@ class MultiStepWrapper(gym.Wrapper):
         """
         Get the maximum number of steps that we need to cache.
         """
-        video_max_steps_needed = (
-            np.max(self.video_delta_indices) - np.min(self.video_delta_indices) + 1
-        )
+        video_max_steps_needed = np.max(self.video_delta_indices) - np.min(self.video_delta_indices) + 1
         if self.state_delta_indices is not None:
-            state_max_steps_needed = (
-                np.max(self.state_delta_indices) - np.min(self.state_delta_indices) + 1
-            )
+            state_max_steps_needed = np.max(self.state_delta_indices) - np.min(self.state_delta_indices) + 1
         else:
             state_max_steps_needed = 0
         return int(max(video_max_steps_needed, state_max_steps_needed))
@@ -178,9 +174,7 @@ class MultiStepWrapper(gym.Wrapper):
         assert delta_indices[-1] == 0, f"{delta_indices=}"
         if len(delta_indices) > 1:
             # The step is consistent (because in real robot experiments, we actually use the dt to get the observations, which requires the step to be consistent)
-            assert np.all(
-                np.diff(delta_indices) == delta_indices[1] - delta_indices[0]
-            ), f"{delta_indices=}"
+            assert np.all(np.diff(delta_indices) == delta_indices[1] - delta_indices[0]), f"{delta_indices=}"
             # And the step is positive
             assert (delta_indices[1] - delta_indices[0]) > 0, f"{delta_indices=}"
 
@@ -218,9 +212,7 @@ class MultiStepWrapper(gym.Wrapper):
             dones.append(done)
             self.obs.append(observation)
             self.reward.append(reward)
-            if (self.max_episode_steps is not None) and (
-                len(self.reward) >= self.max_episode_steps
-            ):
+            if (self.max_episode_steps is not None) and (len(self.reward) >= self.max_episode_steps):
                 # truncation
                 done = True
             self.done.append(done)

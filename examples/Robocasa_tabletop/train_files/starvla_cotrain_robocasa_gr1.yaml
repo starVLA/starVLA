@@ -41,6 +41,7 @@ framework:
       num_layers: 16
       output_dim: 2560
       positional_embeddings: null
+  obs_image_size: [224, 224]
 
 
 
@@ -92,7 +93,7 @@ trainer:
     vlm: 0.1
   # pretrained_checkpoint: ./results/Checkpoints/1_need/0601_qwenact_fixqwen_32gpus_lr_1e-3_qformer_36_37/steps_100000/pytorch_model.pt
   # reload_modules: 'action_model,layer_qformer' # warning: this may cause model to not converge
-  repeated_diffusion_steps: 4
+  # repeated_diffusion_steps moved to framework.action_model.repeated_diffusion_steps
   max_grad_norm: 1.0
   warmup_ratio: 0.1
   weight_decay: 0.0
