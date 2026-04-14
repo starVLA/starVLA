@@ -6,13 +6,14 @@ WanGR00T Framework — Wan2.2-TI2V World Model for Action Prediction.
 Uses Wan2.2-TI2V-5B (DiT-based Text+Image-to-Video model) as the perception
 backbone. The DiT's intermediate representations encode spatiotemporal
 dynamics learned from large-scale video generation pretraining,
-which are projected to the action head for continuous action prediction.
+which are passed directly to the action head as cross-attention condition
+for continuous action prediction.
 
 Architecture:
   UMT5 (text) + VAE (image→latent) → WanTransformer3D
     → hidden_states [B, N, 3072]
-    → Linear projection [B, N, action_hidden_dim]
-    → FlowmatchingActionHead → action predictions
+    → FlowmatchingActionHead (cross-attention on 3072-dim tokens)
+    → action predictions
 
 Key differences from CosmoPredict2GR00T:
   - Text encoder: UMT5-XXL (dim=4096) vs T5 (dim=1024)
@@ -181,7 +182,7 @@ class Wan_GR00T(baseframework):
         return {"action_loss": action_loss}
 
     @torch.inference_mode()
-    def predict_action(self, examples: List[dict], **kwargs) -> np.ndarray:
+    def predict_action(self, examples: List[dict], **kwargs) -> dict:
         if type(examples) is not list:
             examples = [examples]
         batch_images = [to_pil_preserve(example["image"]) for example in examples]

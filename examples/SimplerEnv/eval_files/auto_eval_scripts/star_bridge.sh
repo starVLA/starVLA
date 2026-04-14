@@ -1,6 +1,7 @@
 #!/bin/bash
 
 echo `which python`
+########### Environment setup — adapted for HKUST cluster ###########
 # Environment setup
 cd /mnt/petrelfs/yejinhui/Projects/starVLA
 export star_vla_python=/mnt/petrelfs/share/yejinhui/Envs/miniconda3/envs/starVLA/bin/python
@@ -10,7 +11,7 @@ export PYTHONPATH=$(pwd):${PYTHONPATH}
 base_port=6350 
 
 # export DEBUG=1
-
+########### Environment setup — adapted for HKUST cluster ###########
 
 MODEL_PATH=$1
 # MODEL_PATH=/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/1120_bridge_rt_1_QwenDual_florence/checkpoints/steps_11000_pytorch_model.pt

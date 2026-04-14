@@ -240,3 +240,5 @@ tmp
 
 
 logs/*
+**/.nf*
+code

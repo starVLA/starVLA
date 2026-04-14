@@ -180,19 +180,21 @@ class _Wan2_Interface(nn.Module):
 
         return text_embeds.to(dtype=torch.bfloat16)  # [B, max_length, 4096]
 
-    def _encode_images_vae(self, images, num_frames=5):
+    def _encode_images_vae(self, images, num_frames=None):
         """Encode observation images through VAE to get latent tokens.
 
-        Follows the same temporal padding approach as CosmoPredict2:
-        pad 1 image to `num_frames` with zeros, then VAE-encode the whole
-        video. This avoids issues with temporal downsampling on a single frame.
+        Two-pass approach (same as CosmoPredict2):
+          Pass 1: preprocess each sample, record real frame counts.
+          Determine target_frames = num_frames if given, else batch max.
+          Pass 2: truncate or pad each sample to target_frames.
 
         VAE config: z_dim=48, scale_factor_spatial=16, scale_factor_temporal=4
-        5 frames → T_latent = (5-1)//4+1 = 2
+        T_latent = (target_frames - 1) // 4 + 1
 
         Args:
             images: List of List of PIL Images [B, [imgs...]]
-            num_frames: Number of temporal frames to pad to (default: 5).
+            num_frames: If given, pad/truncate to this exact count.
+                If None (default), pad to the max frame count in the batch.
 
         Returns:
             latents: [B, 48, T_latent, H/16, W/16] video latent tensor
@@ -201,30 +203,35 @@ class _Wan2_Interface(nn.Module):
         dtype = self.vae.dtype
         height, width = 480, 832
 
-        # Use VideoProcessor for image preprocessing (resize, normalize to [-1,1])
-        batch_videos = []
+        # Pass 1: preprocess each sample, record real frame counts
+        preprocessed = []
+        frame_counts = []
         for sample_imgs in images:
             if not isinstance(sample_imgs, (list, tuple)):
                 sample_imgs = [sample_imgs]
 
-            # Truncate if more images than num_frames
-            if len(sample_imgs) > num_frames:
-                sample_imgs = sample_imgs[:num_frames]
-
-            # preprocess_video: list[PIL] → [1, C, T, H, W] (normalized to [-1,1])
             video_tensor = self.video_processor.preprocess_video(sample_imgs, height=height, width=width)
             video_tensor = video_tensor.to(device=device, dtype=dtype)  # [1, C, n_imgs, H, W]
+            preprocessed.append(video_tensor)
+            frame_counts.append(video_tensor.shape[2])
 
-            # Pad with last-frame repetition (matches official Wan pipeline)
-            n_imgs = video_tensor.shape[2]
-            if n_imgs < num_frames:
+        # Determine target frame count: use num_frames if specified, otherwise batch max
+        target_frames = num_frames if num_frames is not None else max(frame_counts)
+
+        # Pass 2: truncate or pad each sample to target_frames
+        batch_videos = []
+        for video_tensor in preprocessed:
+            n = video_tensor.shape[2]
+            if n > target_frames:
+                video_tensor = video_tensor[:, :, :target_frames]
+            elif n < target_frames:
+                # Pad with last-frame repetition (matches official Wan pipeline)
                 last_frame = video_tensor[:, :, -1:]
-                padding = last_frame.repeat(1, 1, num_frames - n_imgs, 1, 1)
+                padding = last_frame.repeat(1, 1, target_frames - n, 1, 1)
                 video_tensor = torch.cat([video_tensor, padding], dim=2)
+            batch_videos.append(video_tensor.squeeze(0))  # [C, target_frames, H, W]
 
-            batch_videos.append(video_tensor.squeeze(0))  # [C, num_frames, H, W]
-
-        # Stack to [B, C, num_frames, H, W]
+        # Stack to [B, C, target_frames, H, W]
         video = torch.stack(batch_videos, dim=0)
 
         with torch.no_grad():
@@ -261,7 +268,10 @@ class _Wan2_Interface(nn.Module):
         """
         assert len(images) == len(instructions)
 
-        # Ensure encoders are on the right device
+        # Move encoders to GPU for encoding, then offload to CPU to free VRAM
+        # for the transformer + action head forward pass.
+        # Trade-off: ~1.5s per step in CPU↔GPU transfer vs ~12 GB VRAM savings.
+        # See improvement.md for alternatives (pinned memory, offline precompute, etc.)
         device = next(self.transformer.parameters()).device
         self.text_encoder.to(device)
         self.vae.to(device)
@@ -283,6 +293,11 @@ class _Wan2_Interface(nn.Module):
         p_t, p_h, p_w = self.transformer.config.patch_size
         _, _, T, H, W = latents.shape
         seq_len = (T // p_t) * (H // p_h) * (W // p_w)
+        assert seq_len <= 1024, (
+            f"seq_len={seq_len} exceeds WanTransformer3D rope_max_seq_len=1024. "
+            f"Reduce num_frames or image resolution. "
+            f"(T_lat={T}, H_lat={H}, W_lat={W}, patch={p_t},{p_h},{p_w})"
+        )
         timestep = torch.zeros(batch_size, seq_len, device=device, dtype=torch.long)
 
         return {
@@ -298,7 +313,7 @@ class _Wan2_Interface(nn.Module):
         Runs a single-step forward to extract rich spatiotemporal features.
         Returns an output object with .hidden_states for compatibility.
         """
-        kwargs.pop("_is_wm_input", False)
+        kwargs.pop("_is_wm_input", False) # 这些文字是干什么的？为什么要从kwargs中弹出？
         kwargs.pop("output_hidden_states", False)
         kwargs.pop("return_dict", True)
         kwargs.pop("output_attentions", None)
@@ -335,7 +350,7 @@ class _Wan2_Interface(nn.Module):
         class _WMOutput:
             def __init__(self, hidden_states_tuple, loss=None):
                 self.hidden_states = hidden_states_tuple
-                self.loss = loss
+                self.loss = loss # TODO if you want to add loss for image reconstruction or other auxiliary objectives, you can include it here and return it in the forward pass
 
         return _WMOutput(hidden_states_tuple=tuple(extracted))
 

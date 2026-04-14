@@ -174,10 +174,10 @@ if __name__ == "__main__":
         help="Override data_mix in config (e.g. libero_goal)",
     )
     args, clipargs = parser.parse_known_args()
-
-    # debugpy.listen(("0.0.0.0", 10092))
-    # print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    # debugpy.wait_for_client()
+    import debugpy
+    debugpy.listen(("0.0.0.0", 10092))
+    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
+    debugpy.wait_for_client()
     args.config_yaml = args.config_yaml  # use CLI arg or default
     cfg = OmegaConf.load(args.config_yaml)
     vla_dataset_cfg = cfg.datasets.vla_data

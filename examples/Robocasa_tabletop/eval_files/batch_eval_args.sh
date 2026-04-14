@@ -17,10 +17,6 @@ CKPT_DEFAULT="StarVLA/Qwen3-VL-OFT-Robocasa/checkpoints/steps_90000_pytorch_mode
 ###########################################################################################
 
 
-<<<<<<< HEAD
-=======
-CKPT_DEFAULT="results/Checkpoints/1224_fourier_gr1_unified_1000_QwenPI_v2_state_qwen3/checkpoints/steps_180000_pytorch_model.pt"
->>>>>>> [feat] fastnresume training | more results on robocasa
 N_ENVS_DEFAULT=1
 MAX_EPISODE_STEPS_DEFAULT=720
 N_ACTION_STEPS_DEFAULT=12
