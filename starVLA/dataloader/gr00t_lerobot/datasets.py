@@ -1367,10 +1367,17 @@ class LeRobotSingleDataset(Dataset):
     def _pack_sample(self, data: dict) -> dict:
         """Pack transformed modality data into training sample format."""
         all_images = []
+        all_future_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
             image = Image.fromarray(image).resize((224, 224))
             all_images.append(image)
+
+            # Future image: when delta_indices has > 1 entry, take the last frame
+            if data[video_key].shape[0] > 1:
+                future_image = data[video_key][-1]
+                future_image = Image.fromarray(future_image).resize((224, 224))
+                all_future_images.append(future_image)
 
         language = data[self.modality_keys["language"][0]][0]
         action = []
@@ -1384,6 +1391,9 @@ class LeRobotSingleDataset(Dataset):
             "lang": language,
             "language": language,
         }
+
+        if all_future_images:
+            sample["future_image"] = all_future_images
 
         if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
             state = []

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 from omegaconf import OmegaConf
 
-from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotSingleDataset, LeRobotMixtureDataset
+from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotSingleDataset, LeRobotMixtureDataset, ModalityConfig
 from starVLA.dataloader.gr00t_lerobot.mixtures import DATASET_NAMED_MIXTURES
 from starVLA.dataloader.gr00t_lerobot.data_config import ROBOT_TYPE_CONFIG_MAP
 from starVLA.dataloader.gr00t_lerobot.embodiment_tags import ROBOT_TYPE_TO_EMBODIMENT_TAG, EmbodimentTag
@@ -36,6 +36,18 @@ def make_LeRobotSingleDataset(
     
     data_config = ROBOT_TYPE_CONFIG_MAP[robot_type]
     modality_config = data_config.modality_config()
+
+    # Override video delta_indices for future observation (IDM visual prediction)
+    future_obs_horizon = data_cfg.get("future_obs_horizon", None) if data_cfg else None
+    if future_obs_horizon:
+        for key, cfg_item in modality_config.items():
+            if key == "video":
+                new_delta = sorted(set(list(cfg_item.delta_indices) + [int(future_obs_horizon)]))
+                modality_config[key] = ModalityConfig(
+                    delta_indices=new_delta,
+                    modality_keys=cfg_item.modality_keys,
+                )
+
     transforms = data_config.transform()
     dataset_path = data_root_dir / data_name
     if robot_type not in ROBOT_TYPE_TO_EMBODIMENT_TAG:
