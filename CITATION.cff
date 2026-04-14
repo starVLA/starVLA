@@ -11,6 +11,16 @@ message: >-
 type: software
 authors:
   - name: starVLA Community
+preferred-citation:
+  type: article
+  title: >-
+    StarVLA: A Lego-like Codebase for Vision-Language-Action
+    Model Developing
+  authors:
+    - name: StarVLA Community
+  journal: arXiv preprint arXiv:2604.05014
+  year: 2026
+  url: https://arxiv.org/abs/2604.05014
 identifiers:
   - type: doi
     value: 10.5281/zenodo.18264214
