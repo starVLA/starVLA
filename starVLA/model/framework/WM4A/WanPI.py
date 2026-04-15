@@ -61,7 +61,7 @@ class WanPIDefaultConfig:
     # LayerwiseFM reads qwenvl.vl_hidden_dim and qwenvl.num_vl_layers
     qwenvl: dict = field(default_factory=lambda: {
         "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-        "vl_hidden_dim": 3072,
+        "vl_hidden_dim": 1024,
         "num_vl_layers": 30,
     })
 
@@ -81,7 +81,9 @@ class WanPIDefaultConfig:
         "noise_beta_beta": 1.0,
         "noise_s": 0.999,
         "num_timestep_buckets": 1000,
-        "diffusion_model_cfg": {},
+        "diffusion_model_cfg": {
+            "cross_attention_dim": 1024,
+        },
     })
 
     obs_image_size: Optional[list] = None
@@ -111,7 +113,12 @@ class Wan_PI(baseframework):
         else:
             num_blocks = len(self.backbone.transformer.blocks)
 
-        self.config.framework.qwenvl.vl_hidden_dim = wm_hidden
+        # Project world model features to action model's cross-attention dim
+        cross_attn_dim = self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim
+        self.wm_projector = torch.nn.Linear(wm_hidden, cross_attn_dim)
+
+        # Sync vl_hidden_dim so LayerwiseFM action head stays consistent
+        self.config.framework.qwenvl.vl_hidden_dim = cross_attn_dim
         self.config.framework.qwenvl.num_vl_layers = num_blocks
 
         self.action_model: LayerwiseFlowmatchingActionHead = get_action_model(config=self.config)
@@ -162,6 +169,7 @@ class Wan_PI(baseframework):
                 return_dict=True,
             )
             vl_embs_list = list(self._all_hidden_states)
+            vl_embs_list = [self.wm_projector(h) for h in vl_embs_list]
             base_hidden = vl_embs_list[-1]
 
         with torch.autocast("cuda", dtype=torch.float32):
@@ -210,6 +218,7 @@ class Wan_PI(baseframework):
                 return_dict=True,
             )
             vl_embs_list = list(self._all_hidden_states)
+            vl_embs_list = [self.wm_projector(h) for h in vl_embs_list]
 
         state = (
             torch.from_numpy(np.array(state)).to(vl_embs_list[-1].device, dtype=vl_embs_list[-1].dtype)

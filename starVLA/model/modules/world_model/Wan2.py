@@ -101,9 +101,9 @@ class _Wan2_Interface(nn.Module):
         self.vae_scale_factor_temporal = 2 ** sum(self.vae.temperal_downsample)
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
-        # Freeze VAE and text encoder by default
-        self.vae.requires_grad_(False)
-        self.text_encoder.requires_grad_(False)
+        # # Freeze VAE and text encoder by default
+        # self.vae.requires_grad_(False)
+        # self.text_encoder.requires_grad_(False)
 
         # DiT: 24 heads × 128 dim = 3072
         self._hidden_size = (
@@ -268,21 +268,10 @@ class _Wan2_Interface(nn.Module):
         """
         assert len(images) == len(instructions)
 
-        # Move encoders to GPU for encoding, then offload to CPU to free VRAM
-        # for the transformer + action head forward pass.
-        # Trade-off: ~1.5s per step in CPU↔GPU transfer vs ~12 GB VRAM savings.
-        # See improvement.md for alternatives (pinned memory, offline precompute, etc.)
         device = next(self.transformer.parameters()).device
-        self.text_encoder.to(device)
-        self.vae.to(device)
 
         text_embeds = self._encode_text(instructions)
         latents = self._encode_images_vae(images)
-
-        # Offload T5 and VAE to CPU to free VRAM for the transformer
-        self.text_encoder.to("cpu")
-        self.vae.to("cpu")
-        torch.cuda.empty_cache()
 
         batch_size = latents.shape[0]
         device = latents.device

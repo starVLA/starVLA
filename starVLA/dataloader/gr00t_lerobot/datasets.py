@@ -2139,6 +2139,7 @@ class LeRobotMixtureDataset(Dataset):
                     rng.shuffle(self._step_order[-1])
                 self._step_pos.append(0)
 
+        self._getitem_count = 0
         self.update_metadata(metadata_config)
 
     @property
@@ -2222,8 +2223,6 @@ class LeRobotMixtureDataset(Dataset):
         trajectory_id, base_index = dataset.all_steps[single_step_index]
         return dataset, trajectory_id, base_index
 
-    _getitem_count = 0
-
     def __getitem__(self, index: int) -> dict:
         """Get the data for a single trajectory and start index.
 
@@ -2233,8 +2232,8 @@ class LeRobotMixtureDataset(Dataset):
         Returns:
             dict: The data for the trajectory and start index.
         """
-        LeRobotMixtureDataset._getitem_count += 1
-        if LeRobotMixtureDataset._getitem_count % 1000 == 0:
+        self._getitem_count += 1
+        if self._getitem_count % 1000 == 0:
             gc.collect()
 
         max_retries = 10

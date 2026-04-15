@@ -91,8 +91,8 @@ class WanGR00TDefaultConfig:
         "num_inference_timesteps": 4,
         "num_target_vision_tokens": 32,
         "diffusion_model_cfg": {
-            # Will be set at runtime to match world model hidden_size (3072)
-            "cross_attention_dim": 3072,
+            # Decoupled from world model hidden_size; wm_projector bridges the gap
+            "cross_attention_dim": 512,
             "dropout": 0.2,
             "final_dropout": True,
             "interleave_self_attention": True,
@@ -127,9 +127,10 @@ class Wan_GR00T(baseframework):
         # Load world model backbone
         self.backbone = get_world_model(config=self.config)
 
-        # Align cross-attention dim to world model hidden size (3072)
+        # Project world model features to action model's cross-attention dim
         wm_hidden = self.backbone.model.config.hidden_size
-        self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = wm_hidden
+        cross_attn_dim = self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim
+        self.wm_projector = torch.nn.Linear(wm_hidden, cross_attn_dim)
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
@@ -156,6 +157,7 @@ class Wan_GR00T(baseframework):
             )
             # hidden_states[-1]: [B, N_tokens, hidden_dim=3072]
             last_hidden = wm_outputs.hidden_states[-1]
+            last_hidden = self.wm_projector(last_hidden)
 
         # Step 3: Action head forward and loss
         with torch.autocast("cuda", dtype=torch.float32):
@@ -201,6 +203,7 @@ class Wan_GR00T(baseframework):
                 return_dict=True,
             )
             last_hidden = wm_outputs.hidden_states[-1]
+            last_hidden = self.wm_projector(last_hidden)
 
         state = (
             torch.from_numpy(np.array(state)).to(last_hidden.device, dtype=last_hidden.dtype)
