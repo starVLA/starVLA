@@ -1,5 +1,5 @@
 run_id: starvla
-run_root_dir: results/Checkpoints
+run_root_dir: playground/Checkpoints
 seed: 42
 trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity

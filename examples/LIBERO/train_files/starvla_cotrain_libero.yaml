@@ -1,5 +1,5 @@
 run_id: starvla
-run_root_dir: results/Checkpoints
+run_root_dir: playground/Checkpoints
 seed: 42
 trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity
@@ -10,41 +10,14 @@ is_debug: false
 framework:
   name: QwenGR00T
   qwenvl:
-    base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct-Action
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct
     attn_implementation: flash_attention_2
     vl_hidden_dim: 2048
-  dino:
-    dino_backbone: dinov2_vits14
   action_model:
-    action_model_type: DiT-B
-    action_hidden_dim: 1024     # TODO merge with hidden_size, in config v2
-    hidden_size: 1024     
-    add_pos_embed: True
-    max_seq_len: 1024
     action_dim: 7
     state_dim: 7
     future_action_window_size: 7
-    action_horizon: 8 # need merge with future_action_window_size 
-    past_action_window_size: 0
-    repeated_diffusion_steps: 8
-    noise_beta_alpha: 1.5
-    noise_beta_beta: 1.0
-    noise_s: 0.999
-    num_timestep_buckets: 1000
-    num_inference_timesteps: 4
-    num_target_vision_tokens: 32
-    diffusion_model_cfg:    # DiT Transformers 的参数
-      cross_attention_dim: 2048 # VLM 的 dim
-      dropout: 0.2
-      final_dropout: true
-      interleave_self_attention: true
-      norm_type: "ada_norm"
-      num_layers: 16
-      output_dim: 1024
-      positional_embeddings: null
-
-  reduce_in_full_precision: true
-
+    action_horizon: 8
 
 datasets:
   vlm_data:
@@ -63,7 +36,7 @@ datasets:
   vla_data:
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
-    data_mix: libero_all # libero_goal
+    data_mix: libero_goal # libero_all
     action_type: delta_qpos
     sequential_step_sampling: False
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
@@ -88,7 +61,7 @@ trainer:
   lr_scheduler_type: cosine_with_min_lr
   scheduler_specific_kwargs:
     min_lr: 1.0e-06
-  freeze_modules: ''
+  freeze_modules: 'qwen_vl_interface'
   loss_scale:
     vla: 1.0
     vlm: 0.1
@@ -97,7 +70,8 @@ trainer:
   weight_decay: 0.0
   logging_frequency: 10
   gradient_clipping: 1.0
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
 
   optimizer:
     name: AdamW
