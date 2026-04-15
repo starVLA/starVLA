@@ -129,6 +129,7 @@ class UnifiedTrainer(TrainerUtils):
         self.accelerator = accelerator
 
         self.completed_steps = 0
+        self._pending_state_restore = None  # set by _init_checkpointing, consumed after prepare
         self.supported_tags = [name for name in self.data_manager.names if self.model.supports_training_tag(name)]
         self.skipped_tags = [name for name in self.data_manager.names if name not in self.supported_tags]
 
@@ -164,14 +165,20 @@ class UnifiedTrainer(TrainerUtils):
         self.model = self.freeze_backbones(self.model, freeze_modules=freeze_modules)
         self.print_trainable_parameters(self.model)
 
-        # Distributed preparation: model + optimizer + dataloaders in ONE call
+        # Distributed preparation: model + optimizer + scheduler + dataloaders in ONE call
         # DeepSpeed requires at least one dataloader in prepare() to infer train_micro_batch_size_per_gpu
         dl_names = list(self.data_manager.dataloaders.keys())
         all_dls = [self.data_manager.dataloaders[n] for n in dl_names]
-        prepared = self.accelerator.prepare(self.model, self.optimizer, *all_dls)
-        self.model, self.optimizer = prepared[0], prepared[1]
+        prepared = self.accelerator.prepare(self.model, self.optimizer, self.lr_scheduler, *all_dls)
+        self.model, self.optimizer, self.lr_scheduler = prepared[0], prepared[1], prepared[2]
         for i, name in enumerate(dl_names):
-            self.data_manager.dataloaders[name] = prepared[2 + i]
+            self.data_manager.dataloaders[name] = prepared[3 + i]
+
+        # Restore full training state if deferred from _init_checkpointing
+        if self._pending_state_restore:
+            self.accelerator.load_state(self._pending_state_restore)
+            logger.info(f"Restored full training state from {self._pending_state_restore}")
+            self._pending_state_restore = None
 
         self._init_wandb()
 
@@ -201,10 +208,19 @@ class UnifiedTrainer(TrainerUtils):
             resume_from_checkpoint, self.completed_steps = self._get_latest_checkpoint(self.checkpoint_dir)
             if resume_from_checkpoint:
                 self.resume_from_checkpoint = resume_from_checkpoint
-                self.model = self.load_pretrained_backbones(self.model, self.resume_from_checkpoint, reload_modules=None)
-                logger.info(
-                    f"Resuming training from checkpoint: {self.resume_from_checkpoint}, steps: {self.completed_steps}"
-                )
+                state_dir = self._get_training_state_dir(self.checkpoint_dir, self.completed_steps)
+                if state_dir:
+                    self._pending_state_restore = state_dir
+                    logger.info(
+                        f"Will restore full training state from: {state_dir} (step {self.completed_steps})"
+                    )
+                else:
+                    self.model = self.load_pretrained_backbones(
+                        self.model, self.resume_from_checkpoint, reload_modules=None
+                    )
+                    logger.info(
+                        f"Resuming from model-only checkpoint: {self.resume_from_checkpoint} (step {self.completed_steps})"
+                    )
                 return
 
             logger.warning(f"No valid checkpoint found in {self.checkpoint_dir}. Starting training from scratch.")
@@ -222,6 +238,9 @@ class UnifiedTrainer(TrainerUtils):
 
     def _adjust_lr_scheduler_for_resume(self):
         """Adjust LR scheduler state after resuming from non-zero steps."""
+        if self._pending_state_restore:
+            logger.info("Skipping manual LR scheduler adjustment — full state will be restored from checkpoint")
+            return
         if self.completed_steps > 0:
             logger.info(f"Adjusting LR scheduler for resume from step {self.completed_steps}")
             for _ in range(self.completed_steps):
@@ -237,6 +256,11 @@ class UnifiedTrainer(TrainerUtils):
 
     def _save_checkpoint(self):
         """Save current training state."""
+        # Save full training state (collective op — all ranks must participate for ZeRO)
+        training_state_dir = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}_training_state")
+        self.accelerator.save_state(training_state_dir)
+        logger.info(f"Full training state saved to {training_state_dir}")
+
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")

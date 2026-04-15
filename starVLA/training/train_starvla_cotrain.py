@@ -139,11 +139,12 @@ class VLAMTrainer(TrainerUtils):
         self.model = self.freeze_backbones(self.model, freeze_modules=freeze_modules)
         self.print_trainable_parameters(self.model)
 
-        self.model, self.optimizer, self.vla_train_dataloader, self.vlm_train_dataloader = (
+        self.model, self.optimizer, self.lr_scheduler, self.vla_train_dataloader, self.vlm_train_dataloader = (
             self.setup_distributed_training(
                 self.accelerator,
                 self.model,
                 self.optimizer,
+                self.lr_scheduler,
                 self.vla_train_dataloader,
                 self.vlm_train_dataloader,
             )
@@ -172,23 +173,33 @@ class VLAMTrainer(TrainerUtils):
             )
 
     def _init_checkpointing(self):
-        """Initialize checkpoint directory."""
+        """Initialize checkpoint directory and handle resume."""
         self.checkpoint_dir = os.path.join(self.config.output_dir, "checkpoints")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
-        pretrained_checkpoint = getattr(self.config.trainer, "pretrained_checkpoint", None)
         is_resume = getattr(self.config.trainer, "is_resume", False)
-
-        if pretrained_checkpoint and is_resume:
-            self._load_checkpoint(self.config.resume_from_checkpoint)
-
-    def _load_checkpoint(self, checkpoint_path):
-        """Load checkpoint."""
-        self.accelerator.load_state(checkpoint_path)
-        self.accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
+        if is_resume:
+            resume_ckpt, self.completed_steps = self._get_latest_checkpoint(self.checkpoint_dir)
+            if resume_ckpt:
+                state_dir = self._get_training_state_dir(self.checkpoint_dir, self.completed_steps)
+                if state_dir:
+                    self.accelerator.load_state(state_dir)
+                    logger.info(f"Restored full training state from {state_dir} (step {self.completed_steps})")
+                else:
+                    # Legacy: model-only checkpoint
+                    unwrapped = self.accelerator.unwrap_model(self.model)
+                    self.load_pretrained_backbones(unwrapped, resume_ckpt, reload_modules=None)
+                    logger.info(f"Resumed from model-only checkpoint: {resume_ckpt} (step {self.completed_steps})")
+            else:
+                logger.warning(f"No valid checkpoint found in {self.checkpoint_dir}. Starting from scratch.")
 
     def _save_checkpoint(self):
         """Save current training state."""
+        # Save full training state (collective op — all ranks must participate for ZeRO)
+        training_state_dir = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}_training_state")
+        self.accelerator.save_state(training_state_dir)
+        logger.info(f"Full training state saved to {training_state_dir}")
+
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")

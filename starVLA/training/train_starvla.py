@@ -120,6 +120,7 @@ class VLATrainer(TrainerUtils):
         self.accelerator = accelerator
 
         self.completed_steps = 0
+        self._pending_state_restore = None  # set by _init_checkpointing, consumed after prepare
         self.total_batch_size = self._calculate_total_batch_size()
 
     def prepare_training(self):
@@ -138,12 +139,19 @@ class VLATrainer(TrainerUtils):
         self.model = self.freeze_backbones(self.model, freeze_modules=freeze_modules)
         self.print_trainable_parameters(self.model)
 
-        self.model, self.optimizer, self.vla_train_dataloader = self.setup_distributed_training(
+        self.model, self.optimizer, self.lr_scheduler, self.vla_train_dataloader = self.setup_distributed_training(
             self.accelerator,
             self.model,
             self.optimizer,
+            self.lr_scheduler,
             self.vla_train_dataloader,
         )
+
+        # Restore full training state if deferred from _init_checkpointing
+        if self._pending_state_restore:
+            self.accelerator.load_state(self._pending_state_restore)
+            logger.info(f"Restored full training state from {self._pending_state_restore}")
+            self._pending_state_restore = None
 
         self._init_wandb()
 
@@ -179,10 +187,21 @@ class VLATrainer(TrainerUtils):
             resume_from_checkpoint, self.completed_steps = self._get_latest_checkpoint(self.checkpoint_dir)
             if resume_from_checkpoint:
                 self.resume_from_checkpoint = resume_from_checkpoint
-                self.model = self.load_pretrained_backbones(self.model, self.resume_from_checkpoint, reload_modules=None)
-                logger.info(
-                    f"Resuming training from checkpoint: {self.resume_from_checkpoint}, steps: {self.completed_steps}"
-                )
+                state_dir = self._get_training_state_dir(self.checkpoint_dir, self.completed_steps)
+                if state_dir:
+                    # Defer full state restore to after accelerator.prepare()
+                    self._pending_state_restore = state_dir
+                    logger.info(
+                        f"Will restore full training state from: {state_dir} (step {self.completed_steps})"
+                    )
+                else:
+                    # Legacy: model-only checkpoint, no optimizer state
+                    self.model = self.load_pretrained_backbones(
+                        self.model, self.resume_from_checkpoint, reload_modules=None
+                    )
+                    logger.info(
+                        f"Resuming from model-only checkpoint: {self.resume_from_checkpoint} (step {self.completed_steps})"
+                    )
                 return
 
             logger.warning(f"No valid checkpoint found in {self.checkpoint_dir}. Starting training from scratch.")
@@ -200,6 +219,9 @@ class VLATrainer(TrainerUtils):
 
     def _adjust_lr_scheduler_for_resume(self):
         """Adjust LR scheduler state after resuming from non-zero steps."""
+        if self._pending_state_restore:
+            logger.info("Skipping manual LR scheduler adjustment — full state will be restored from checkpoint")
+            return
         if self.completed_steps > 0:
             logger.info(f"Adjusting LR scheduler for resume from step {self.completed_steps}")
             for _ in range(self.completed_steps):
@@ -215,6 +237,11 @@ class VLATrainer(TrainerUtils):
 
     def _save_checkpoint(self):
         """Save current training state."""
+        # Save full training state (collective op — all ranks must participate for ZeRO)
+        training_state_dir = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}_training_state")
+        self.accelerator.save_state(training_state_dir)
+        logger.info(f"Full training state saved to {training_state_dir}")
+
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
@@ -240,7 +267,7 @@ class VLATrainer(TrainerUtils):
                 self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
                 full_cfg_path = output_dir / "config.full.yaml"
                 logger.info(f"📦 Saving full merged configuration to `{full_cfg_path}`...")
-                self.config.save_full_config(full_cfg_path, resolve=True)
+                self.config.save_full_config(full_cfg_path)
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()

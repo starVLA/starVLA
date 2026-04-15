@@ -508,6 +508,17 @@ class TrainerUtils:
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
         return latest_checkpoint_path, completed_steps
 
+    def _get_training_state_dir(self, checkpoint_dir, step_number):
+        """Return path to full training state directory if it exists, else None.
+
+        Full training state (optimizer, scheduler, RNG) is saved by
+        ``accelerator.save_state()`` into ``steps_<N>_training_state/``.
+        """
+        state_dir = os.path.join(checkpoint_dir, f"steps_{step_number}_training_state")
+        if os.path.isdir(state_dir):
+            return state_dir
+        return None
+
 
 import os
 
