@@ -503,7 +503,7 @@ class AccessTrackedConfig:
             else:
                 raise ValueError(f"Unsupported file format: {filepath.suffix}")
 
-    def save_full_config(self, filepath: Path):
+    def save_full_config(self, filepath: Path, resolve: bool = True):
         """Save the complete configuration (all parameters) to file."""
         filepath = Path(filepath)
         filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -512,9 +512,9 @@ class AccessTrackedConfig:
             source = self.get_root()._cfg
         with open(filepath, "w") as f:
             if filepath.suffix == ".json":
-                json.dump(_original_to_container(source, resolve=True), f, indent=2)
+                json.dump(_original_to_container(source, resolve=resolve), f, indent=2)
             elif filepath.suffix in (".yaml", ".yml"):
-                _original_save(source, f, resolve=True)
+                _original_save(source, f, resolve=resolve)
             else:
                 raise ValueError(f"Unsupported file format: {filepath.suffix}")
 
