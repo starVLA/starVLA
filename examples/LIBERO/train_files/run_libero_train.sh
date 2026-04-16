@@ -16,7 +16,7 @@ base_vlm=playground/Pretrained_models/Qwen3-VL-4B-Instruct
 config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
 libero_data_root=playground/Datasets/LEROBOT_LIBERO_DATA
 data_mix=libero_all
-run_root_dir=./results/Checkpoints
+run_root_dir=./playground/Checkpoints
 run_id=1229_libero4in1_qwen3oft
 # === End of environment variable configuration ===
 ###########################################################################################

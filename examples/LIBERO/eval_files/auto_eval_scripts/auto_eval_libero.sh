@@ -9,12 +9,12 @@ SCRIPT_PATH="./examples/LIBERO/eval_files/auto_eval_scripts/eval_libero_parall.s
 ###############################################################################
 
 # --- Checkpoint directory (all .pt files inside will be evaluated) ---
-CKPT_DIR="results/Checkpoints/0405_libero4in1_CosmoPredict2GR00T/checkpoints"
+CKPT_DIR="playground/Checkpoints/0405_libero4in1_CosmoPredict2GR00T/checkpoints"
 
 # --- Or specify an explicit list (overrides CKPT_DIR when non-empty) ---
 CKPT_LIST=(
-    # "results/Checkpoints/.../steps_30000_pytorch_model.pt"
-    # "results/Checkpoints/.../steps_50000_pytorch_model.pt"
+    # "playground/Checkpoints/.../steps_30000_pytorch_model.pt"
+    # "playground/Checkpoints/.../steps_50000_pytorch_model.pt"
 )
 
 # --- Task suites to evaluate ---
