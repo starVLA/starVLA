@@ -8,6 +8,27 @@ DOMINO reports two primary evaluation metrics: **Success Rate (SR)** and **Manip
 
 ---
 
+### 📊 Experimental Results
+
+| Model | Backbone | SR | MS |
+| ----- | -------- | -- | -- |
+| OpenVLA | Llama-2 | 1.54 | 6.10 |
+| RDT-1B | DiT-1B | 5.34 | 17.71 |
+| $\pi_0$ | PaliGemma | 8.17 | 23.96 |
+| $\pi_0$-FAST | PaliGemma | 3.54 | 20.87 |
+| $\pi_{0.5}$ | PaliGemma | 9.63 | 26.17 |
+| InternVLA-M1 | InternVL | 5.40 | 27.57 |
+| OpenVLA-OFT | Llama-2 | 9.06 | 24.06 |
+| PUMA | Qwen3-VL | **17.20** | **34.97** |
+| **StarVLA-GR00T** | Qwen3-VL | 6.10 | 28.60 |
+| **StarVLA-Adapter** | Qwen3-VL | 4.40 | 24.31 |
+| **StarVLA-FAST** | Qwen3-VL | 5.74 | 20.66 |
+| **StarVLA-OFT** | Qwen3-VL | 10.86 | 30.49 |
+
+We train one policy for all 35 dynamic tasks under clean setting with dynamic coefficient $\alpha=0.1$.
+
+---
+
 ## 📦 1. Environment Setup
 
 Evaluation uses two environments:
@@ -15,9 +36,9 @@ Evaluation uses two environments:
 - `starvla`: runs training and the policy server
 - `domino`: runs the DOMINO simulator and benchmark
 
-### starVLA environment
+### StarVLA environment
 
-Follow the repository root [README.md](../../README.md) to install starVLA and prepare the training environment.
+Follow the repository root [README.md](../../README.md) to install StarVLA and prepare the training environment.
 
 ### DOMINO environment
 
@@ -106,7 +127,7 @@ The training config used by the launcher is [starvla_train_domino.yaml](./train_
 
 Evaluation runs two processes in parallel:
 
-- starVLA policy server in the `starvla` environment
+- StarVLA policy server in the `starvla` environment
 - DOMINO benchmark in the `domino` environment
 
 ### Option A: Launcher script
@@ -203,7 +224,7 @@ When you run evaluation through `start_eval.sh` or `eval.sh`, DOMINO summarizes:
 
 Historical information is important for DOMINO because the benchmark focuses on dynamic manipulation rather than static single-frame understanding.
 
-The starVLA-DOMINO bridge already exposes a generic history interface through [deploy_policy.yml](./eval_files/deploy_policy.yml) and [model2robotwin_interface.py](./eval_files/model2robotwin_interface.py).
+The StarVLA-DOMINO bridge already exposes a generic history interface through [deploy_policy.yml](./eval_files/deploy_policy.yml) and [model2robotwin_interface.py](./eval_files/model2robotwin_interface.py).
 
 You can enable and configure history in [deploy_policy.yml](./eval_files/deploy_policy.yml):
 
