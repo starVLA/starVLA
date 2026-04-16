@@ -9,9 +9,9 @@ This guide walks you through the complete StarVLA workflow — from installation
 ## Table of Contents
 
 - [0. Installation](#0-installation)
-- [1. Verify Your Installation](#1-verify-your-installation)
-- [2. Prepare Training Data](#2-prepare-training-data)
-- [3. Prepare Pretrained Models](#3-prepare-pretrained-models)
+- [1. Prepare Training Data](#1-prepare-training-data)
+- [2. Prepare Pretrained Models](#2-prepare-pretrained-models)
+- [3. Verify Your Installation](#3-verify-your-installation)
 - [4. Understanding the Training Config](#4-understanding-the-training-config)
 - [5. Understanding the Training Script](#5-understanding-the-training-script)
 - [6. Launch Training](#6-launch-training)
@@ -51,25 +51,16 @@ We have verified that `flash-attn==2.7.4.post1` works well with nvcc versions `1
 
 ---
 
-## 1. Verify Your Installation
-
-Run a quick smoke test to make sure the framework loads correctly:
-
-```bash
-python starVLA/model/framework/QwenGR00T.py
-```
-
-This requires [Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) at `./playground/Pretrained_models/Qwen3-VL-4B-Instruct` (see [Step 3](#3-prepare-pretrained-models)). It should print the model architecture and run a forward pass on fake data without errors.
-
----
-
-## 2. Prepare Training Data
+## 1. Prepare Training Data
 
 StarVLA uses **LeRobot-format** datasets. We provide a one-command script to download all four LIBERO suites (Spatial, Object, Goal, Long-Horizon) plus the co-training VLM data:
 
 ```bash
 # Set DEST to where you want to store the raw data (can be a shared disk)
 export DEST=/path/to/your/data/directory
+# For Chinese users, use the mirror site for acceleration.
+# export HF_ENDPOINT=https://hf-mirror.com
+
 bash examples/LIBERO/data_preparation.sh
 ```
 
@@ -121,21 +112,57 @@ python starVLA/dataloader/lerobot_datasets.py \
   --config_yaml examples/LIBERO/train_files/starvla_cotrain_libero.yaml
 ```
 
+<details>
+<summary><b>If runs with error</b></summary>
+
+Please check the value of `data_root_dir` in `starvla_cotrain_libero.yaml` config file, which should be `playground/Datasets/LEROBOT_LIBERO_DATA`.
+</details>
+
 ---
 
-## 3. Prepare Pretrained Models
+## 2. Prepare Pretrained Models
 
 Download the base VLM to `playground/Pretrained_models/`:
 
 ```bash
+# For Chinese users, use the mirror site for acceleration.
+# export HF_ENDPOINT=https://hf-mirror.com
+
 # Qwen3-VL (recommended)
-huggingface-cli download Qwen/Qwen3-VL-4B-Instruct --local-dir playground/Pretrained_models/Qwen3-VL-4B-Instruct
+hf download Qwen/Qwen3-VL-4B-Instruct --local-dir playground/Pretrained_models/Qwen3-VL-4B-Instruct
 
 # For FAST framework, use the action-extended version instead:
-# huggingface-cli download StarVLA/Qwen3-VL-4B-Instruct-Action --local-dir playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
+# hf download StarVLA/Qwen3-VL-4B-Instruct-Action --local-dir playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
 ```
 
 See [Model Zoo](model_zoo.md) for all available base models and finetuned checkpoints.
+
+---
+
+## 3. Verify Your Installation
+
+Run a quick smoke test to make sure the framework loads correctly:
+
+```bash
+python starVLA/model/framework/VLM4A/QwenGR00T.py
+```
+
+This requires [Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) at `./playground/Pretrained_models/Qwen3-VL-4B-Instruct` (see [Step 2](#2-prepare-pretrained-models)). It should print the model architecture and run a forward pass on fake data without errors.
+
+<details>
+<summary><b>If runs with error</b></summary>
+
+The potential solution is use `starvla_cotrain_libero.yaml` rather `starvla_cotrain_robotwin.yaml`. For example, 
+```python
+parser.add_argument(
+    "--config_yaml",
+    type=str,
+    # default="./examples/Robotwin/train_files/starvla_cotrain_robotwin.yaml",
+    default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
+    help="Path to YAML config",
+)
+```
+</details>
 
 ---
 
