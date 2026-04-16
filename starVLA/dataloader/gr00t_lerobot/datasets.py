@@ -42,6 +42,7 @@ from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
 from torch.utils.data import Dataset
 from tqdm import tqdm
+from io import BytesIO
 
 from starVLA.dataloader.gr00t_lerobot.embodiment_tags import EmbodimentTag
 from starVLA.dataloader.gr00t_lerobot.schema import (
@@ -769,9 +770,23 @@ class LeRobotSingleDataset(Dataset):
                 channels = le_video_meta["shape"][le_video_meta["names"].index("channel")]
                 fps = le_video_meta["video_info"]["video.fps"]
             except (ValueError, KeyError):
-                # channels = le_video_meta["shape"][le_video_meta["names"].index("channels")]
-                channels = le_video_meta["info"]["video.channels"]
-                fps = le_video_meta["info"]["video.fps"]
+                try:
+                    # channels = le_video_meta["shape"][le_video_meta["names"].index("channels")]
+                    channels = le_video_meta["info"]["video.channels"]
+                    fps = le_video_meta["info"]["video.fps"]
+                except (ValueError, KeyError):
+                    # For datasets like calvin that store images (not videos) in parquet files
+                    # Try to get channels from shape, and fps from top-level info.json
+                    try:
+                        channels = le_video_meta["shape"][le_video_meta["names"].index("channel")]
+                    except ValueError:
+                        # Try "rgb" or "channels" as fallback
+                        try:
+                            channels = le_video_meta["shape"][le_video_meta["names"].index("rgb")]
+                        except ValueError:
+                            channels = le_video_meta["shape"][le_video_meta["names"].index("channels")]
+                    # Get fps from top-level info.json or use default
+                    fps = le_info.get("fps", 10)  # Default to 10 fps if not found
             simplified_modality_meta["video"][new_key] = {
                 "resolution": [width, height],
                 "channels": channels,
@@ -846,6 +861,25 @@ class LeRobotSingleDataset(Dataset):
                 state_action_meta = le_modality_meta.get_key_meta(f"{our_modality}.{subkey}")
                 assert isinstance(state_action_meta, LeRobotStateActionMetadata)
                 le_modality = state_action_meta.original_key
+                # If original_key is None, use the modality name (state/action) or actions for action
+                if le_modality is None:
+                    if our_modality == "action":
+                        le_modality = "actions"  # calvin uses "actions" not "action"
+                    else:
+                        le_modality = our_modality
+                # Handle different dataset formats: some use "observation.state", others use "state"
+                if le_modality not in le_statistics:
+                    # Try alternative key names
+                    if our_modality == "state":
+                        alternative_keys = ["observation.state", "state"]
+                    else:  # action
+                        alternative_keys = ["observation.actions", "actions", "action"]
+                    for alt_key in alternative_keys:
+                        if alt_key in le_statistics:
+                            le_modality = alt_key
+                            break
+                    else:
+                        raise KeyError(f"Could not find statistics for {our_modality}. Tried: {alternative_keys}, available keys: {list(le_statistics.keys())}")
                 for stat_name in le_statistics[le_modality]:
                     indices = np.arange(
                         state_action_meta.start,
@@ -1517,6 +1551,25 @@ class LeRobotSingleDataset(Dataset):
             )
         return self.dataset_path / video_filename
 
+    def _decode_image_entry(self, entry) -> np.ndarray:
+        """Decode an image entry from parquet into a numpy array (H, W, C)."""
+        if isinstance(entry, dict):
+            if entry.get("bytes"):
+                img = Image.open(BytesIO(entry["bytes"])).convert("RGB")
+            elif entry.get("path"):
+                img = Image.open(entry["path"]).convert("RGB")
+            else:
+                raise ValueError("Unsupported image dict format: missing bytes/path")
+        elif isinstance(entry, (bytes, bytearray)):
+            img = Image.open(BytesIO(entry)).convert("RGB")
+        elif isinstance(entry, Image.Image):
+            img = entry.convert("RGB")
+        elif isinstance(entry, np.ndarray):
+            return entry
+        else:
+            raise ValueError(f"Unsupported image entry type: {type(entry)}")
+        return np.array(img)
+
     def get_video(
         self,
         trajectory_id: int,
@@ -1546,11 +1599,21 @@ class LeRobotSingleDataset(Dataset):
         assert key.startswith("video."), f"Video key must start with 'video.', got {key}"
         # Get the sub-key
         key = key.replace("video.", "")
+        original_key = self.lerobot_modality_meta.video[key].original_key
+        if original_key is None:
+            original_key = key
         video_path = self.get_video_path(trajectory_id, key)
         # Get the action/state timestamps for each frame in the video
         assert self.curr_traj_data is not None, f"No data found for {trajectory_id=}"
         assert "timestamp" in self.curr_traj_data.columns, f"No timestamp found in {trajectory_id=}"
         timestamp: np.ndarray = self.curr_traj_data["timestamp"].to_numpy()
+        # If dataset does not provide video files, decode images from parquet directly.
+        if self.lerobot_info_meta.get("total_videos", 0) == 0:
+            frames = []
+            column = self.curr_traj_data[original_key]
+            for idx in step_indices:
+                frames.append(self._decode_image_entry(column.iloc[idx]))
+            return np.stack(frames, axis=0)
         # Get the corresponding video timestamps from the step indices
         video_timestamp = timestamp[step_indices]
         if self._lerobot_version == "v3.0":
@@ -2243,6 +2306,8 @@ class LeRobotMixtureDataset(Dataset):
             try:
                 while True:  # @DUG
                     dataset, trajectory_id, step = self.sample_step(index)
+                    if dataset.lerobot_info_meta.get("total_videos", 0) == 0:
+                        break
                     key = dataset.modality_keys["video"][0].replace("video.", "")
                     video_path = dataset.get_video_path(trajectory_id, key)
                     if os.path.exists(video_path):

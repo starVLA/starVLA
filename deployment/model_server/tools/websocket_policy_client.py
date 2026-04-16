@@ -44,15 +44,26 @@ class WebsocketClientPolicy:
 
             try:
                 headers = {"Authorization": f"Api-Key {self._api_key}"} if self._api_key else None
-                conn = websockets.sync.client.connect(
-                    self._uri,
-                    compression=None,
-                    max_size=None,
-                    additional_headers=headers,
-                    open_timeout=150,
-                    ping_interval=20,
-                    ping_timeout=20,
-                )
+                # Try with ping parameters first (for newer websockets versions)
+                try:
+                    conn = websockets.sync.client.connect(
+                        self._uri,
+                        compression=None,
+                        max_size=None,
+                        additional_headers=headers,
+                        open_timeout=150,
+                        ping_interval=20,
+                        ping_timeout=20,
+                    )
+                except TypeError:
+                    # Fallback for older websockets versions that don't support ping_interval/ping_timeout
+                    conn = websockets.sync.client.connect(
+                        self._uri,
+                        compression=None,
+                        max_size=None,
+                        additional_headers=headers,
+                        open_timeout=150,
+                    )
                 metadata = msgpack_numpy.unpackb(conn.recv())
                 return conn, metadata
             except ConnectionRefusedError:
