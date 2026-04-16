@@ -125,12 +125,12 @@ _RANDOM_STATIC = [(f"Randomized/{t}", 1.0, "robotwin") for t in DOMINO_35_TASKS]
 
 
 DATASET_NAMED_MIXTURES = {
-    # 35 × (Clean_Dynamic + Random_Dynamic) — the default DOMINO training mix
+    # 35 × (Clean_Dynamic + Random_Dynamic)
     "domino": _CLEAN_DYNAMIC + _RANDOM_DYNAMIC,
 
     # Clean-only / random-only variants for ablations
-    "domino_clean_dynamic": _CLEAN_DYNAMIC,
-    "domino_random_dynamic": _RANDOM_DYNAMIC,
+    "domino_clean": _CLEAN_DYNAMIC,
+    "domino_random": _RANDOM_DYNAMIC,
 
     # DOMINO + RoboTwin-static co-training (matches tab. "exp_mix" in the paper)
     "domino_cotrain": _CLEAN_DYNAMIC + _RANDOM_DYNAMIC + _CLEAN_STATIC + _RANDOM_STATIC,

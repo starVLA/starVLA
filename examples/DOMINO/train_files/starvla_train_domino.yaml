@@ -1,4 +1,4 @@
-run_id: starvla_domino
+run_id: starvla_domino_clean
 run_root_dir: results/Checkpoints
 seed: 42
 trackers: [jsonl, wandb]
@@ -62,10 +62,10 @@ datasets:
     data_root_dir: playground/Datasets/DOMINO
     # Available mixtures (see examples/DOMINO/train_files/data_registry/data_config.py):
     #   domino                 - 35 tasks x (Clean_Dynamic + Random_Dynamic)
-    #   domino_clean_dynamic   - 35 tasks x Clean_Dynamic
-    #   domino_random_dynamic  - 35 tasks x Random_Dynamic
+    #   domino_clean           - 35 tasks x Clean_Dynamic
+    #   domino_random          - 35 tasks x Random_Dynamic
     #   domino_cotrain         - DOMINO dynamic + RoboTwin static co-training
-    data_mix: domino
+    data_mix: domino_clean
     action_type: abs_qpos
     action_mode: abs
     sequential_step_sampling: False

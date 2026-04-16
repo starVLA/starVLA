@@ -94,8 +94,8 @@ Copy [modality.json](./train_files/modality.json) into the `meta/` directory of 
 
 Supported `data_mix` options:
 
-- `domino_clean_dynamic`: train with `Clean_Dynamic`
-- `domino_random_dynamic`: train with `Random_Dynamic`
+- `domino_clean`: train with `Clean_Dynamic`
+- `domino_random`: train with `Random_Dynamic`
 - `domino`: train with both dynamic splits
 - `domino_cotrain`: train with DOMINO dynamic data plus static `Clean` and `Randomized`
 

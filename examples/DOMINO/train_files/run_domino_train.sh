@@ -16,10 +16,10 @@ config_yaml=./examples/DOMINO/train_files/starvla_train_domino.yaml
 run_root_dir=./results/Checkpoints
 # Available mixtures (see examples/DOMINO/train_files/data_registry/data_config.py):
 #   domino                 - 35 tasks x (Clean_Dynamic + Random_Dynamic)
-#   domino_clean_dynamic   - 35 tasks x Clean_Dynamic
-#   domino_random_dynamic  - 35 tasks x Random_Dynamic
+#   domino_clean           - 35 tasks x Clean_Dynamic
+#   domino_random          - 35 tasks x Random_Dynamic
 #   domino_cotrain         - DOMINO dynamic + RoboTwin static co-training
-data_mix=domino
+data_mix=domino_clean
 run_id=starvla_${data_mix}_qwen3OFT
 # === End of environment variable configuration ===
 ###########################################################################################
