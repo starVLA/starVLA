@@ -237,6 +237,7 @@ tmp
 
 */**/*.md
 */*.md
+!examples/**/README.md
 
 
 logs/*

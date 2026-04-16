@@ -1,0 +1,21 @@
+policy_name: model2robotwin_interface
+task_name: null
+task_config: null
+ckpt_setting: null
+seed: null
+instruction_type: unseen
+
+# StarVLA Client Parameters
+host: "127.0.0.1"
+port: 5694
+unnorm_key: "new_embodiment"
+action_mode: "abs"
+normalization_mode: "min_max"  # options: min_max, q99
+# policy_ckpt_path is injected at runtime by eval.sh via --overrides
+
+# Historical context (disabled by default; set history_k > 0 to enable)
+history_k: 0              # number of history frames (0 = current frame only)
+# history_stride: 1       # stride between sampled frames
+# history_mode: "flow"    # "flow", "frames", or "none"
+# history_image_size: [224, 224]
+# history_flow_compute_size: [128, 128]
