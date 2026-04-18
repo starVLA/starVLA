@@ -62,7 +62,9 @@ class LeRobotStateActionMetadata(LeRobotModalityField):
         ...,
         description="The end index of the modality in the concatenated state/action vector",
     )
-    rotation_type: Optional[RotationType] = Field(default=None, description="The type of rotation for the modality")
+    rotation_type: Optional[RotationType] = Field(
+        default=None, description="The type of rotation for the modality"
+    )
     absolute: bool = Field(default=True, description="Whether the modality is absolute")
     dtype: str = Field(
         default="float64",
@@ -153,7 +155,9 @@ class LeRobotModalityMetadata(BaseModel):
                 )
             return self.video[subkey]
         elif modality == "annotation":
-            assert self.annotation is not None, "Trying to get annotation metadata for a dataset with no annotations"
+            assert (
+                self.annotation is not None
+            ), "Trying to get annotation metadata for a dataset with no annotations"
             if subkey not in self.annotation:
                 raise ValueError(
                     f"Key: {key}, annotation key {subkey} not found in metadata, available annotation keys: {self.annotation.keys()}"

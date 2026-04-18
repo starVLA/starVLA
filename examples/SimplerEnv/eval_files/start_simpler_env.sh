@@ -13,7 +13,11 @@ export LD_LIBRARY_PATH=/home/jye624/.conda/envs/simpler_env/lib:${LD_LIBRARY_PAT
 port=6678 
 gpu_id=0
 
-your_ckpt=./results/Checkpoints/0414_oxe_bridge_rt_1_QwenOFT/checkpoints/steps_20000_pytorch_model.pt
+
+
+your_ckpt=./results/Checkpoints/0414_oxe_bridge_rt_1_QwenOFT/checkpoints/steps_50000_pytorch_model.pt
+
+
 
 
 MODEL_PATH=${1:-"${your_ckpt}"}
@@ -120,8 +124,9 @@ for i in "${!ENV_NAMES_V2[@]}"; do
       --obj-variation-mode episode \
       --obj-episode-range 0 24 \
       --robot-init-rot-quat-center 0 0 0 1 \
-      --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1
-      # > "${task_log}" 2>&1 &
+      --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 
+      # \
+      # > "${task_log}" 2>&1
 
     sleep 6
   done

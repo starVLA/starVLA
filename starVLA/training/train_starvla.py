@@ -14,9 +14,9 @@ Conventions:
 import argparse
 import json
 import os
+import re
 import time
 from pathlib import Path
-from datetime import timedelta
 from typing import Tuple
 
 # Third-Party Libraries
@@ -24,7 +24,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin, InitProcessGroupKwargs
+from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
@@ -34,16 +34,12 @@ from transformers import AutoProcessor, get_scheduler
 
 # Local Modules
 from starVLA.dataloader import build_dataloader
-from starVLA.model.framework.base_framework import build_framework
+from starVLA.model.framework import build_framework
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, normalize_dotlist_args
 
 deepspeed_plugin = DeepSpeedPlugin()
-# Avoid default c10d 30-minute timeout (1800000ms) on slow/imbalanced steps.
-# You can override via env: TORCH_DIST_TIMEOUT_MINUTES=1440
-dist_timeout_minutes = int(os.environ.get("TORCH_DIST_TIMEOUT_MINUTES", "1440"))
-process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(minutes=dist_timeout_minutes))
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, kwargs_handlers=[process_group_kwargs])
+accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
 accelerator.print(accelerator.state)
 
 # Sane Defaults
@@ -65,11 +61,6 @@ def setup_directories(cfg) -> Path:
     if not dist.is_initialized() or dist.get_rank() == 0:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(output_dir / "checkpoints", exist_ok=True)
-
-        # Save full config (all parameters) immediately
-        if isinstance(cfg, AccessTrackedConfig):
-            cfg.save_full_config(output_dir / "config.full.yaml")
-            logger.info(f"📋 Full configuration saved to {output_dir / 'config.full.yaml'}")
 
     return output_dir
 
@@ -238,9 +229,6 @@ class VLATrainer(TrainerUtils):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
                 self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
-                full_cfg_path = output_dir / "config.full.yaml"
-                logger.info(f"📦 Saving full merged configuration to `{full_cfg_path}`...")
-                self.config.save_full_config(full_cfg_path)
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
@@ -271,17 +259,9 @@ class VLATrainer(TrainerUtils):
 
         return batch_vla
 
-    def _save_config_snapshot(self):
-        """Save accessed config snapshot. Called at train start and each checkpoint."""
-        if self.accelerator.is_main_process and isinstance(self.config, AccessTrackedConfig):
-            output_dir = Path(self.config.output_dir)
-            self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
-            logger.info(f"📊 Accessed config snapshot saved to {output_dir / 'config.yaml'}")
-
     def train(self):
         """Execute training loop."""
         self._log_training_config()
-        self._save_config_snapshot()
         self._create_data_iterators()
         progress_bar = tqdm(
             range(self.config.trainer.max_train_steps), disable=not self.accelerator.is_local_main_process
@@ -365,14 +345,7 @@ class VLATrainer(TrainerUtils):
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            # Only step the scheduler when an actual optimizer update occurs.
-            # Inside accelerator.accumulate(), optimizer.step() is a no-op on
-            # non-sync micro-steps, but lr_scheduler.step() always advances
-            # the internal counter.  This caused the scheduler to advance
-            # gradient_accumulation_steps times faster than intended, leading
-            # to premature LR decay and incorrect LR on resume (#204).
-            if self.accelerator.sync_gradients:
-                self.lr_scheduler.step()
+            self.lr_scheduler.step()
 
         return {
             "action_dit_loss": action_loss.item(),
@@ -443,9 +416,6 @@ if __name__ == "__main__":
     dotlist = normalize_dotlist_args(clipargs)
     cli_cfg = OmegaConf.from_dotlist(dotlist)
     cfg = OmegaConf.merge(cfg, cli_cfg)
-
-    # Wrap immediately so ALL subsequent accesses (including is_debug) are tracked.
-    cfg = wrap_config(cfg, cli_overrides=dotlist)
 
     if cfg.is_debug and dist.is_initialized() and dist.get_rank() == 0:
         import debugpy

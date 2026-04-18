@@ -33,7 +33,7 @@ cp $0 ${output_dir}/
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes 8 \
-  starVLA/training/train_starvla.py \
+  starVLA/training/train_starvlm.py \
   --config_yaml ${config_yaml} \
   --framework.name ${Framework_name} \
   --framework.qwenvl.base_vlm ${base_vlm} \
