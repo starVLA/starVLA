@@ -9,9 +9,12 @@ from typing import Sequence
 from omegaconf import OmegaConf
 
 from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotSingleDataset, LeRobotMixtureDataset
-from starVLA.dataloader.gr00t_lerobot.mixtures import DATASET_NAMED_MIXTURES
-from starVLA.dataloader.gr00t_lerobot.data_config import ROBOT_TYPE_CONFIG_MAP
-from starVLA.dataloader.gr00t_lerobot.embodiment_tags import ROBOT_TYPE_TO_EMBODIMENT_TAG, EmbodimentTag
+from starVLA.dataloader.gr00t_lerobot.registry import (
+    ROBOT_TYPE_CONFIG_MAP,
+    ROBOT_TYPE_TO_EMBODIMENT_TAG,
+    DATASET_NAMED_MIXTURES,
+    EmbodimentTag,
+)
 
 def collate_fn(batch):
     return batch
