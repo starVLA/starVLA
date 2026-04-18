@@ -319,7 +319,7 @@ class VLAMTrainer(TrainerUtils):
             examples, _ = self._get_next_batch()
             actions = [example["action"] for example in examples]
 
-            output_dict = self.model.predict_action(examples=examples)
+            output_dict = self.accelerator.unwrap_model(self.model).predict_action(examples=examples)
             normalized_actions = output_dict["normalized_actions"]
 
             actions = np.array(actions)
@@ -352,7 +352,8 @@ class VLAMTrainer(TrainerUtils):
             self.accelerator.backward(total_loss)
 
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                vlm_output = self.model.qwen_vl_interface(**batch_vlm)
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 

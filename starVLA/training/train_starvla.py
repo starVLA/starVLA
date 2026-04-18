@@ -179,14 +179,6 @@ class VLATrainer(TrainerUtils):
             self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
             logger.info(f"📊 Accessed config snapshot saved at {output_dir / 'config.yaml'}")
 
-        # 3. Copy the source YAML config file if available
-        config_yaml_path = getattr(self.config, "config_yaml", None)
-        if config_yaml_path and Path(config_yaml_path).exists():
-            import shutil
-            dest = output_dir / f"source_{Path(config_yaml_path).name}"
-            if not dest.exists():
-                shutil.copy2(config_yaml_path, dest)
-                logger.info(f"📋 Source config copied to {dest}")
 
     def _init_checkpointing(self):
         """Initialize checkpoint directory and handle checkpoint loading."""
@@ -338,7 +330,7 @@ class VLATrainer(TrainerUtils):
         """Run simple action-eval on current batch and attach score to metrics."""
         examples = self._get_next_batch()
         actions = [example["action"] for example in examples]
-        output_dict = self.model.predict_action(examples=examples, use_ddim=True, num_ddim_steps=20)
+        output_dict = self.accelerator.unwrap_model(self.model).predict_action(examples=examples, use_ddim=True, num_ddim_steps=20)
 
         if self.accelerator.is_main_process:
             normalized_actions = output_dict["normalized_actions"]

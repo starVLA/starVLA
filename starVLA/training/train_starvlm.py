@@ -293,7 +293,8 @@ class VLAMTrainer(TrainerUtils):
         with self.accelerator.accumulate(self.model):
             self.optimizer.zero_grad()
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                vlm_output = self.model.qwen_vl_interface(**batch_vlm)
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 
