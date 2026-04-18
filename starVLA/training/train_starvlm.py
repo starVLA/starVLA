@@ -31,7 +31,7 @@ from transformers import AutoProcessor, get_scheduler
 
 # Local Modules
 from starVLA.dataloader import build_dataloader
-from starVLA.model.framework import build_framework
+from starVLA.model.framework.base_framework import build_framework
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, normalize_dotlist_args
 
@@ -135,6 +135,28 @@ class VLAMTrainer(TrainerUtils):
 
         self._init_wandb()
         self._init_checkpointing()
+        self._save_initial_configs()
+
+    def _save_initial_configs(self):
+        """Save full config and training script at the very start of training."""
+        if not self.accelerator.is_main_process:
+            return
+
+        output_dir = Path(self.config.output_dir)
+
+        # 1. Save config.full.yaml — the complete merged config (all parameters)
+        if isinstance(self.config, AccessTrackedConfig):
+            full_cfg = self.config.unwrap()
+        else:
+            full_cfg = self.config
+        full_yaml_path = output_dir / "config.full.yaml"
+        OmegaConf.save(full_cfg, full_yaml_path, resolve=True)
+        logger.info(f"\U0001f4dd Full config saved at {full_yaml_path}")
+
+        # 2. Save config.yaml — accessed-only snapshot (will be updated at checkpoints)
+        if isinstance(self.config, AccessTrackedConfig):
+            self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+            logger.info(f"\U0001f4ca Accessed config snapshot saved at {output_dir / 'config.yaml'}")
 
     def _calculate_total_batch_size(self):
         """Calculate global batch size."""
@@ -349,6 +371,9 @@ if __name__ == "__main__":
     dotlist = normalize_dotlist_args(clipargs)
     cli_cfg = OmegaConf.from_dotlist(dotlist)
     cfg = OmegaConf.merge(cfg, cli_cfg)
+
+    # Store source config path for later copying to output dir
+    cfg.config_yaml = args.config_yaml
 
     if cfg.is_debug and dist.is_initialized() and dist.get_rank() == 0:
         import debugpy
