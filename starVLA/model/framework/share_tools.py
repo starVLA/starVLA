@@ -230,11 +230,22 @@ def merge_framework_config(default_config_cls, cfg):
     # 4. Write back into the original cfg
     #    Handle both OmegaConf and AccessTrackedConfig transparently
     if hasattr(cfg, "_cfg") and isinstance(cfg._cfg, DictConfig):
-        # AccessTrackedConfig path — write to underlying cfg AND invalidate
-        # the cached child so subsequent attribute access sees the merged result.
+        # AccessTrackedConfig caches child wrappers in _children dict.
+        # After replacing the underlying DictConfig node, the old child wrapper
+        # still points to the pre-merge node (stale data).  We must invalidate
+        # the cache so the next attribute access creates a fresh wrapper around
+        # the merged node.
+        #
+        # However, the old child's _local_accessed set records which keys were
+        # already read (e.g. "name" from build_framework).  Deleting the child
+        # would lose that tracking info, causing save_accessed_config to omit
+        # those keys from config.yaml.  So we preserve and restore it.
         cfg._cfg.framework = merged_fw
         if hasattr(cfg, "_children") and "framework" in cfg._children:
-            del cfg._children["framework"]
+            old_accessed = cfg._children["framework"]._local_accessed.copy()
+            del cfg._children["framework"]          # invalidate stale cache
+            new_child = cfg.framework               # re-create child around merged_fw
+            new_child._local_accessed.update(old_accessed)  # restore tracking
     elif isinstance(cfg, DictConfig):
         cfg.framework = merged_fw
     else:

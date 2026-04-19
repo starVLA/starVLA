@@ -12,7 +12,7 @@ export LD_LIBRARY_PATH=/home/jye624/.conda/envs/simpler_env/lib:${LD_LIBRARY_PAT
 port=6678 
 gpu_id=0
 
-your_ckpt=./results/Checkpoints/0414_oxe_bridge_rt_1_QwenOFT/checkpoints/steps_50000_pytorch_model.pt
+your_ckpt=./results/Checkpoints/0418_oxe_bridge_rt_1_QwenGR00T/checkpoints/steps_10000_pytorch_model.pt
 
 
 
