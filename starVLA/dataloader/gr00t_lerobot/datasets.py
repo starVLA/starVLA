@@ -115,7 +115,7 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
 
 def _normalize_action_mode(mode: str) -> str:
     """Normalize action mode names to {abs, delta, rel}.""" 
-    # @gaoning plz move this, we want dataloader to be independent of the action mode logic, we can move this to transform or a separate utils tool to 处理lerobot dataset
+    # @gaoning plz move this, we want dataloader to be independent of the action mode logic, we can move this to transform or a separate utils tool to handle lerobot dataset
     mode = str(mode).lower()
     if mode in {"absolute", "raw"}:
         mode = "abs"
@@ -935,7 +935,7 @@ class LeRobotSingleDataset(Dataset):
                     }
                     self.trajectory_ids_to_metadata[trajectory_ids[-1]] = episode_meta
 
-            # 这里应该可以直接读取到 save index 信息
+            # Should be able to directly read the saved index info here
             return np.array(trajectory_ids), np.array(trajectory_lengths)
 
     def _get_all_steps(self) -> list[tuple[int, int]]:
@@ -1284,9 +1284,9 @@ class LeRobotSingleDataset(Dataset):
         elif self._lerobot_version == "v3.0":
             tasks_path = self.dataset_path / LE_ROBOT3_TASKS_FILENAME
             df = pd.read_parquet(tasks_path)
-            df = df.reset_index()  # 把索引变成一列，列名通常为 'index'
-            df = df.rename(columns={'index': 'task'})  # 把 'index' 列重命名为 'task'
-            df = df[['task_index', 'task']]  # 调整列顺序
+            df = df.reset_index()  # convert index to a column, typically named 'index'
+            df = df.rename(columns={'index': 'task'})  # rename 'index' column to 'task'
+            df = df[['task_index', 'task']]  # reorder columns
             return df
     def _check_integrity(self):
         """Use the config to check if the keys are valid and detect silent data corruption."""

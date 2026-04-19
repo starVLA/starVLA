@@ -58,7 +58,7 @@ class VideoConfig:
 class MultiStepConfig:
     """Configuration for multi-step environment settings."""
 
-    video_delta_indices: np.ndarray = field(default_factory=lambda: np.array([0])) # 为什么这里要变换 TODO bug checking
+    video_delta_indices: np.ndarray = field(default_factory=lambda: np.array([0])) # why transform here? TODO bug checking
     state_delta_indices: np.ndarray = field(default_factory=lambda: np.array([0]))
     n_action_steps: int = 16
     max_episode_steps: int = 1440

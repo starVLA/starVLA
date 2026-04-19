@@ -62,7 +62,7 @@ class _QWen3_VL_Interface(nn.Module):
             model_id,
             attn_implementation=attn_implementation,
             dtype=torch.bfloat16,
-            ignore_mismatched_sizes=True, # rezise image 是说没有了？ @TODO check bug
+            ignore_mismatched_sizes=True, # resize image no longer needed? @TODO check bug
         )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.padding_side = "left"
