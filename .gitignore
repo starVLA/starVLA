@@ -236,6 +236,16 @@ tmp
 */**/*.md
 */*.md
 
+# Whitelist specific docs that should be tracked
+!.github/PULL_REQUEST_TEMPLATE.md
+!docs/branching_strategy.md
+!docs/PR_readme.md
+!docs/CONTRIBUTING.md
+!docs/faq.md
+!docs/model_zoo.md
+!docs/starVLA_guideline.md
+!docs/WM4A.md
+
 
 logs/*
 **/.nf*

@@ -28,6 +28,8 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 **[2026/04/09]** 🔜 🚀 unified **multi-benchmark co-training** example (combining LIBERO, SimplerEnv, RoboTwin, VLA-Arena, etc.) is coming soon. Stay tuned!
 
+**[2026/04/19]** 📋 As community PRs grow rapidly, we are establishing **PR guidelines** to maintain code quality and stability. Thank you all for your contributions! Please review the new [PR Guidelines](docs/PR_readme.md) and [Branching Strategy](docs/branching_strategy.md) before submitting PRs.
+
 **[2026/04/09]** 🎯 Thanks to the [RLinf](https://rlinf.readthedocs.io) team, StarVLA now supports **RL post-training**! Check out the [StarVLA × RLinf tutorial](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/starvla.html) to get started.
 
 **[2026/04/09]** 🔥 **WM4A (World Model for Action)** is now integrated! Use pretrained video-generation DiT models (Cosmos-Predict2, Wan2.2) as backbones for action prediction. See [docs/WM4A.md](docs/WM4A.md) for architecture details and training instructions.
