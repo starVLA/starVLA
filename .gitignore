@@ -207,8 +207,6 @@ scripts/run_scripts/sum2cluter.sh
 
 examples/SimplerEnv/eval_scripts
 
-.github
-
 starVLA/config/frameworks/*
 starVLA/model/modules/sam_model/*
 assets/SAMv2.txt

@@ -2099,7 +2099,7 @@ class LeRobotMixtureDataset(Dataset):
         # 1. Dataset lengths
         self._dataset_lengths = np.array([len(dataset) for dataset in self.datasets])
         print(f"Dataset lengths: {self._dataset_lengths}")
-
+        self._getitem_count = 0
         # 2. Dataset sampling weights
         self._dataset_sampling_weights = np.array(dataset_sampling_weights)
         
@@ -2232,14 +2232,14 @@ class LeRobotMixtureDataset(Dataset):
         dataset = self.datasets[dataset_index]
 
         # Sample trajectory
-        # trajectory_index = rng.choice(
-        #     len(dataset.trajectory_ids), p=self.trajectory_sampling_weights[dataset_index]
-        # )
-        # trajectory_id = dataset.trajectory_ids[trajectory_index]
+        trajectory_index = rng.choice(
+            len(dataset.trajectory_ids), p=self.trajectory_sampling_weights[dataset_index]
+        )
+        trajectory_id = dataset.trajectory_ids[trajectory_index]
 
-        # # Sample step
-        # base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
-        # return dataset, trajectory_id, base_index
+        # Sample step
+        base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
+        return dataset, trajectory_id, base_index
         if len(dataset.all_steps) == 0:
             raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
 
@@ -2261,7 +2261,7 @@ class LeRobotMixtureDataset(Dataset):
         trajectory_id, base_index = dataset.all_steps[single_step_index]
         return dataset, trajectory_id, base_index
 
-    _getitem_count = 0
+    
 
     def __getitem__(self, index: int) -> dict:
         """Get the data for a single trajectory and start index.
@@ -2272,8 +2272,8 @@ class LeRobotMixtureDataset(Dataset):
         Returns:
             dict: The data for the trajectory and start index.
         """
-        LeRobotMixtureDataset._getitem_count += 1
-        if LeRobotMixtureDataset._getitem_count % 1000 == 0:
+        self._getitem_count += 1
+        if self._getitem_count % 1000 == 0:
             gc.collect()
 
         max_retries = 10
