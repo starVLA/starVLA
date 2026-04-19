@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Delete all results/Checkpoints/*/videos/libero_* directories
+# Delete all playground/Checkpoints/*/videos/libero_* directories
 
 # Set target directory
-TARGET_DIR="results/Checkpoints"
+TARGET_DIR="playground/Checkpoints"
 
 # Check if directory exists
 if [ ! -d "$TARGET_DIR" ]; then

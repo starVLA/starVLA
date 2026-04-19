@@ -14,7 +14,7 @@ Framework_name=QwenFast
 freeze_module_list=''
 base_vlm=playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
 config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
-run_root_dir=./results/Checkpoints
+run_root_dir=./playground/Checkpoints
 run_id=1207_libero4in1_starvlm
 vlm_data=sharegpt4v_coco
 # === End of environment variable configuration ===

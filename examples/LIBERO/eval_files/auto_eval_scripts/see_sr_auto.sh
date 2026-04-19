@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Specify the root directory for log files
-log_dir="${1:-results/Checkpoints/0405_libero4in1_CosmoPredict2GR00T}"
+log_dir="${1:-playground/Checkpoints/0405_libero4in1_CosmoPredict2GR00T}"
 
 # Iterate over all log files in the specified directory
 last_Folder=""
