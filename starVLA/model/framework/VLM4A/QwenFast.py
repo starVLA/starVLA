@@ -297,7 +297,7 @@ if __name__ == "__main__":
 
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 14)).astype(np.float16),
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
         "image": [image, image],
         "lang": "This is a fake instruction for testing.",
     }
