@@ -61,11 +61,6 @@ def setup_directories(cfg) -> Path:
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(output_dir / "checkpoints", exist_ok=True)
 
-        # Save full config (all parameters) immediately
-        if isinstance(cfg, AccessTrackedConfig):
-            cfg.save_full_config(output_dir / "config.full.yaml")
-            logger.info(f"📋 Full configuration saved to {output_dir / 'config.full.yaml'}")
-
     return output_dir
 
 
@@ -151,6 +146,28 @@ class VLAMTrainer(TrainerUtils):
 
         self._init_wandb()
         self._init_checkpointing()
+        self._save_initial_configs()
+
+    def _save_initial_configs(self):
+        """Save full config and training script at the very start of training."""
+        if not self.accelerator.is_main_process:
+            return
+
+        output_dir = Path(self.config.output_dir)
+
+        # 1. Save config.full.yaml — the complete merged config (all parameters)
+        if isinstance(self.config, AccessTrackedConfig):
+            full_cfg = self.config.unwrap()
+        else:
+            full_cfg = self.config
+        full_yaml_path = output_dir / "config.full.yaml"
+        OmegaConf.save(full_cfg, full_yaml_path, resolve=True)
+        logger.info(f"\U0001f4dd Full config saved at {full_yaml_path}")
+
+        # 2. Save config.yaml — accessed-only snapshot (will be updated at checkpoints)
+        if isinstance(self.config, AccessTrackedConfig):
+            self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+            logger.info(f"\U0001f4ca Accessed config snapshot saved at {output_dir / 'config.yaml'}")
 
     def _calculate_total_batch_size(self):
         """Calculate global batch size."""
@@ -212,9 +229,6 @@ class VLAMTrainer(TrainerUtils):
                 logger.info("📊 Saving accessed configuration...")
                 output_dir = Path(self.config.output_dir)
                 self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
-                full_cfg_path = output_dir / "config.full.yaml"
-                logger.info(f"📦 Saving full merged configuration to `{full_cfg_path}`...")
-                self.config.save_full_config(full_cfg_path)
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
@@ -254,17 +268,9 @@ class VLAMTrainer(TrainerUtils):
 
         return batch_vla, batch_vlm
 
-    def _save_config_snapshot(self):
-        """Save accessed config snapshot. Called at train start and each checkpoint."""
-        if self.accelerator.is_main_process and isinstance(self.config, AccessTrackedConfig):
-            output_dir = Path(self.config.output_dir)
-            self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
-            logger.info(f"📊 Accessed config snapshot saved to {output_dir / 'config.yaml'}")
-
     def train(self):
         """Execute training loop."""
         self._log_training_config()
-        self._save_config_snapshot()
         self._create_data_iterators()
         progress_bar = tqdm(
             range(self.config.trainer.max_train_steps), disable=not self.accelerator.is_local_main_process
@@ -313,7 +319,7 @@ class VLAMTrainer(TrainerUtils):
             examples, _ = self._get_next_batch()
             actions = [example["action"] for example in examples]
 
-            output_dict = self.model.predict_action(examples=examples)
+            output_dict = self.accelerator.unwrap_model(self.model).predict_action(examples=examples)
             normalized_actions = output_dict["normalized_actions"]
 
             actions = np.array(actions)
@@ -346,7 +352,8 @@ class VLAMTrainer(TrainerUtils):
             self.accelerator.backward(total_loss)
 
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                vlm_output = self.model.qwen_vl_interface(**batch_vlm)
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 
@@ -354,9 +361,7 @@ class VLAMTrainer(TrainerUtils):
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            # Only step scheduler on actual optimizer updates (see train_starvla.py)
-            if self.accelerator.sync_gradients:
-                self.lr_scheduler.step()
+            self.lr_scheduler.step()
 
             log_dict.update(
                 {
@@ -434,8 +439,8 @@ if __name__ == "__main__":
     cli_cfg = OmegaConf.from_dotlist(dotlist)
     cfg = OmegaConf.merge(cfg, cli_cfg)
 
-    # Wrap immediately so ALL subsequent accesses (including is_debug) are tracked.
-    cfg = wrap_config(cfg, cli_overrides=dotlist)
+    # Store source config path for later copying to output dir
+    cfg.config_yaml = args.config_yaml
 
     if cfg.is_debug and dist.is_initialized() and dist.get_rank() == 0:
         import debugpy

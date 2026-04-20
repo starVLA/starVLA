@@ -277,6 +277,7 @@ class Qwen_Dual(baseframework):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
     from omegaconf import OmegaConf
 
@@ -284,77 +285,40 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()
 
-    try:
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()
-    except (ImportError, RuntimeError):
-        pass
 
     cfg = OmegaConf.load(args.config_yaml)
-    # try get model
-    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct"
-    # # cfg.framework.action_model.connect_layer_index = 16
-    # cfg.framework.action_model.state_dim = 44
-    # cfg.datasets.vla_data.include_state = True
-
-    cfg.framework.action_model.action_hidden_dim = 2048
-    # cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Florence-2-large"
-    cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct"
 
     model: Qwen_Dual = Qwen_Dual(cfg)
     print(model)
 
-    # fake sample
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
-    # Create a sample
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),  # action_chunk, action_dim
-        "image": [image],  # three views
-        # "wrist_views": [image, image],
-        "lang": (
-            "Put all the toys in the child's room - the three board games (two on the bed and one on the table), the two jigsaw puzzles on the table, and the tennis ball on the table - inside the toy box on the table in the child's room."
-        ),
-        # "state" : np.random.uniform(-1, 1, size=(1, 44)).astype(np.float16), # chunk, state_dim
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
+        "image": [image],
+        "lang": "This is a fake instruction for testing.",
     }
-
     sample2 = sample.copy()
-    sample2["lang"] = "Move the red cup from the table to the kitchen counter next to the sink."
-    batch = [sample, sample2]  # batch size 2
+    sample2["lang"] = "Another fake instruction for testing."
+
+    batch = [sample, sample2]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     forward_output = model(batch)
     action_loss = forward_output["action_loss"]
     print(f"Action Loss: {action_loss.item()}")
 
-    # test predict action
-    predict_output = model.predict_action([sample])  # , state=[batch[0]["state"]]
+    predict_output = model.predict_action([sample])
     normalized_actions = predict_output["normalized_actions"]
     print(f"Unnormalized Action: {normalized_actions}")
 
-    # # Advance: try forward model with dataloader
-    # # can be fake sample， but here get from dataloader for simpler
-    # from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset
-    # vla_dataset_cfg = cfg.datasets.vla_data
-    # vla_dataset_cfg.task_id = 40
-    # vla_dataset_cfg.video_backend = "torchvision_av"
-    # dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-    # from torch.utils.data import DataLoader
-    # train_dataloader = DataLoader(dataset, batch_size=2, num_workers=1, collate_fn=collate_fn)
-    # count = 0
-    # for batch in tqdm(train_dataloader, desc="Processing Batches"):
-    #     batch
-    #     count += 1
-    #     if count > 1:
-    #         break
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model = model.to(device)
-    # model(batch)
-    # action = model.predict_action(examples=[sample])
     print("Finished")

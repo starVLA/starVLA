@@ -18,12 +18,12 @@ import av
 import cv2
 import numpy as np
 
-import torch  # isort: skip
-import torchvision  # isort: skip
+import torch  # noqa: F401 # isort: skip
+import torchvision  # noqa: F401 # isort: skip
 
 # Import decord with graceful fallback
 try:
-    import decord
+    import decord  # noqa: F401
 
     DECORD_AVAILABLE = True
 except ImportError:
@@ -76,46 +76,46 @@ def get_frames_by_indices(
             stream = container.streams.video[0]
             time_base = float(stream.time_base)
             fps = float(stream.average_rate) if stream.average_rate else float(stream.guessed_rate)
-
+            
             loaded_frames = []
-
+            
             for target_idx in indices:
                 # Convert frame index to timestamp, then to pts
                 target_ts = target_idx / fps
                 target_pts = int(target_ts / time_base)
-
+                
                 # Seek to the target position
                 container.seek(target_pts, stream=stream, backward=True, any_frame=False)
-
+                
                 closest_frame = None
-                closest_idx_diff = float("inf")
-
+                closest_idx_diff = float('inf')
+                
                 for frame in container.decode(video=0):
                     current_ts = float(frame.pts * time_base)
                     current_idx = int(round(current_ts * fps))
                     current_diff = abs(current_idx - target_idx)
-
+                    
                     if current_diff < closest_idx_diff:
                         closest_idx_diff = current_diff
                         closest_frame = frame
-
+                    
                     # If we've passed the target and diff is increasing, stop
                     if current_idx > target_idx and current_diff > closest_idx_diff:
                         break
-
+                    
                     # Stop if we're significantly past the target
                     if current_idx > target_idx + 5:
                         break
-
+                
                 if closest_frame is not None:
                     frame_data = closest_frame.to_ndarray(format="rgb24")
                     loaded_frames.append(frame_data)
                 else:
                     raise ValueError(f"Unable to find frame at index {target_idx}")
-
+            
             frames = np.array(loaded_frames)
             return frames
-
+            
         finally:
             if container is not None:
                 container.close()
@@ -186,81 +186,81 @@ def get_frames_by_timestamps(
         try:
             container = av.open(video_path)
             stream = container.streams.video[0]
-
+            
             # Get video properties
             time_base = float(stream.time_base)
             fps = float(stream.average_rate) if stream.average_rate else float(stream.guessed_rate)
             duration = float(stream.duration * time_base) if stream.duration else None
-
+            
             loaded_frames = []
-
+            
             for target_ts in timestamps:
                 # Convert timestamp to pts (presentation timestamp)
                 target_pts = int(target_ts / time_base)
-
+                
                 # Seek to the target timestamp (seek to keyframe before target)
                 container.seek(target_pts, stream=stream, backward=True, any_frame=False)
-
+                
                 closest_frame = None
-                closest_ts_diff = float("inf")
-
+                closest_ts_diff = float('inf')
+                
                 for frame in container.decode(video=0):
                     current_ts = float(frame.pts * time_base)
                     current_diff = abs(current_ts - target_ts)
-
+                    
                     if current_diff < closest_ts_diff:
                         # Release the previous frame
                         if closest_frame is not None:
                             del closest_frame
                         closest_ts_diff = current_diff
                         closest_frame = frame
-
+                    
                     # If we've passed the target and diff is increasing, stop
                     if current_ts > target_ts and current_diff > closest_ts_diff:
                         break
-
+                    
                     # Also stop if we're significantly past the target (optimization)
                     if current_ts > target_ts + 1.0:
                         break
-
+                
                 if closest_frame is not None:
                     frame_data = closest_frame.to_ndarray(format="rgb24")
                     loaded_frames.append(frame_data)
                     del closest_frame
                 else:
                     raise ValueError(f"Unable to find frame at timestamp {target_ts}")
-
+            
             frames = np.array(loaded_frames)
             return frames
-
+            
         finally:
             if container is not None:
                 container.close()
                 container = None
-
+    
     elif video_backend == "torchvision_av":
         torchvision.set_video_backend("pyav")
         loaded_frames = []
         loaded_ts = []
-
+        
         reader = None
         try:
             reader = torchvision.io.VideoReader(video_path, "video")
-
+            
             for target_ts in timestamps:
                 # Reset reader state
                 reader.seek(target_ts, keyframes_only=True)
-
+                
                 closest_frame = None
-                closest_ts_diff = float("inf")
-
+                closest_ts_diff = float('inf')
+                
                 for frame in reader:
                     current_ts = frame["pts"]
                     current_diff = abs(current_ts - target_ts)
-
+                    
                     if closest_frame is None:
                         closest_frame = frame
-
+                    
                     if current_diff < closest_ts_diff:
                         # Release the previous frame
                         if closest_frame is not None:
@@ -270,26 +270,26 @@ def get_frames_by_timestamps(
                     else:
                         # The time difference starts to increase, stop searching
                         break
-
+                
                 if closest_frame is not None:
                     frame_data = closest_frame["data"]
                     if isinstance(frame_data, torch.Tensor):
                         frame_data = frame_data.cpu().numpy()
                     loaded_frames.append(frame_data)
                     loaded_ts.append(closest_frame["pts"])
-
+                    
                     # Immediately release frame reference
                     del closest_frame
-
+                    
         finally:
             # Thoroughly clean resources
             if reader is not None:
-                if hasattr(reader, "_c"):
+                if hasattr(reader, '_c'):
                     reader._c = None
-                if hasattr(reader, "container"):
+                if hasattr(reader, 'container'):
                     reader.container.close()
                     reader.container = None
-
+        
         frames = np.array(loaded_frames)
         return frames.transpose(0, 2, 3, 1)
     else:

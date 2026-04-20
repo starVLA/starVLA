@@ -26,7 +26,9 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 
 
-**[2026/04/09]** 🔜 🚀 unified **multi-benchmark co-training** example (combining LIBERO, SimplerEnv, RoboTwin, VLA-Arena, etc.) is coming soon. Stay tuned!
+**[2026/04/09]** 🚀 unified **multi-benchmark co-training** example (combining LIBERO, SimplerEnv, RoboTwin, VLA-Arena, etc.) is coming soon. Stay tuned!
+
+**[2026/04/19]** 📋 As community PRs grow rapidly, we are establishing **PR guidelines** to maintain code quality and stability. Thank you all for your contributions! Please review the new [PR Guidelines](docs/PR_readme.md) and [Branching Strategy](docs/branching_strategy.md) before submitting PRs.
 
 **[2026/04/18]** 🔥 StarVLA now supports [DOMINO](examples/DOMINO), a dynamic manipulation benchmark for moving objects and time-varying scenes. Original DOMINO repository is [here](https://github.com/H-EmbodVis/DOMINO).
 

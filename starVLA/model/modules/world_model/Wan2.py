@@ -302,7 +302,7 @@ class _Wan2_Interface(nn.Module):
         Runs a single-step forward to extract rich spatiotemporal features.
         Returns an output object with .hidden_states for compatibility.
         """
-        kwargs.pop("_is_wm_input", False) # 这些文字是干什么的？为什么要从kwargs中弹出？
+        kwargs.pop("_is_wm_input", False) # pop internal routing flags from kwargs to avoid passing them downstream
         kwargs.pop("output_hidden_states", False)
         kwargs.pop("return_dict", True)
         kwargs.pop("output_attentions", None)

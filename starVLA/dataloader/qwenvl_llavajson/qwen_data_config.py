@@ -1,11 +1,13 @@
 import re
 
+from pathlib import Path
+
 # You can add multimodal datasets here and register a short nickname to ${data_dict}.
 # The data format should follow the general multimodal VLM format, for example:
 # https://github.com/QwenLM/Qwen2.5-VL/blob/main/qwen-vl-finetune/README.md
 
-json_root = "./playground/Datasets/LLaVA-OneVision-COCO/llava_jsons"
-image_root = "./playground/Datasets/LLaVA-OneVision-COCO/images"
+json_root = f"./playground/Datasets/LLaVA-OneVision-COCO/llava_jsons"
+image_root = f"./playground/Datasets/LLaVA-OneVision-COCO/images"
 
 SHAREGPT4V_COCO = {
     "annotation_path": f"{json_root}/sharegpt4v_coco.json",
@@ -16,13 +18,11 @@ data_dict = {
     "sharegpt4v_coco": SHAREGPT4V_COCO,
 }
 
-
 def parse_sampling_rate(dataset_name):
     match = re.search(r"%(\d+)$", dataset_name)
     if match:
         return int(match.group(1)) / 100.0
     return 1.0
-
 
 def data_list(dataset_names):
     if dataset_names == ["all"]:
@@ -39,6 +39,6 @@ def data_list(dataset_names):
             raise ValueError(f"do not find {dataset_name}")
     return config_list
 
-
 if __name__ == "__main__":
     print(data_list)
+    

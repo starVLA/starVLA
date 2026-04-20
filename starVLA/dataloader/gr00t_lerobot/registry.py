@@ -58,8 +58,8 @@ _DISCOVERED = False
 def _find_registry_dirs() -> list[Path]:
     """Return all ``examples/*/train_files/data_registry/`` directories."""
     # Walk up from this file to the repo root
-    # registry.py is at starVLA/starVLA/dataloader/gr00t_lerobot/registry.py
-    #   parents: [0]=gr00t_lerobot, [1]=dataloader, [2]=starVLA(pkg), [3]=starVLA(repo)
+    # registry.py is at starVLA/dataloader/gr00t_lerobot/registry.py
+    #   parents: [0]=gr00t_lerobot, [1]=dataloader, [2]=starVLA(pkg), [3]=repo root
     repo_root = Path(__file__).resolve().parents[3]
     examples_dir = repo_root / "examples"
     if not examples_dir.is_dir():

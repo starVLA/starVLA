@@ -1,0 +1,26 @@
+# Default reviewer for everything
+* @JinhuiYE
+
+# Core modules
+/starVLA/model/          @JinhuiYE
+/starVLA/model/
+/starVLA/dataloader/     @JinhuiYE
+/starVLA/training/       @JinhuiYE
+/starVLA/config/         @JinhuiYE
+
+# Benchmarks & examples
+/examples/LIBERO/        @JinhuiYE
+/examples/LIBERO-plus/   @missTL
+/examples/SimplerEnv/    @JinhuiYE
+/examples/Robotwin/      @Axi404
+/examples/Robocasa_tabletop/ @JinhuiYE
+/examples/calvin/        @Zhijie-Song
+/examples/VLA-Arena/     @propellanesjc
+/examples/Behavior/      @JinhuiYE
+/examples/Franka/        @yx-chen-ust
+
+# Deployment
+/deployment/             @JinhuiYE
+
+# Documentation
+/docs/                   @JinhuiYE
