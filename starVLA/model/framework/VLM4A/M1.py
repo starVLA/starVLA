@@ -71,6 +71,12 @@ class InternVLA_M1DefaultConfig:
         "qformer_start_layer": 20,
         # End layer index for QFormer (exclusive)
         "qformer_end_layer": 36,
+        # Number of learnable query tokens
+        "num_query_tokens": 16,
+        # Input feature dim (aligned to VLM hidden_size, e.g. Qwen3-VL-4B-Instruct = 2048)
+        "input_dim": 2048,
+        # Output feature dim (aligned to DiT-B input_embedding_dim = 768)
+        "ouptput_dim": 768,
     })
 
     # === Action head (DiT diffusion) ===
