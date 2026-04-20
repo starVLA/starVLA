@@ -112,6 +112,10 @@ class QwenAdapterDefaultConfig:
         "num_actions_chunk": 16,
         # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
         "action_dim": 7,
+        # MLPResNet hidden dim (aligned to VLM hidden_size, Qwen3-VL-4B = 2048)
+        "hidden_dim": 2048,
+        # Use the "pro" version of MLPResNet
+        "use_pro_version": True,
         # Whether to use proprioceptive state input
         "use_proprio": False,
         # State dimension (proprioception input, used when use_proprio=True)
