@@ -600,15 +600,17 @@ def make_vlm_dataloader(cfg):
 from transformers import AutoTokenizer, AutoProcessor
 
 if __name__ == "__main__":
-    import debugpy
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml", help="Path to YAML config")
+    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_libero.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
     
@@ -634,7 +636,6 @@ if __name__ == "__main__":
     data_args_ns.image_processor = image_processor
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args_ns)
 
-    #
     train_dataset = data_module["train_dataset"]
     data_collator = data_module["data_collator"]
     from torch.utils.data import DataLoader
@@ -646,13 +647,10 @@ if __name__ == "__main__":
     )
     batchs = iter(train_dataloader)
     batch_samples = next(batchs)
-    # skip the first 99 batches, get the 100th batch
-    from itertools import islice
 
-    # batch_samples = next(islice(batchs, 99, 100))
     count = 0
     while count < 100:
-        batch_samples = next(batchs)  # for debug
+        batch_samples = next(batchs)
         print(count)
         count += 1
     pass

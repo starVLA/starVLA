@@ -163,8 +163,8 @@ class _Florence_Interface(nn.Module):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -176,12 +176,13 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
-    # model_id = "microsoft/Florence-2-large"
     model_id = "playground/Pretrained_models/Florence-2-large"
     cfg.framework.qwenvl.base_vlm = model_id
     qwen_vl = _Florence_Interface(cfg)

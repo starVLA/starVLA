@@ -99,27 +99,25 @@ def get_vla_dataset(
 
 
 if __name__ == "__main__":
-
-    # import debugpy
     import argparse
+    import os
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_behavior.yaml", help="Path to YAML config")
+    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_libero.yaml", help="Path to YAML config")
     args, clipargs = parser.parse_known_args()
 
-    # debugpy.listen(("0.0.0.0", 10092))
-    # print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    # debugpy.wait_for_client()
-    args.config_yaml = "./examples/MultiRobot/train_files/starvla_cotrain_multiRobot.yaml"
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+
     cfg = OmegaConf.load(args.config_yaml)
-    # cfg.datasets.vla_data.data_mix = "robotwin"
     vla_dataset_cfg = cfg.datasets.vla_data
-    # cfg.datasets.vla_data.include_state = True
-    vla_dataset_cfg.task_id = 1
     for task_id in ["all"]:
         vla_dataset_cfg.task_id = task_id
         print(f"Testing Task ID: {task_id}")
         dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
-        # dataset
     from torch.utils.data import DataLoader
     train_dataloader = DataLoader(
         dataset,
@@ -135,8 +133,6 @@ if __name__ == "__main__":
     from tqdm import tqdm
     count = 0
     for batch in tqdm(train_dataloader, desc="Processing Batches"):
-        # print(batch)
-        # print(1)
         if count > 100:
             break
         count += 1

@@ -185,7 +185,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
+        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()
@@ -206,13 +206,10 @@ if __name__ == "__main__":
     sample = {
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
         "image": [image, image],
-        "lang": "Pick up the red block and place it on the table.",
+        "lang": "This is a fake instruction for testing.",
     }
-    sample2 = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
-        "image": [image],
-        "lang": "Pick up the red block and place it on the table.",
-    }
+    sample2 = sample.copy()
+    sample2["lang"] = "Another fake instruction for testing."
 
     batch = [sample, sample2]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
