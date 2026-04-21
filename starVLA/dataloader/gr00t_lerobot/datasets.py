@@ -926,13 +926,33 @@ class LeRobotSingleDataset(Dataset):
                         video_key = str(col)[len("videos/") : -len("/from_timestamp")]
                         from_timestamps[video_key] = float(value)
 
-                    # TODO auto map key? just map to file_path and file_from_index
+                    # TODO auto map key 
+                    # Collect video file indices for each video key
+                    #已修改的lerobotv3.0的视频索引（提取视频和文件的索引）
+                    video_file_indices = {}
+                    for col in timestamp_cols:
+                        video_key = str(col)[len("videos/") : -len("/from_timestamp")]
+                        chunk_col = f"videos/{video_key}/chunk_index"
+                        file_col = f"videos/{video_key}/file_index"
+                        if chunk_col in episode and file_col in episode:
+                            video_file_indices[video_key] = {
+                                "chunk_index": int(episode[chunk_col]),
+                                "file_index": int(episode[file_col]),
+                            }
+                    print(video_file_indices)
                     episode_meta = {
                         "data/chunk_index": episode["data/chunk_index"],
                         "data/file_index": episode["data/file_index"],
                         "data/file_from_index": index,
                         "videos/from_timestamps": from_timestamps,
+                        "videos/file_indices": video_file_indices,
                     }
+                    # episode_meta = {
+                    #     "data/chunk_index": episode["data/chunk_index"],
+                    #     "data/file_index": episode["data/file_index"],
+                    #     "data/file_from_index": index,
+                    #     "videos/from_timestamps": from_timestamps,
+                    # }
                     self.trajectory_ids_to_metadata[trajectory_ids[-1]] = episode_meta
 
             # Should be able to directly read the saved index info here
@@ -1542,6 +1562,16 @@ class LeRobotSingleDataset(Dataset):
             )
         elif self._lerobot_version == "v3.0":
             episode_meta = self.trajectory_ids_to_metadata[trajectory_id]
+
+            video_file_indices = episode_meta.get("videos/file_indices", {})
+            # print(f"{video_file_indices=}")
+            #已修改的lerobotv3.0的视频索引
+            if original_key in video_file_indices:
+                video_chunk_index = video_file_indices[original_key]["chunk_index"]
+                video_file_index = video_file_indices[original_key]["file_index"]
+            else:
+                video_chunk_index = episode_meta["data/chunk_index"]
+                video_file_index = episode_meta["data/file_index"]
             video_filename = self.video_path_pattern.format(
                 video_key=original_key,
                 chunk_index=episode_meta["data/chunk_index"],

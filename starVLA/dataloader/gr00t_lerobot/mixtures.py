@@ -359,4 +359,7 @@ DATASET_NAMED_MIXTURES = {
         ("LEROBOT_LIBERO_DATA/libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
         # ("OXE_LEROBOT_DATASET/bridge_orig_1.0.0_lerobot", 1.0, "oxe_bridge"),
     ],
+    "calvin_task_D_D_v3.0": [
+        ("calvin_task_D_D_v3.0", 1.0, "libero_franka"),
+    ],
 }
