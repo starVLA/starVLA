@@ -998,7 +998,7 @@ model_path = (
     "/mnt/petrelfs/yejinhui/Projects/llavavla/results/Checkpoints/1_need/QwenGR00T/videos/steps_30000_pytorch_model.pt"
 )
 
-# 获得 文件名字
+# Get the file name
 model_name = model_path.split("/")[-1]
 model_path = model_path.replace(model_name, "")
 parser.add_argument("--task", type=str, default="long_horizon_apple_in_drawer", help="task name")

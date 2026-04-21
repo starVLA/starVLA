@@ -207,8 +207,6 @@ scripts/run_scripts/sum2cluter.sh
 
 examples/SimplerEnv/eval_scripts
 
-.github
-
 starVLA/config/frameworks/*
 starVLA/model/modules/sam_model/*
 assets/SAMv2.txt
@@ -235,4 +233,20 @@ tmp
 **/*.npy
 **/*.parquet
 
+*/**/*.md
+*/*.md
 
+# Whitelist specific docs that should be tracked
+!.github/PULL_REQUEST_TEMPLATE.md
+!docs/branching_strategy.md
+!docs/PR_readme.md
+!docs/CONTRIBUTING.md
+!docs/faq.md
+!docs/model_zoo.md
+!docs/starVLA_guideline.md
+!docs/WM4A.md
+
+
+logs/*
+**/.nf*
+code

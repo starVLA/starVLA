@@ -6,7 +6,7 @@
 from typing import Optional
 
 import torch
-from accelerate.logging import get_logger
+from starVLA.training.trainer_utils import initialize_overwatch
 from transformers import AutoProcessor
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
@@ -17,7 +17,7 @@ except ImportError as import_error:
         "Qwen3.5 model class is unavailable. Please install transformers >= 5.2.0 or check your transformers version."
     ) from import_error
 
-logger = get_logger(__name__)
+logger = initialize_overwatch(__name__)
 
 IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = 248056
@@ -182,8 +182,8 @@ class _QWen3_5_VL_Interface(nn.Module):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -195,9 +195,11 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
 

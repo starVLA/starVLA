@@ -146,6 +146,28 @@ class VLAMTrainer(TrainerUtils):
 
         self._init_wandb()
         self._init_checkpointing()
+        self._save_initial_configs()
+
+    def _save_initial_configs(self):
+        """Save full config and training script at the very start of training."""
+        if not self.accelerator.is_main_process:
+            return
+
+        output_dir = Path(self.config.output_dir)
+
+        # 1. Save config.full.yaml — the complete merged config (all parameters)
+        if isinstance(self.config, AccessTrackedConfig):
+            full_cfg = self.config.unwrap()
+        else:
+            full_cfg = self.config
+        full_yaml_path = output_dir / "config.full.yaml"
+        OmegaConf.save(full_cfg, full_yaml_path, resolve=True)
+        logger.info(f"\U0001f4dd Full config saved at {full_yaml_path}")
+
+        # 2. Save config.yaml — accessed-only snapshot (will be updated at checkpoints)
+        if isinstance(self.config, AccessTrackedConfig):
+            self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
+            logger.info(f"\U0001f4ca Accessed config snapshot saved at {output_dir / 'config.yaml'}")
 
     def _calculate_total_batch_size(self):
         """Calculate global batch size."""
@@ -297,7 +319,7 @@ class VLAMTrainer(TrainerUtils):
             examples, _ = self._get_next_batch()
             actions = [example["action"] for example in examples]
 
-            output_dict = self.model.predict_action(examples=examples)
+            output_dict = self.accelerator.unwrap_model(self.model).predict_action(examples=examples)
             normalized_actions = output_dict["normalized_actions"]
 
             actions = np.array(actions)
@@ -330,7 +352,8 @@ class VLAMTrainer(TrainerUtils):
             self.accelerator.backward(total_loss)
 
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                vlm_output = self.model.qwen_vl_interface(**batch_vlm)
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 
@@ -415,6 +438,9 @@ if __name__ == "__main__":
     dotlist = normalize_dotlist_args(clipargs)
     cli_cfg = OmegaConf.from_dotlist(dotlist)
     cfg = OmegaConf.merge(cfg, cli_cfg)
+
+    # Store source config path for later copying to output dir
+    cfg.config_yaml = args.config_yaml
 
     if cfg.is_debug and dist.is_initialized() and dist.get_rank() == 0:
         import debugpy

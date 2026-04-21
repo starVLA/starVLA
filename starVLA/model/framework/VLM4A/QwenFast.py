@@ -1,0 +1,319 @@
+# Copyright 2025 starVLA community. All rights reserved.
+# Licensed under the MIT License, Version 1.0 (the "License");
+# Implemented by [Jinhui YE / HKUST University] in [2025].
+
+"""
+Qwen-Fast Framework
+
+A lightweight implementation for autoregressive discrete action prediction conditioned on multi-view images + instruction.
+fast tokenizer is copyright from physical-intelligence/fast
+
+Key Points:
+  - Qwen2.5 vision-language backbone
+  - Unified action learning via next-token prediction (fast tokenizer)
+  - Autoregressive action tokens derived from discretized / symbolized continuous actions
+
+Note: How to add special tokens to Qwen2.5:
+  download our model checkpoint with special tokens added: https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action
+"""
+
+from dataclasses import dataclass, field
+from typing import Any, List, Optional, Tuple
+
+import numpy as np
+import torch
+from PIL import Image
+from tqdm import tqdm
+
+from deployment.model_server.tools.image_tools import to_pil_preserve
+from starVLA.model.tools import FRAMEWORK_REGISTRY
+from starVLA.training.trainer_utils import initialize_overwatch
+
+logger = initialize_overwatch(__name__)
+
+# HuggingFace Default / LLaMa-2 IGNORE_INDEX (for labels)
+IGNORE_INDEX = -100
+
+from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.share_tools import merge_framework_config
+from starVLA.model.modules.action_model.fast_ActionHeader import get_action_model
+from starVLA.model.modules.vlm import get_vlm_model
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Default Config for QwenFast
+#  - Documents every framework-level parameter with type + description
+#  - YAML values override these defaults; extra YAML keys are preserved
+# ──────────────────────────────────────────────────────────────────────
+@dataclass
+class QwenFastDefaultConfig:
+    """QwenFast framework default parameters.
+
+    Autoregressive discrete action prediction via FAST tokenizer.
+    All fields can be overridden by the corresponding key in the YAML
+    ``framework:`` section.
+    """
+
+    # --- Registry identifier ---
+    name: str = "QwenFast"
+
+    # === VLM backbone (Qwen2.5-VL / Qwen3-VL with action special tokens) ===
+    qwenvl: dict = field(default_factory=lambda: {
+        # Path to base VLM checkpoint (must include FAST action tokens)
+        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+        "attn_implementation": "flash_attention_2",
+    })
+
+    # === Action head (FAST tokenizer — discrete next-token prediction) ===
+    action_model: dict = field(default_factory=lambda: {
+        # Action head architecture type
+        "action_model_type": "FAST",
+        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+        "action_dim": 7,
+        # How many future steps to predict
+        "future_action_window_size": 15,
+        # How many past steps included in action chunk (usually 0)
+        "past_action_window_size": 0,
+    })
+
+    # === Observation image size (optional resize before encoding) ===
+    obs_image_size: Optional[list] = None
+
+
+@FRAMEWORK_REGISTRY.register("QwenFast")
+class Qwenvl_Fast(baseframework):
+    """
+    Multimodal vision-language-action model (FAST variant).
+
+    Components:
+      - Qwen2.5-VL / Qwen3-VL backbone for fused language/vision token embeddings
+      - FAST tokenizer for discretized / symbolized continuous action encoding
+      - Autoregressive next-token prediction over action tokens
+
+    Focus: Predict future continuous actions conditioned on images + instruction.
+    """
+
+    def __init__(
+        self,
+        config: Optional[dict] = None,
+        **kwargs,
+    ) -> None:
+        """
+        Construct all submodules and cache key configuration values.
+
+        Args:
+            config: Hierarchical configuration (OmegaConf/dict) containing framework + trainer sections.
+            **kwargs: Reserved for future overrides (unused).
+        """
+        super().__init__()
+        # Merge framework defaults with YAML config (YAML wins on conflicts)
+        self.config = merge_framework_config(QwenFastDefaultConfig, config)
+        self.qwen_vl_interface = get_vlm_model(config=self.config)
+        self.action_model = get_action_model(config=self.config)
+
+        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
+        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
+        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # self.hidden_dim = config.framework.action_model.action_hidden_dim
+
+        self.action_model.fast_tokenizer.time_horizon = self.future_action_window_size + 1
+        self.action_model.fast_tokenizer.action_dim = self.config.framework.action_model.action_dim
+
+    def forward(
+        self,
+        examples: List[dict] = None,
+        **kwargs,
+    ) -> Tuple:
+        """
+        Training forward: directly predict future actions via next-token prediction (no diffusion).
+
+        Flow:
+          1. Build QwenVL inputs (images + instruction tokens)
+          2. Extract hidden states from configured layer range
+          7. Predict action and compute L1 loss
+
+        Args:
+            examples: List[dict], each dict requires:
+                - image: List[PIL.Image] (multi-view)
+                - lang: str instruction
+                - action: np.ndarray or list shaped [T, action_dim]
+            **kwargs: Reserved.
+
+        Returns:
+            dict:
+                action_loss (torch.Tensor): Scalar diffusion noise prediction loss.
+        """
+        batch_images = [example["image"] for example in examples]  #  [B, [PIL]]
+        instructions = [example["lang"] for example in examples]  # [B, str]
+        actions = [example["action"] for example in examples]  # label [B, len, 7]
+
+        # step 0: map_raw_action_to_vlm_action
+        batch_fast_tokens = self.action_model.encoder_action2fastoken(actions)  # List[str]
+
+        # batch_fast_tokens = [self.fast_tokenizer(raw_action)[0] for raw_action in raw_actions]
+        vlm_action_tokens = [self.map_fast_token_to_vlm_action(fast_tokens) for fast_tokens in batch_fast_tokens]
+
+        # Step 1: QWenVL input format
+        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+            images=batch_images, instructions=instructions, solutions=vlm_action_tokens
+        )
+
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            qwenvl_outputs = self.qwen_vl_interface(
+                **qwen_inputs,
+                output_attentions=False,
+                output_hidden_states=False,
+                return_dict=True,
+            )
+
+        vlm_action_loss = qwenvl_outputs.loss
+        if vlm_action_loss is None or torch.isnan(vlm_action_loss):
+            vlm_action_loss = torch.tensor(0.0, device=self.qwen_vl_interface.model.device)
+
+        return {"action_loss": vlm_action_loss}
+
+    @torch.inference_mode()
+    def predict_action(
+        self,
+        examples: List[dict] = None,
+        **kwargs: str,
+    ) -> np.ndarray:
+        """
+        Inference: single forward pass to obtain future actions (no diffusion sampling).
+        # can be batch forward
+        Steps:
+          1. Resize images to training resolution (if specified)
+          2. Encode with QwenVL (hidden states retained)
+          6. Return normalized action trajectory
+
+        Returns:
+            dict:
+                normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
+        """
+        if type(examples) is not list:
+            examples = [examples]
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        instructions = [example["lang"] for example in examples]  # [B, str]
+
+        # train_obs_image_size = getattr(self.config.datasets.vla_data, "image_size", None)
+        # if train_obs_image_size:
+        #     batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+        instructions = [instruction for instruction in instructions]
+
+        # Step 1: QWenVL input format
+        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
+
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            generated_ids = self.qwen_vl_interface.model.generate(
+                **qwen_inputs,
+                max_length=2048,
+            )
+        # --- Extract and decoder vlm_action to continue actions ---
+        # --- extrace token (index based on VLM) ---
+        batch_vlm_action_token_ids = self._extract_action_token_ids(generated_ids)
+        # --- map index to fast tokenizer index space ---
+        batch_fast_action_token_idx = self._decode_action_tokens(batch_vlm_action_token_ids)
+        # --- decode fast tokenizer index to action semantic ---
+        normalized_actions = self.action_model.fast_tokenizer.decode(batch_fast_action_token_idx)
+
+        return {"normalized_actions": normalized_actions}
+
+    def _extract_action_token_ids(
+        self,
+        generated_ids: torch.LongTensor,
+    ) -> List[List[int]]:
+        """
+        Extract action tokens (with offset) from the generated token sequence and return a 2D list:
+        ret[b] = [vlm_action_token_id_0, vlm_action_token_id_1, ...]
+        Rule: keep all tokens falling within [_ACTION_TOKEN_MIN, _ACTION_TOKEN_MAX] in order of appearance.
+        You may change it to "take only the first occurrence followed by continuous segment" as needed.
+        """
+        act_min = self.qwen_vl_interface._ACTION_TOKEN_MIN
+        act_max = self.qwen_vl_interface._ACTION_TOKEN_MAX
+        mask = (generated_ids >= act_min) & (generated_ids <= act_max)  # [B, L]
+        results = []
+        for b in range(generated_ids.size(0)):
+            idx = mask[b].nonzero(as_tuple=False).flatten()
+            if idx.numel() == 0:
+                results.append([])
+                continue
+            # all action tokens
+            tokens = generated_ids[b, idx].tolist()
+            results.append(tokens)
+        return results
+
+    def _decode_action_tokens(self, batch_vlm_tokens: List[List[int]]) -> List[Any]:
+        """
+        Decode the offset VLM action token list back to fast tokenizer semantics.
+        fast_tokenizer.decode expects the original fast token id sequence (without offset).
+        """
+        act_min = self.qwen_vl_interface._ACTION_TOKEN_MIN
+        batch_fast_token_ids = []
+        for seq in batch_vlm_tokens:
+            if not seq:
+                batch_fast_token_ids.append(None)
+                continue
+            fast_ids = [t - act_min for t in seq]
+
+            batch_fast_token_ids.append(fast_ids)
+
+        return batch_fast_token_ids
+
+    def map_fast_token_to_vlm_action(self, tokens) -> str:
+        """Maps fast action tokens to the VLM action format.
+        Action token 0 is mapped to the string <robot_action_0>  ... and so on
+        """
+        return "".join(
+            [f"<robot_action_{token}>" for token in tokens]
+        )  # you should add <robot_action_{token}> to VLM as special tokens,
+
+
+if __name__ == "__main__":
+    import argparse
+    import os
+
+    from omegaconf import OmegaConf
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
+        help="Path to YAML config",
+    )
+    args, clipargs = parser.parse_known_args()
+
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
+
+    cfg = OmegaConf.load(args.config_yaml)
+
+    model = Qwenvl_Fast(cfg)
+    print(model)
+
+    image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
+    sample = {
+        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
+        "image": [image, image],
+        "lang": "This is a fake instruction for testing.",
+    }
+    sample2 = sample.copy()
+    sample2["lang"] = "Another fake instruction for testing."
+
+    batch = [sample, sample2]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    forward_output = model(batch)
+    action_loss = forward_output["action_loss"]
+    print(f"Action Loss: {action_loss.item()}")
+
+    # Untrained models haven't learned the action tokens, so predictions may be empty.
+    predict_output = model.predict_action([sample])
+    normalized_actions = predict_output["normalized_actions"]
+    print(f"Unnormalized Action: {normalized_actions}")
+
+    print("Finished")

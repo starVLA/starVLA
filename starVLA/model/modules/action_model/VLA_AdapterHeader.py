@@ -52,8 +52,8 @@ class VLA_Adapter_L1RegressionActionHead(nn.Module):
         Args:
             actions_hidden_states: [B, Layers, Total_Len, D]
 
-            根据 Qwen_Adapter 的逻辑，Total_Len = (Vision_Len + Action_Query_Num)。
-            Language Tokens 已经在 Adapter 阶段被过滤掉了，所以这里不需要额外处理 Language。
+            Following Qwen_Adapter's logic, Total_Len = (Vision_Len + Action_Query_Num).
+            Language Tokens have already been filtered out during the Adapter phase, so no extra language handling is needed here.
         """
         batch_size = actions_hidden_states.shape[0]
         device = actions_hidden_states.device

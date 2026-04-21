@@ -28,16 +28,27 @@ def _auto_import_framework_modules() -> None:
     if _FRAMEWORKS_IMPORTED:
         return
 
+    _SKIP = {"__init__", "base_framework", "share_tools"}
     framework_dir = Path(__file__).resolve().parent
-    for _, module_name, _ in pkgutil.iter_modules([str(framework_dir)]):
-        if module_name in {"__init__", "base_framework", "share_tools"}:
+
+    # Scan top-level modules (backwards compat)
+    for _, module_name, is_pkg in pkgutil.iter_modules([str(framework_dir)]):
+        if module_name in _SKIP:
             continue
-        importlib.import_module(f"starVLA.model.framework.{module_name}")
+        if is_pkg:
+            # Scan sub-packages (VLM4A/, WM4A/, etc.)
+            sub_dir = framework_dir / module_name
+            for _, sub_name, _ in pkgutil.iter_modules([str(sub_dir)]):
+                if sub_name.startswith("_"):
+                    continue
+                importlib.import_module(f"starVLA.model.framework.{module_name}.{sub_name}")
+        else:
+            importlib.import_module(f"starVLA.model.framework.{module_name}")
 
     _FRAMEWORKS_IMPORTED = True
 
 
-def build_framework(cfg): # 这格式构建不同模型等唯一入口
+def build_framework(cfg): # The single entry point for building different model frameworks
     """
     Build a framework model from config.
     Args:
@@ -123,7 +134,15 @@ class baseframework(PreTrainedModel):
     # Unified loss interface for Trainer
     # ------------------------------------------------------------------
 
-    def compute_loss(self, tag: str, batch, loss_scale: dict = None) -> Dict[str, torch.Tensor]:
+    def supports_training_tag(self, tag: str) -> bool:
+        """Return whether this framework can consume batches for *tag*."""
+        if tag == "vla":
+            return type(self).forward is not baseframework.forward
+        if tag == "vlm":
+            return hasattr(self, "qwen_vl_interface") or type(self).forward_vlm is not baseframework.forward_vlm
+        return False
+
+    def compute_loss(self, tag: str, batch, loss_scale: dict = None) -> Dict[str, torch.Tensor] | None:
         """Unified forward entry-point: route to the right forward by *tag*.
 
         The trainer calls ``model.compute_loss(tag, batch)`` for every
@@ -142,9 +161,13 @@ class baseframework(PreTrainedModel):
                         Defaults to 1.0 for unspecified tags.
 
         Returns:
-            dict[str, Tensor]: keyed losses (e.g. ``{"action_loss": ...}``).
-                The trainer simply backwards each value.
+            dict[str, Tensor] | None: keyed losses (e.g. ``{"action_loss": ...}``).
+                Returns ``None`` when this framework does not support the
+                incoming dataloader tag so the trainer can ``continue``.
         """
+        if not self.supports_training_tag(tag):
+            return None
+
         scale = (loss_scale or {}).get(tag, 1.0)
 
         if tag == "vla":
@@ -152,10 +175,7 @@ class baseframework(PreTrainedModel):
         elif tag == "vlm":
             out = self.forward_vlm(batch)
         else:
-            raise ValueError(
-                f"Unknown tag '{tag}'. Override compute_loss() in "
-                f"{type(self).__name__} to handle it."
-            )
+            return None
 
         # Apply loss scale and filter to Tensor values only
         return {k: v * scale for k, v in out.items() if isinstance(v, torch.Tensor)}

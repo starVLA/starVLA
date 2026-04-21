@@ -7,10 +7,11 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import transformers
-from accelerate.logging import get_logger
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-logger = get_logger(__name__)
+from starVLA.training.trainer_utils import initialize_overwatch
+
+logger = initialize_overwatch(__name__)
 
 import warnings
 
@@ -29,7 +30,8 @@ class _CosmosReason2_Interface(nn.Module):
     def __init__(self, config: Optional[dict] = None, **kwargs):
         super().__init__()
         qwenvl_config = config.framework.get("qwenvl", {})
-        model_name = "nvidia/Cosmos-Reason2-2B"
+        model_name = qwenvl_config.get("base_vlm", "nvidia/Cosmos-Reason2-2B")
+
         attn_implementation = qwenvl_config.get("attn_implementation", "sdpa")
         self.model = transformers.Qwen3VLForConditionalGeneration.from_pretrained(
             model_name,
@@ -101,14 +103,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="/mnt/workspace/users/wanhanwen/JoyRA/examples/Robocasa_tabletop/train_files/starvla_cotrain_robocasa_gr1.yaml",
+        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()
 
     cfg = OmegaConf.load(args.config_yaml)
 
-    cfg.framework.qwenvl.base_vlm = "path/to/Cosmos-Reason2-2B"
+    cfg.framework.qwenvl.base_vlm = "playground/Pretrained_models/nvidia/Cosmos-Reason2-2B"
     cfg.framework.qwenvl.attn_implementation = "sdpa"
     qwen_vl = _CosmosReason2_Interface(cfg)
 
@@ -122,7 +124,7 @@ if __name__ == "__main__":
             "content": [
                 {
                     "type": "image",
-                    "image": "path/to/sample.png",
+                    "image": "assets/starvla_LIBERO.png",
                 },
                 {"type": "text", "text": "What is the robot most likely to do?"},
             ],
@@ -152,4 +154,6 @@ if __name__ == "__main__":
     print(output_text[0])
     print(SEPARATOR)
 
-    # print(f"last_hidden: {last_hidden}")
+    print("Done!")
+
+

@@ -20,7 +20,6 @@ from starVLA.dataloader.gr00t_lerobot.transform.video import (
     VideoToNumpy,
     VideoToTensor,
 )
-
 # from gr00t.model.transforms import GR00TTransform
 
 
@@ -35,7 +34,6 @@ class BaseDataConfig(ABC):
 
 
 ###########################################################################################
-
 
 class OxeDroidDataConfig:
     video_keys = [
@@ -251,7 +249,6 @@ class OxeBridgeDataConfig:
 
 ###########################################################################################
 
-
 class OxeRT1DataConfig:
     video_keys = [
         "video.image",
@@ -436,16 +433,14 @@ class SingleFrankaRobotiqDeltaEefDataConfig:
 
         return ComposedModalityTransform(transforms=transforms)
 
-
 ###########################################################################################
-
 
 class Libero4in1DataConfig:
     video_keys = [
         "video.primary_image",
         "video.wrist_image",
     ]
-
+    
     state_keys = [
         "state.x",
         "state.y",
@@ -465,7 +460,7 @@ class Libero4in1DataConfig:
         "action.yaw",
         "action.gripper",
     ]
-
+    
     language_keys = ["annotation.human.action.task_description"]
 
     observation_indices = [0]
@@ -502,20 +497,19 @@ class Libero4in1DataConfig:
             # action transforms
             StateActionToTensor(apply_to=self.action_keys),
             StateActionTransform(
-                apply_to=self.action_keys,
-                normalization_modes={
-                    "action.x": "min_max",
-                    "action.y": "min_max",
-                    "action.z": "min_max",
-                    "action.roll": "min_max",
-                    "action.pitch": "min_max",
-                    "action.yaw": "min_max",
-                },
-            ),
+            apply_to=self.action_keys,
+            normalization_modes={
+                "action.x": "min_max",
+                "action.y": "min_max",
+                "action.z": "min_max",
+                "action.roll": "min_max",
+                "action.pitch": "min_max",
+                "action.yaw": "min_max",
+            },
+        ),
         ]
 
         return ComposedModalityTransform(transforms=transforms)
-
 
 ###########################################################################################
 
@@ -588,7 +582,6 @@ class SingleFrankaRobotiqDeltaJointsDataConfig:
 
 ###########################################################################################
 
-
 class FourierGr1ArmsWaistDataConfig:
     video_keys = ["video.ego_view"]
     state_keys = [
@@ -608,6 +601,7 @@ class FourierGr1ArmsWaistDataConfig:
     language_keys = ["annotation.human.coarse_action"]
     observation_indices = [0]
     action_indices = list(range(16))
+
 
     def modality_config(self):
         video_modality = ModalityConfig(
@@ -672,14 +666,13 @@ class FourierGr1ArmsWaistDataConfig:
 
 ###########################################################################################
 
-
 class SO101Config:
-    # input
+    #input
     video_keys = [
         "video.primary_image",
         "video.wrist_image",
     ]
-
+    
     state_keys = [
         "state.shoulder_pan.pos",
         "state.shoulder_lift.pos",
@@ -699,9 +692,11 @@ class SO101Config:
         "action.wrist_roll.pos",
         "action.gripper.pos",
     ]
+    
 
     observation_indices = [0]
     action_indices = list(range(16))
+
 
     def modality_config(self):
         video_modality = ModalityConfig(
@@ -734,17 +729,22 @@ class SO101Config:
             StateActionToTensor(apply_to=self.state_keys),
             StateActionTransform(
                 apply_to=self.state_keys,
-                normalization_modes={key: "min_max" for key in self.state_keys},
+                normalization_modes={
+                    key: "min_max" for key in self.state_keys
+                },
             ),
             # action transforms
             StateActionToTensor(apply_to=self.action_keys),
             StateActionTransform(
                 apply_to=self.action_keys,
-                normalization_modes={key: "min_max" for key in self.action_keys},
+                normalization_modes={
+                    key: "min_max" for key in self.action_keys
+                },
             ),
         ]
 
         return ComposedModalityTransform(transforms=transforms)
+
 
 
 class ArxX5DataConfig:
@@ -823,7 +823,6 @@ class ArxX5DataConfig:
 
         return ComposedModalityTransform(transforms=transforms)
 
-
 ###########################################################################################
 
 
@@ -841,7 +840,7 @@ class AgilexDataConfig:
     ]
     action_keys = [
         "action.left_joints",
-        "action.right_joints",  # @JinhuiYE this order is different from Dataset
+        "action.right_joints",#@JinhuiYE this order is different from Dataset
         "action.left_gripper",
         "action.right_gripper",
     ]
@@ -902,7 +901,6 @@ class AgilexDataConfig:
         ]
 
         return ComposedModalityTransform(transforms=transforms)
-
 
 ###########################################################################################
 
@@ -985,7 +983,6 @@ class AgilexData50Config:
 
         return ComposedModalityTransform(transforms=transforms)
 
-
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "oxe_droid": OxeDroidDataConfig(),
@@ -997,5 +994,7 @@ ROBOT_TYPE_CONFIG_MAP = {
     "robotwin": AgilexDataConfig(),
     "robotwin50": AgilexData50Config(),
     "fourier_gr1_arms_waist": FourierGr1ArmsWaistDataConfig(),
+    
     "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
 }
+

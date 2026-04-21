@@ -97,11 +97,11 @@ CUDA_VISIBLE_DEVICES=2 ${LIBERO_Python} ./examples/LIBERO-plus/eval_files/eval_l
     --args.log-path "$LOG_DIR" \
     2>&1 | tee "${log_file}" &
 
-# =============== 等待所有后台任务完成 ===============
+# =============== Wait for all background tasks to finish ===============
 echo "Waiting for all evaluation tasks to finish..."
 wait  
 
-# # =============== 聚合结果 ===============
+# # =============== Aggregate results ===============
 # echo "All tasks completed. Aggregating results..."
 # export LOG_DIR="${LOG_DIR}"
 # python ./examples/LIBERO-plus/eval_files/aggregate_results.py

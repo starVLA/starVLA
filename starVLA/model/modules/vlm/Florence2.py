@@ -5,12 +5,12 @@
 from typing import Optional
 
 import torch
-from accelerate.logging import get_logger
+from starVLA.training.trainer_utils import initialize_overwatch
 from PIL import Image
 from transformers import AutoModelForCausalLM, AutoProcessor
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-logger = get_logger(__name__)
+logger = initialize_overwatch(__name__)
 
 # IGNORE_INDEX = -100
 # IMAGE_TOKEN_INDEX = 151655
@@ -55,7 +55,7 @@ class _Florence_Interface(nn.Module):
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id, torch_dtype=torch_dtype, trust_remote_code=True, attn_implementation="eager"
-        )  # 强制使用 eager 注意力
+        )  # Force eager attention
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
 
         self.processor._construct_prompts = _construct_prompts
@@ -163,8 +163,8 @@ class _Florence_Interface(nn.Module):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -176,12 +176,13 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
-    # model_id = "microsoft/Florence-2-large"
     model_id = "playground/Pretrained_models/Florence-2-large"
     cfg.framework.qwenvl.base_vlm = model_id
     qwen_vl = _Florence_Interface(cfg)

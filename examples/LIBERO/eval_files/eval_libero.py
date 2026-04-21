@@ -157,7 +157,7 @@ def eval_libero(args: Args) -> None:
                     "instruction": [str(task_description)],
                 }
 
-                # align key with model API --> 这里给了两个图像 --> check training
+                # align key with model API --> two images provided here --> check training
                 example_dict = {
                     "image": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
                     "lang": observation["instruction"][0],

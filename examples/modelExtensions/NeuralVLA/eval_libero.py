@@ -127,8 +127,8 @@ def eval_libero(args: Args) -> None:
             t = 0
             replay_images = []
             full_actions = []
-            # --- 新增：初始化 states 队列 ---
-            n = 16  # 可根据需要调整 n
+            # --- Initialize states queue ---
+            n = 16  # Adjust n as needed
             state = np.concatenate(
                 (
                     obs["robot0_eef_pos"],
@@ -137,7 +137,7 @@ def eval_libero(args: Args) -> None:
                 )
             )
             states = np.tile(state, (n, 1))  # shape (n, 8)
-            # --- 新增结束 ---
+            # --- End of initialization ---
 
             logging.info(f"Starting episode {task_episodes + 1}...")
             step = 0
@@ -168,11 +168,11 @@ def eval_libero(args: Args) -> None:
                     )
                 )
 
-                # --- 新增：更新 states 队列 ---
-                states = np.vstack([states[1:], state])  # 保持最新的 n 个 state
-                # --- 新增结束 ---
+                # --- Update states queue ---
+                states = np.vstack([states[1:], state])  # Keep the latest n states
+                # --- End of update ---
 
-                observation = {  # key 要和 和模型API对齐
+                observation = {  # Keys must align with model API
                     "observation.primary": np.expand_dims(img, axis=0),  # (H, W, C), dtype=unit8, range(0-255)
                     "observation.wrist_image": np.expand_dims(wrist_img, axis=0),  # (H, W, C)
                     "observation.states": np.expand_dims(states, axis=0),
@@ -185,7 +185,7 @@ def eval_libero(args: Args) -> None:
                     "images": [
                         observation["observation.primary"][0],
                         observation["observation.wrist_image"][0],
-                    ],  # @Junqiu 为什么是单视角？
+                    ],  # @Junqiu Why single viewpoint?
                     "states": observation["observation.states"].astype(np.float32),  # shape (n, 8)
                     "task_description": observation["instruction"][0],
                 }

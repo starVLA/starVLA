@@ -25,7 +25,7 @@ class WebsocketPolicyServer:
         policy,
         host: str = "0.0.0.0",
         port: int = 10093,
-        idle_timeout: int = -1,  # 新增参数，单位秒，-1表示永不关闭
+        idle_timeout: int = -1,  # Idle timeout in seconds, -1 means never auto-close
         metadata: dict | None = None,
     ) -> None:
         self._policy = policy  #
@@ -53,7 +53,7 @@ class WebsocketPolicyServer:
                 await server.serve_forever()
 
     async def _idle_watchdog(self, server):
-        """监控空闲时间，超时则关闭服务器"""
+        """Monitor idle time and shut down the server on timeout."""
         while True:
             await asyncio.sleep(5)
             if time.time() - self._last_active > self._idle_timeout:
@@ -71,7 +71,7 @@ class WebsocketPolicyServer:
         while True:
             try:
                 msg = msgpack_numpy.unpackb(await websocket.recv())
-                self._last_active = time.time()  # 每次收到消息刷新活跃时间
+                self._last_active = time.time()  # Refresh active time on each received message
                 ret = self._route_message(msg)  # route message
                 await websocket.send(packer.pack(ret))
             except websockets.ConnectionClosed:
@@ -96,7 +96,7 @@ class WebsocketPolicyServer:
         """
         req_id = msg.get("request_id", "default")
         mtype = msg.get("type", "infer")  # default = infer
-        msg  # when no explicit payload, treat top-level as payload
+        payload = msg.get("payload", msg)  # when no explicit payload, treat top-level as payload
 
         # ping
         if mtype == "ping":
@@ -105,7 +105,7 @@ class WebsocketPolicyServer:
         # infer --> framework.predict_action
         elif mtype == "infer" or mtype == "predict_action":
             # Basic payload sanity
-            if not isinstance(msg, dict):
+            if not isinstance(payload, dict):
                 return {
                     "status": "error",
                     "ok": False,
@@ -114,8 +114,7 @@ class WebsocketPolicyServer:
                     "error": {"message": "Payload must be a dict", "payload_type": str(type(payload))},
                 }
             try:
-
-                ouput_dict = self._policy.predict_action(**msg)
+                output_dict = self._policy.predict_action(**payload)
             except Exception as e:
                 logging.exception("Policy inference error (request_id=%s)", req_id)
                 logging.exception(e)
@@ -127,10 +126,9 @@ class WebsocketPolicyServer:
                     "request_id": req_id,
                     "error": {
                         "message": str(e),
-                        # "traceback": traceback.format_exc(),
                     },
                 }
-            data = ouput_dict
+            data = output_dict
             return {
                 "status": "ok",
                 "ok": True,

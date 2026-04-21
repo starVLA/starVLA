@@ -1,5 +1,5 @@
 run_id: starvla
-run_root_dir: results/Checkpoints
+run_root_dir: playground/Checkpoints
 seed: 42
 trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity
@@ -61,7 +61,7 @@ trainer:
   lr_scheduler_type: cosine_with_min_lr
   scheduler_specific_kwargs:
     min_lr: 1.0e-06
-  freeze_modules: ''
+  freeze_modules: 'qwen_vl_interface'
   loss_scale:
     vla: 1.0
     vlm: 0.1
@@ -70,7 +70,8 @@ trainer:
   weight_decay: 0.0
   logging_frequency: 10
   gradient_clipping: 1.0
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
 
   optimizer:
     name: AdamW

@@ -230,7 +230,7 @@ class ModelClient:
         policy_ckpt_path = Path(policy_ckpt_path)
         model_config, norm_stats = read_mode_config(policy_ckpt_path)  # read config and norm_stats
 
-        # unnorm_key = baseframework._check_unnorm_key(norm_stats, unnorm_key) # 其实也是很环境 specific 的
+        # unnorm_key = baseframework._check_unnorm_key(norm_stats, unnorm_key) # This is also very environment-specific
         return norm_stats[unnorm_key]["action"]
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:

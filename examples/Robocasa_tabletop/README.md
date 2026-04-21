@@ -79,7 +79,7 @@ bash examples/Robocasa_tabletop/batch_eval_args.sh
 
 # RoboCasa GR1 Tabletop Tasks Evaluation Results
 
-| Task | GR00T-N1.6 | Qwen3GR00T | Qwen3PI | Qwen3OFT | Qwen3FAST |
+| Task | GR00T-N1.6 | StarVLA-GR00T-Qwen3 | StarVLA-π-Qwen3 | StarVLA-OFT-Qwen3 | StarVLA-FAST-Qwen3 |
 |------|------------|------------|---------|----------|-----------|
 | **PnP Bottle To Cabinet Close** | 51.5 | 46.0 | 26.0 | **30.0** | 38.0 |
 | **PnP Can To Drawer Close** | 13.0 | 80.0 | 62.0 | **76.0** | 44.0 |

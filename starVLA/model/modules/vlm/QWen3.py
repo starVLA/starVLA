@@ -5,11 +5,11 @@
 from typing import Optional
 
 import torch
-from accelerate.logging import get_logger
+from starVLA.training.trainer_utils import initialize_overwatch
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-logger = get_logger(__name__)
+logger = initialize_overwatch(__name__)
 
 IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = 151655
@@ -62,6 +62,7 @@ class _QWen3_VL_Interface(nn.Module):
             model_id,
             attn_implementation=attn_implementation,
             dtype=torch.bfloat16,
+            ignore_mismatched_sizes=True, # resize image no longer needed? @TODO check bug
         )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.padding_side = "left"
@@ -173,8 +174,8 @@ class _QWen3_VL_Interface(nn.Module):
 
 if __name__ == "__main__":
     import argparse
+    import os
 
-    import debugpy
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
@@ -186,9 +187,11 @@ if __name__ == "__main__":
     )
     args, clipargs = parser.parse_known_args()
 
-    debugpy.listen(("0.0.0.0", 10092))
-    print("🔍 Rank 0 waiting for debugger attach on port 10092...")
-    debugpy.wait_for_client()
+    if os.getenv("DEBUGPY_ENABLE", "0") == "1":
+        import debugpy
+        debugpy.listen(("0.0.0.0", 10092))
+        print("Rank 0 waiting for debugger attach on port 10092...")
+        debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
 

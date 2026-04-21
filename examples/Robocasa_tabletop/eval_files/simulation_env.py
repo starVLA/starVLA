@@ -45,8 +45,8 @@ class VideoConfig:
     """Configuration for video recording settings."""
 
     video_dir: Optional[str] = None
-    steps_per_render: int = 2  # 和10 是什么关系
-    fps: int = 10  # BUG 数据集中应该是 20？
+    steps_per_render: int = 2  # What is the relation to 10?
+    fps: int = 10  # BUG: should be 20 according to the dataset?
     codec: str = "h264"
     input_pix_fmt: str = "rgb24"
     crf: int = 22
@@ -58,8 +58,8 @@ class VideoConfig:
 class MultiStepConfig:
     """Configuration for multi-step environment settings."""
 
-    video_delta_indices: np.ndarray = field(default=np.array([0]))
-    state_delta_indices: np.ndarray = field(default=np.array([0]))
+    video_delta_indices: np.ndarray = field(default_factory=lambda: np.array([0])) # why transform here? TODO bug checking
+    state_delta_indices: np.ndarray = field(default_factory=lambda: np.array([0]))
     n_action_steps: int = 16
     max_episode_steps: int = 1440
 
