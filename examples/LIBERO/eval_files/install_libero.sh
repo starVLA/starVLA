@@ -7,7 +7,7 @@ eval "$(conda shell.bash hook)"
 conda activate libero
 
 echo "=== Step 2: Install mujoco ==="
-pip install mujoco
+pip install mujoco==3.2.3
 
 echo "=== Step 3: Clone and install LIBERO ==="
 LIBERO_DIR=/home/jye624/Projcets/LIBERO

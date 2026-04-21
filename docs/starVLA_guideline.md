@@ -282,7 +282,7 @@ Create a separate conda environment for the LIBERO simulator:
 ```bash
 conda create -n libero python=3.10 -y
 conda activate libero
-pip install mujoco
+pip install mujoco==3.2.3
 
 # Clone and install LIBERO
 git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
