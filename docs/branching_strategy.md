@@ -41,7 +41,7 @@ git checkout -b feat/my-new-feature
 ### 2. Pull Request → `starVLA_dev`
 
 - Open a PR targeting `starVLA_dev`.
-- Pass `make check` (Black + Ruff).
+- Pass Black + Ruff on the files you changed (full-repo `make check` is currently expected to fail due to historical lint backlog; see [PR_readme.md](PR_readme.md#4-pre-submit-checklist)).
 - Get at least **one maintainer approval**.
 - Merge via **Squash Merge** to keep the commit history clean.
 
@@ -143,7 +143,7 @@ Example format (in the PR description):
 
 - **New features**: Must include at least one test script or test case, placed in `tmp/` or the corresponding `examples/` directory for the PR.
 - **Bug fixes**: Describe reproduction steps, ideally with a minimal test that triggers the bug.
-- **Refactors**: Ensure existing `make check` passes; if behavior changes are involved, add supplementary tests.
+- **Refactors**: Black + Ruff must pass on the files you changed; if behavior changes are involved, add supplementary tests.
 
 ### 4. PR Scope Control
 

@@ -58,17 +58,38 @@ See [branching_strategy.md](branching_strategy.md) for naming conventions (`feat
 
 ### 4. Pre-Submit Checklist
 
-Before pushing, run:
+> **Note on `make check`**: the repository currently carries a historical
+> Black / Ruff backlog, so running `make check` against the **whole repo** is
+> expected to fail. Until that backlog is cleaned up, **only check the files
+> your PR actually touches**. Mixing in formatting fixes for unrelated files
+> violates the "No unrelated changes" rule.
+
+Recommended local check, scoped to your PR:
 
 ```bash
-make check        # Verify formatting (Black) and lint (Ruff)
-make autoformat   # Auto-fix formatting issues
+# Files modified or added in this PR (compared to starVLA_dev)
+FILES=$(git diff --name-only --diff-filter=ACMR origin/starVLA_dev | grep -E '\.py$')
+
+# Format + lint just those files
+black $FILES
+python -m ruff check --fix $FILES
+
+# Verify
+black --check $FILES
+python -m ruff check $FILES
+```
+
+The full-repo entry points are still useful as a reference:
+
+```bash
+make check        # Verify formatting (Black) and lint (Ruff) on the whole repo
+make autoformat   # Auto-fix formatting issues across the whole repo (do NOT commit unrelated reformat noise)
 ```
 
 Self-review checklist:
 
-- [ ] Code passes `make check` with no errors
-- [ ] No unrelated changes (debug prints, unrelated refactors)
+- [ ] `black --check` and `ruff check` pass **on the files this PR touches**
+- [ ] No unrelated changes (debug prints, unrelated refactors, drive-by reformats)
 - [ ] New features have example configs or documentation
 - [ ] No secrets, API keys, or large binary files committed
 - [ ] Config YAML changes are backward-compatible (or clearly noted as breaking)
@@ -137,7 +158,7 @@ Closes #<issue-number>
 ## Testing
 
 <!-- How was this tested? -->
-- [ ] Ran `make check` — passes
+- [ ] Ran `black --check` / `ruff check` on the files this PR touches — passes
 - [ ] Tested on [dataset/framework/environment]: ...
 - [ ] Training runs for N steps without error
 
@@ -175,7 +196,7 @@ None / Yes: ...
 | Reference the related Issue | Submit without prior discussion |
 | Include before/after comparison | Leave reviewers guessing about impact |
 | Keep diff small (<500 lines ideally) | Submit 3000-line PRs without context |
-| Run `make check` before pushing | Push code that fails lint/format |
+| Run Black + Ruff on your changed files before pushing | Push code that fails lint/format on the lines you touched |
 
 ## Special Cases
 
