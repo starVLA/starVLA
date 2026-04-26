@@ -5,6 +5,7 @@ trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity
 wandb_project: llavavla
 is_debug: false
+version_id: "0.21"
 
 
 framework:
@@ -16,7 +17,6 @@ framework:
   action_model:
     action_dim: 7
     state_dim: 7
-    future_action_window_size: 7
     action_horizon: 8
 
 datasets:

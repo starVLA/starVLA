@@ -101,14 +101,15 @@ def get_action_model(config=None):
     model_type = action_model_cfg.action_model_type
     action_hidden_dim = action_model_cfg.action_hidden_dim
     action_dim = action_model_cfg.action_dim
-    future_action_window_size = action_model_cfg.future_action_window_size
-    past_action_window_size = action_model_cfg.past_action_window_size
+    # `action_horizon` is the canonical chunk length, normalised upstream
+    # by share_tools.apply_config_compat.
+    action_horizon = int(action_model_cfg.action_horizon)
 
     action_model = L1RegressionActionHead(
         input_dim=action_hidden_dim,
         hidden_dim=action_hidden_dim * 2,
         action_dim=action_dim,
-        NUM_ACTIONS_CHUNK=past_action_window_size + 1 + future_action_window_size,
+        NUM_ACTIONS_CHUNK=action_horizon,
     )
 
     return action_model

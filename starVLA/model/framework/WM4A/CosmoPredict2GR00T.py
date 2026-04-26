@@ -55,51 +55,57 @@ class CosmoPredict2GR00TDefaultConfig:
     name: str = "CosmoPredict2GR00T"
 
     # === World Model backbone (Cosmos-Predict2) ===
-    world_model: dict = field(default_factory=lambda: {
-        "base_wm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
-        # Which DiT layers to extract features from (-1 = last block)
-        "extract_layers": [-1],
-    })
+    world_model: dict = field(
+        default_factory=lambda: {
+            "base_wm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
+            # Which DiT layers to extract features from (-1 = last block)
+            "extract_layers": [-1],
+        }
+    )
 
     # Legacy compat: factory functions (vlm/__init__, world_model/__init__)
     # fall back to qwenvl.base_vlm when world_model.base_wm is absent.
     # vl_hidden_dim is read by some action heads (VLA_AdapterHeader, LayerwiseFM).
-    qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
-        "vl_hidden_dim": 2048,
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            "base_vlm": "./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World",
+            "vl_hidden_dim": 2048,
+        }
+    )
 
     # === Action head (Flow-matching / DiT diffusion) ===
-    action_model: dict = field(default_factory=lambda: {
-        "action_model_type": "DiT-B",
-        "action_hidden_dim": 1024,
-        "hidden_size": 1024,
-        "add_pos_embed": True,
-        "max_seq_len": 1024,
-        "action_dim": 7,
-        "state_dim": 7,
-        "future_action_window_size": 7,
-        "action_horizon": 8,
-        "past_action_window_size": 0,
-        "repeated_diffusion_steps": 8,
-        "noise_beta_alpha": 1.5,
-        "noise_beta_beta": 1.0,
-        "noise_s": 0.999,
-        "num_timestep_buckets": 1000,
-        "num_inference_timesteps": 4,
-        "num_target_vision_tokens": 32,
-        "diffusion_model_cfg": {
-            # Will be set at runtime to match world model hidden_size (2048)
-            "cross_attention_dim": 2048,
-            "dropout": 0.2,
-            "final_dropout": True,
-            "interleave_self_attention": True,
-            "norm_type": "ada_norm",
-            "num_layers": 16,
-            "output_dim": 1024,
-            "positional_embeddings": None,
-        },
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            "action_model_type": "DiT-B",
+            "action_hidden_dim": 1024,
+            "hidden_size": 1024,
+            "add_pos_embed": True,
+            "max_seq_len": 1024,
+            "action_dim": 7,
+            "state_dim": 7,
+            "future_action_window_size": 7,
+            "action_horizon": 8,
+            "past_action_window_size": 0,
+            "repeated_diffusion_steps": 8,
+            "noise_beta_alpha": 1.5,
+            "noise_beta_beta": 1.0,
+            "noise_s": 0.999,
+            "num_timestep_buckets": 1000,
+            "num_inference_timesteps": 4,
+            "num_target_vision_tokens": 32,
+            "diffusion_model_cfg": {
+                # Will be set at runtime to match world model hidden_size (2048)
+                "cross_attention_dim": 2048,
+                "dropout": 0.2,
+                "final_dropout": True,
+                "interleave_self_attention": True,
+                "norm_type": "ada_norm",
+                "num_layers": 16,
+                "output_dim": 1024,
+                "positional_embeddings": None,
+            },
+        }
+    )
 
     obs_image_size: Optional[list] = None
 
@@ -130,9 +136,11 @@ class CosmoPredict2_GR00T(baseframework):
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
     def forward(self, examples: List[dict] = None, **kwargs) -> Tuple:
         batch_images = [example["image"] for example in examples]
@@ -156,10 +164,8 @@ class CosmoPredict2_GR00T(baseframework):
 
         # Step 3: Action head forward and loss
         with torch.autocast("cuda", dtype=torch.float32):
-            actions = torch.tensor(
-                np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype
-            )
-            actions_target = actions[:, -(self.future_action_window_size + 1):, :]
+            actions = torch.tensor(np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype)
+            actions_target = actions[:, -self.action_horizon :, :]
 
             repeated_diffusion_steps = (
                 self.config.framework.action_model.get("repeated_diffusion_steps", 4)
@@ -212,18 +218,16 @@ class CosmoPredict2_GR00T(baseframework):
         return {"normalized_actions": normalized_actions}
 
 
-
-
-
 if __name__ == "__main__":
     import argparse
     import os
 
-    from PIL import Image
     from omegaconf import OmegaConf
+    from PIL import Image
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

@@ -9,7 +9,7 @@ SCRIPT_PATH="./examples/LIBERO/eval_files/auto_eval_scripts/eval_libero_parall.s
 ###############################################################################
 
 # --- Checkpoint directory (all .pt files inside will be evaluated) ---
-CKPT_DIR="playground/Checkpoints/0405_libero4in1_CosmoPredict2GR00T/checkpoints"
+CKPT_DIR="results/Checkpoints/0415_libero4in1_WanOFT/checkpoints"
 
 # --- Or specify an explicit list (overrides CKPT_DIR when non-empty) ---
 CKPT_LIST=(
@@ -21,7 +21,7 @@ CKPT_LIST=(
 TASK_SUITES=(libero_10 libero_goal libero_object libero_spatial)
 
 # --- Available GPUs (will be used in round-robin) ---
-GPU_LIST=(0 1 2 3 4 5 6 7)
+GPU_LIST=(0 1)
 
 # --- Base port (each job gets base_port + job_index) ---
 BASE_PORT=6450
@@ -70,7 +70,7 @@ for ckpt in "${CKPT_LIST[@]}"; do
         ckpt_name=$(basename "$ckpt" .pt)
         echo "[Job ${job_index}] GPU=${gpu_id}  port=${port}  ckpt=${ckpt_name}  task=${task}"
 
-        bash "$SCRIPT_PATH" "$ckpt" "$task" "$gpu_id" "$port" &
+        bash "$SCRIPT_PATH" "$ckpt" "$task" "$gpu_id" "$port"
         pids+=($!)
 
         gpu_job_count[$gpu_idx]=$(( ${gpu_job_count[$gpu_idx]} + 1 ))

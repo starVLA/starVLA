@@ -14,7 +14,6 @@ Conventions:
 import argparse
 import json
 import os
-import re
 import time
 from pathlib import Path
 from typing import Tuple
@@ -35,6 +34,7 @@ from transformers import AutoProcessor, get_scheduler
 # Local Modules
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
+from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, normalize_dotlist_args
 
@@ -118,6 +118,11 @@ class VLATrainer(TrainerUtils):
         seed = self.config.seed + rank if hasattr(self.config, "seed") else rank + 3047
         set_seed(seed)
 
+        # Save config snapshots upfront so that even if a later setup step
+        # (ckpt load / DeepSpeed init / dataloader build) crashes, the
+        # produced run dir is still introspectable / from_pretrained-able.
+        self._save_initial_configs()
+
         self._init_checkpointing()
         self._adjust_lr_scheduler_for_resume()
 
@@ -137,7 +142,6 @@ class VLATrainer(TrainerUtils):
         )
 
         self._init_wandb()
-        self._save_initial_configs()
 
     def _calculate_total_batch_size(self):
         """Calculate global batch size."""
@@ -178,7 +182,6 @@ class VLATrainer(TrainerUtils):
         if isinstance(self.config, AccessTrackedConfig):
             self.config.save_accessed_config(output_dir / "config.yaml", use_original_values=False)
             logger.info(f"📊 Accessed config snapshot saved at {output_dir / 'config.yaml'}")
-
 
     def _init_checkpointing(self):
         """Initialize checkpoint directory and handle checkpoint loading."""
@@ -330,7 +333,9 @@ class VLATrainer(TrainerUtils):
         """Run simple action-eval on current batch and attach score to metrics."""
         examples = self._get_next_batch()
         actions = [example["action"] for example in examples]
-        output_dict = self.accelerator.unwrap_model(self.model).predict_action(examples=examples, use_ddim=True, num_ddim_steps=20)
+        output_dict = self.accelerator.unwrap_model(self.model).predict_action(
+            examples=examples, use_ddim=True, num_ddim_steps=20
+        )
 
         if self.accelerator.is_main_process:
             normalized_actions = output_dict["normalized_actions"]
@@ -349,7 +354,7 @@ class VLATrainer(TrainerUtils):
             logger.info("***** Training Configuration *****")
             logger.info(f"  Total optimization steps = {self.config.trainer.max_train_steps}")
             logger.info(f"  Per device batch size = {self.config.datasets.vla_data.per_device_batch_size}")
-            logger.info(f"  Gradient accumulation steps = {self.config.trainer.gradient_accumulation_steps}")
+            logger.info(f"  Gradient accumulation steps = {self.accelerator.gradient_accumulation_steps}")
             logger.info(f"  Total batch size = {self.total_batch_size}")
 
     def _train_step(self, batch_vla, batch_vlm=None):
@@ -439,6 +444,11 @@ if __name__ == "__main__":
     dotlist = normalize_dotlist_args(clipargs)
     cli_cfg = OmegaConf.from_dotlist(dotlist)
     cfg = OmegaConf.merge(cfg, cli_cfg)
+
+    # Normalise legacy YAML keys into the current `version_id == "0.21"` schema.
+    # This is idempotent and does not modify framework class signatures.
+    # See bar/config_收紧.md for the rationale.
+    cfg = apply_config_compat(cfg)
 
     # Store source config path for later copying to output dir
     cfg.config_yaml = args.config_yaml

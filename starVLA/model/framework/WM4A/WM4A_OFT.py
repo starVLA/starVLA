@@ -59,29 +59,35 @@ class WM4AOFTDefaultConfig:
     name: str = "WM4A_OFT"
 
     # === World Model backbone (any supported WM) ===
-    world_model: dict = field(default_factory=lambda: {
-        "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B",
-        "extract_layers": [-1],
-    })
+    world_model: dict = field(
+        default_factory=lambda: {
+            "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B",
+            "extract_layers": [-1],
+        }
+    )
 
     # Legacy compat: vlm/__init__.py and world_model/__init__.py fall back to
     # config.framework.qwenvl.base_vlm when world_model.base_wm is absent.
     # Some action heads (VLA_AdapterHeader, LayerwiseFM) also read
     # qwenvl.vl_hidden_dim / num_vl_layers.  WM4A_OFT uses neither of those
     # action heads, so we only mirror base_vlm here for the factory fallback.
-    qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B",
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B",
+        }
+    )
 
     # === Action head (MLP L1 regression) ===
-    action_model: dict = field(default_factory=lambda: {
-        "action_model_type": "MLP",
-        "action_dim": 7,
-        # Will be auto-set at runtime from world model hidden_size
-        "action_hidden_dim": 3072,
-        "future_action_window_size": 8,
-        "past_action_window_size": 0,
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            "action_model_type": "MLP",
+            "action_dim": 7,
+            # Will be auto-set at runtime from world model hidden_size
+            "action_hidden_dim": 3072,
+            "future_action_window_size": 8,
+            "past_action_window_size": 0,
+        }
+    )
 
     obs_image_size: Optional[list] = None
 
@@ -114,9 +120,12 @@ class WM4A_OFT(baseframework):
 
         self.action_model = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
+        self.chunk_len = self.action_horizon
 
         # Learnable projection: pool N spatial tokens → chunk_len action queries
         self.action_query_proj = nn.Linear(wm_hidden, self.chunk_len * wm_hidden)
@@ -162,10 +171,8 @@ class WM4A_OFT(baseframework):
             action_queries = self._pool_to_action_queries(last_hidden)  # [B, chunk_len, H]
             pred_actions = self.action_model.predict_action(action_queries)  # [B, chunk_len, action_dim]
 
-            actions = torch.tensor(
-                np.array(actions), device=pred_actions.device, dtype=pred_actions.dtype
-            )
-            actions_target = actions[:, -(self.future_action_window_size + 1):, :]
+            actions = torch.tensor(np.array(actions), device=pred_actions.device, dtype=pred_actions.dtype)
+            actions_target = actions[:, -self.action_horizon :, :]
 
             action_loss = self.l1_loss(pred_actions, actions_target)
 

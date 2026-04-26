@@ -25,7 +25,7 @@ framework:
     state_dim: 44
     future_action_window_size: 49
     action_horizon: 50
-    past_action_window_size: 0
+
     repeated_diffusion_steps: 8
     noise_beta_alpha: 1.5
     noise_beta_beta: 1.0
@@ -42,7 +42,6 @@ framework:
       num_layers: 16
       output_dim: 1024
       positional_embeddings: null
-
 
 
 datasets:
@@ -69,7 +68,6 @@ datasets:
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
     CoT_answer: bbox
     default_image_resolution: [3, 224, 224]
-
 
 trainer:
   epochs: 100

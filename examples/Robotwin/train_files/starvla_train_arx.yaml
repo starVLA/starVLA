@@ -5,6 +5,7 @@ trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity
 wandb_project: llavavla
 is_debug: false
+version_id: "0.21"
 
 framework:
   name: QwenOFT
@@ -22,9 +23,8 @@ framework:
     max_seq_len: 1024
     action_dim: 14
     state_dim: 14
-    future_action_window_size: 15
     action_horizon: 16
-    past_action_window_size: 0
+
     repeated_diffusion_steps: 8
     noise_beta_alpha: 1.5
     noise_beta_beta: 1.0
@@ -33,16 +33,13 @@ framework:
     num_inference_timesteps: 4
     num_target_vision_tokens: 32
     diffusion_model_cfg:    # DiT Transformer parameters
-      cross_attention_dim: 2048 # VLM hidden dim
       dropout: 0.2
       final_dropout: true
       interleave_self_attention: true
       norm_type: "ada_norm"
       num_layers: 16
-      output_dim: 1024
       positional_embeddings: null
   obs_image_size: [224, 224]
-
 
 
 datasets:

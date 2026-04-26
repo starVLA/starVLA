@@ -27,7 +27,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from PIL import Image
-from tqdm import tqdm
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
 from starVLA.model.tools import FRAMEWORK_REGISTRY
@@ -63,26 +62,30 @@ class QwenOFTDefaultConfig:
     name: str = "QwenOFT"
 
     # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
-    qwenvl: dict = field(default_factory=lambda: {
-        # Path to base VLM checkpoint (local or HF hub id)
-        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
-        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
-        "attn_implementation": "flash_attention_2",
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            # Path to base VLM checkpoint (local or HF hub id)
+            "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+            # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+            "attn_implementation": "flash_attention_2",
+        }
+    )
 
     # === Action head (MLP regression over action special tokens) ===
-    action_model: dict = field(default_factory=lambda: {
-        # Action head architecture type
-        "action_model_type": "MLP",
-        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
-        "action_dim": 7,
-        # Hidden dim for the action MLP (auto-set from VLM hidden_size at runtime)
-        "action_hidden_dim": 2560,
-        # How many future steps to predict
-        "future_action_window_size": 8,
-        # How many past steps included in action chunk (usually 0)
-        "past_action_window_size": 0,
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            # Action head architecture type
+            "action_model_type": "MLP",
+            # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+            "action_dim": 7,
+            # Hidden dim for the action MLP (auto-set from VLM hidden_size at runtime)
+            "action_hidden_dim": 2560,
+            # How many future steps to predict
+            "future_action_window_size": 8,
+            # How many past steps included in action chunk (usually 0)
+            "past_action_window_size": 0,
+        }
+    )
 
     # === Observation image size (optional resize before encoding) ===
     #  Set to [H, W] to resize; None = keep original resolution
@@ -122,9 +125,12 @@ class Qwenvl_OFT(baseframework):
         self.config.framework.action_model.action_hidden_dim = self.qwen_vl_interface.model.config.hidden_size
         self.action_model = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
+        self.chunk_len = self.action_horizon
         # self.hidden_dim = config.framework.action_model.action_hidden_dim
 
         self.action_token = "🔍"  # TODO also can add spacail token to Qwen, but too complex
@@ -193,7 +199,7 @@ class Qwenvl_OFT(baseframework):
             actions = torch.tensor(
                 np.array(actions), device=pred_actions.device, dtype=pred_actions.dtype
             )  # [B, T_full, action_dim]
-            actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
+            actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
             # Compute L1 loss
             action_loss = self.l1_loss(pred_actions, actions_target)
@@ -292,7 +298,8 @@ class Qwenvl_OFT(baseframework):
         if (counts < self.chunk_len).any():
             insufficient = (counts < self.chunk_len).nonzero(as_tuple=False).flatten().tolist()
             raise RuntimeError(
-                f"The following samples have insufficient action tokens (< {self.chunk_len}): {insufficient} | counts={counts.tolist()}"
+                f"The following samples have insufficient action tokens (< {self.chunk_len}): {insufficient} |"
+                f" counts={counts.tolist()}"
             )
 
         # Position indices
@@ -328,6 +335,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()
@@ -358,5 +366,3 @@ if __name__ == "__main__":
     print(f"Unnormalized Action: {normalized_actions}")
 
     print("Finished")
-
-

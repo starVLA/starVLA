@@ -53,38 +53,44 @@ class WanPIDefaultConfig:
     name: str = "WanPI"
 
     # === World Model backbone (Wan2.2-TI2V-5B-Diffusers) ===
-    world_model: dict = field(default_factory=lambda: {
-        "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-        "extract_layers": [-1],
-    })
+    world_model: dict = field(
+        default_factory=lambda: {
+            "base_wm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "extract_layers": [-1],
+        }
+    )
 
     # LayerwiseFM reads qwenvl.vl_hidden_dim and qwenvl.num_vl_layers
-    qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-        "vl_hidden_dim": 1024,
-        "num_vl_layers": 30,
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            "base_vlm": "./playground/Pretrained_models/Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "vl_hidden_dim": 1024,
+            "num_vl_layers": 30,
+        }
+    )
 
     # === Action head (Layer-wise Flow-matching / cross-DiT) ===
-    action_model: dict = field(default_factory=lambda: {
-        "action_model_type": "LayerwiseFM",
-        "action_dim": 7,
-        "state_dim": 7,
-        "future_action_window_size": 15,
-        "past_action_window_size": 0,
-        "repeated_diffusion_steps": 2,
-        "num_inference_timesteps": 4,
-        "add_pos_embed": True,
-        "max_seq_len": 1024,
-        "num_target_vision_tokens": 32,
-        "noise_beta_alpha": 1.5,
-        "noise_beta_beta": 1.0,
-        "noise_s": 0.999,
-        "num_timestep_buckets": 1000,
-        "diffusion_model_cfg": {
-            "cross_attention_dim": 1024,
-        },
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            "action_model_type": "LayerwiseFM",
+            "action_dim": 7,
+            "state_dim": 7,
+            "future_action_window_size": 15,
+            "past_action_window_size": 0,
+            "repeated_diffusion_steps": 2,
+            "num_inference_timesteps": 4,
+            "add_pos_embed": True,
+            "max_seq_len": 1024,
+            "num_target_vision_tokens": 32,
+            "noise_beta_alpha": 1.5,
+            "noise_beta_beta": 1.0,
+            "noise_s": 0.999,
+            "num_timestep_buckets": 1000,
+            "diffusion_model_cfg": {
+                "cross_attention_dim": 1024,
+            },
+        }
+    )
 
     obs_image_size: Optional[list] = None
 
@@ -108,7 +114,7 @@ class Wan_PI(baseframework):
         # Auto-detect hidden size and num layers from world model
         wm_hidden = self.backbone.model.config.hidden_size
         # Cosmos uses transformer_blocks, Wan uses blocks
-        if hasattr(self.backbone.transformer, 'transformer_blocks'):
+        if hasattr(self.backbone.transformer, "transformer_blocks"):
             num_blocks = len(self.backbone.transformer.transformer_blocks)
         else:
             num_blocks = len(self.backbone.transformer.blocks)
@@ -123,9 +129,11 @@ class Wan_PI(baseframework):
 
         self.action_model: LayerwiseFlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
         # Register hooks for ALL transformer blocks
         self._all_hidden_states = []
@@ -138,7 +146,7 @@ class Wan_PI(baseframework):
             hook.remove()
         self._all_hooks.clear()
 
-        if hasattr(self.backbone.transformer, 'transformer_blocks'):
+        if hasattr(self.backbone.transformer, "transformer_blocks"):
             blocks = self.backbone.transformer.transformer_blocks
         else:
             blocks = self.backbone.transformer.blocks
@@ -173,10 +181,8 @@ class Wan_PI(baseframework):
             base_hidden = vl_embs_list[-1]
 
         with torch.autocast("cuda", dtype=torch.float32):
-            actions = torch.tensor(
-                np.array(actions), device=base_hidden.device, dtype=base_hidden.dtype
-            )
-            actions_target = actions[:, -(self.future_action_window_size + 1):, :]
+            actions = torch.tensor(np.array(actions), device=base_hidden.device, dtype=base_hidden.dtype)
+            actions_target = actions[:, -self.action_horizon :, :]
 
             repeated_diffusion_steps = (
                 self.config.framework.action_model.get("repeated_diffusion_steps", 2)
@@ -191,9 +197,7 @@ class Wan_PI(baseframework):
                 state = torch.tensor(np.array(state), device=base_hidden.device, dtype=base_hidden.dtype)
                 state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
 
-            action_loss = self.action_model(
-                vl_embs_list_repeated, actions_target_repeated, state_repeated
-            )
+            action_loss = self.action_model(vl_embs_list_repeated, actions_target_repeated, state_repeated)
 
         return {"action_loss": action_loss}
 
@@ -237,11 +241,12 @@ if __name__ == "__main__":
     import argparse
     import os
 
-    from PIL import Image
     from omegaconf import OmegaConf
+    from PIL import Image
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

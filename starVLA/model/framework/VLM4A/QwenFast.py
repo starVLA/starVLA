@@ -23,7 +23,6 @@ from typing import Any, List, Optional, Tuple
 import numpy as np
 import torch
 from PIL import Image
-from tqdm import tqdm
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
 from starVLA.model.tools import FRAMEWORK_REGISTRY
@@ -58,24 +57,28 @@ class QwenFastDefaultConfig:
     name: str = "QwenFast"
 
     # === VLM backbone (Qwen2.5-VL / Qwen3-VL with action special tokens) ===
-    qwenvl: dict = field(default_factory=lambda: {
-        # Path to base VLM checkpoint (must include FAST action tokens)
-        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
-        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
-        "attn_implementation": "flash_attention_2",
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            # Path to base VLM checkpoint (must include FAST action tokens)
+            "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action",
+            # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+            "attn_implementation": "flash_attention_2",
+        }
+    )
 
     # === Action head (FAST tokenizer — discrete next-token prediction) ===
-    action_model: dict = field(default_factory=lambda: {
-        # Action head architecture type
-        "action_model_type": "FAST",
-        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
-        "action_dim": 7,
-        # How many future steps to predict
-        "future_action_window_size": 15,
-        # How many past steps included in action chunk (usually 0)
-        "past_action_window_size": 0,
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            # Action head architecture type
+            "action_model_type": "FAST",
+            # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+            "action_dim": 7,
+            # How many future steps to predict
+            "future_action_window_size": 15,
+            # How many past steps included in action chunk (usually 0)
+            "past_action_window_size": 0,
+        }
+    )
 
     # === Observation image size (optional resize before encoding) ===
     obs_image_size: Optional[list] = None
@@ -112,12 +115,14 @@ class Qwenvl_Fast(baseframework):
         self.qwen_vl_interface = get_vlm_model(config=self.config)
         self.action_model = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
         # self.hidden_dim = config.framework.action_model.action_hidden_dim
 
-        self.action_model.fast_tokenizer.time_horizon = self.future_action_window_size + 1
+        self.action_model.fast_tokenizer.time_horizon = self.action_horizon
         self.action_model.fast_tokenizer.action_dim = self.config.framework.action_model.action_dim
 
     def forward(
@@ -286,6 +291,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

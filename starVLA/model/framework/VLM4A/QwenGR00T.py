@@ -22,7 +22,6 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 from PIL import Image
-from tqdm import tqdm
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
 from starVLA.training.trainer_utils import initialize_overwatch
@@ -58,14 +57,16 @@ class QwenGR00TDefaultConfig:
     name: str = "QwenGR00T"
 
     # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
-    qwenvl: dict = field(default_factory=lambda: {
-        # Path to base VLM checkpoint (local or HF hub id)
-        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
-        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
-        "attn_implementation": "flash_attention_2",
-        # VLM hidden dimension (used for cross-attention alignment)
-        "vl_hidden_dim": 2048,
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            # Path to base VLM checkpoint (local or HF hub id)
+            "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+            # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+            "attn_implementation": "flash_attention_2",
+            # VLM hidden dimension (used for cross-attention alignment)
+            "vl_hidden_dim": 2048,
+        }
+    )
 
     # # === DINO encoder (optional multi-view spatial tokens) === Dino is not used in this QwenGR00T version, we can add it later when we want to use it
     # dino: dict = field(default_factory=lambda: {
@@ -74,56 +75,55 @@ class QwenGR00TDefaultConfig:
     # })
 
     # === Action head (Flow-matching / DiT diffusion) ===
-    action_model: dict = field(default_factory=lambda: {
-        # DiT model size: "DiT-B" | "DiT-L" | "DiT-XL"
-        "action_model_type": "DiT-B",
-        # Hidden dim for action model (auto-aligned at runtime)
-        "action_hidden_dim": 1024,
-        "hidden_size": 1024,
-        # Whether to add positional embeddings in the action head
-        "add_pos_embed": True,
-        "max_seq_len": 1024,
-        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
-        "action_dim": 7,
-        # State dimension (proprioception input)
-        "state_dim": 7,
-        # How many future steps to predict
-        "future_action_window_size": 7,
-        # Alias for future_action_window_size + 1 (to be unified)
-        "action_horizon": 8,
-        # How many past steps included in action chunk
-        "past_action_window_size": 0,
-        # Repeat factor for flow-matching loss (more noise samples per batch)
-        "repeated_diffusion_steps": 8,
-        # Beta distribution params for noise schedule
-        "noise_beta_alpha": 1.5,
-        "noise_beta_beta": 1.0,
-        "noise_s": 0.999,
-        "num_timestep_buckets": 1000,
-        # Inference denoising steps
-        "num_inference_timesteps": 4,
-        # Number of vision tokens fed to action head
-        "num_target_vision_tokens": 32,
-        # === DiT Transformer sub-config ===
-        "diffusion_model_cfg": {
-            # Cross-attention dim (aligned to VLM hidden_size at runtime)
-            "cross_attention_dim": 2048,
-            "dropout": 0.2,
-            "final_dropout": True,
-            "interleave_self_attention": True,
-            "norm_type": "ada_norm",
-            "num_layers": 16,
-            "output_dim": 1024,
-            "positional_embeddings": None,
-        },
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            # DiT model size: "DiT-B" | "DiT-L" | "DiT-XL"
+            "action_model_type": "DiT-B",
+            # Hidden dim for action model (auto-aligned at runtime)
+            "action_hidden_dim": 1024,
+            "hidden_size": 1024,
+            # Whether to add positional embeddings in the action head
+            "add_pos_embed": True,
+            "max_seq_len": 1024,
+            # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+            "action_dim": 7,
+            # State dimension (proprioception input)
+            "state_dim": 7,
+            # Canonical chunk length (number of action steps the head predicts).
+            # Legacy YAMLs may use future_action_window_size = action_horizon - 1;
+            # apply_config_compat normalises both directions.
+            "action_horizon": 8,
+            # Repeat factor for flow-matching loss (more noise samples per batch)
+            "repeated_diffusion_steps": 8,
+            # Beta distribution params for noise schedule
+            "noise_beta_alpha": 1.5,
+            "noise_beta_beta": 1.0,
+            "noise_s": 0.999,
+            "num_timestep_buckets": 1000,
+            # Inference denoising steps
+            "num_inference_timesteps": 4,
+            # Number of vision tokens fed to action head
+            "num_target_vision_tokens": 32,
+            # === DiT Transformer sub-config ===
+            "diffusion_model_cfg": {
+                # Cross-attention dim (aligned to VLM hidden_size at runtime)
+                "cross_attention_dim": 2048,
+                "dropout": 0.2,
+                "final_dropout": True,
+                "interleave_self_attention": True,
+                "norm_type": "ada_norm",
+                "num_layers": 16,
+                "output_dim": 1024,
+                "positional_embeddings": None,
+            },
+        }
+    )
 
     # === Observation image size (optional resize before encoding) ===
     obs_image_size: Optional[list] = None
 
     # # === Training precision flag === This is unnecessary, unused parameter
     # reduce_in_full_precision: bool = True
-
 
 
 @FRAMEWORK_REGISTRY.register("QwenGR00T")
@@ -161,9 +161,11 @@ class Qwen_GR00T(baseframework):
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
     def forward(
         self,
@@ -194,7 +196,7 @@ class Qwen_GR00T(baseframework):
             actions = torch.tensor(
                 np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype
             )  # [B, T_full, action_dim]
-            actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
+            actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
             repeated_diffusion_steps = (
                 self.config.framework.action_model.get("repeated_diffusion_steps", 4)
@@ -285,6 +287,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

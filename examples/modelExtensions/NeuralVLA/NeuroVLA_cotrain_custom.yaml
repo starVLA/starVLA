@@ -30,7 +30,7 @@ framework:
     state_dim: 7
     future_action_window_size: 15
     action_horizon: 16
-    past_action_window_size: 0
+
     repeated_diffusion_steps: 8
     noise_beta_alpha: 1.5
     noise_beta_beta: 1.0
@@ -48,7 +48,6 @@ framework:
       output_dim: 1024
       positional_embeddings: null
   obs_image_size: [224, 224]
-
 
 
 datasets:

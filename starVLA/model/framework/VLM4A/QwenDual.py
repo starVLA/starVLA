@@ -15,7 +15,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from PIL import Image
-from tqdm import tqdm
 
 from starVLA.model.modules.dino_model.dino import get_dino_model
 from starVLA.training.trainer_utils import initialize_overwatch
@@ -52,45 +51,51 @@ class QwenDualDefaultConfig:
     name: str = "QwenDual"
 
     # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
-    qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
-        "attn_implementation": "flash_attention_2",
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+            "attn_implementation": "flash_attention_2",
+        }
+    )
 
     # === DINO encoder (multi-view spatial tokens) ===
-    dino: dict = field(default_factory=lambda: {
-        # DINO backbone variant: "dinov2_vits14" | "dinov2_vitb14" | ...
-        "dino_backbone": "dinov2_vits14",
-    })
+    dino: dict = field(
+        default_factory=lambda: {
+            # DINO backbone variant: "dinov2_vits14" | "dinov2_vitb14" | ...
+            "dino_backbone": "dinov2_vits14",
+        }
+    )
 
     # === Action head (Flow-matching / DiT diffusion) ===
-    action_model: dict = field(default_factory=lambda: {
-        "action_model_type": "DiT-B",
-        "action_hidden_dim": 1024,
-        "hidden_size": 1024,
-        "add_pos_embed": True,
-        "max_seq_len": 1024,
-        "action_dim": 7,
-        "state_dim": 7,
-        "future_action_window_size": 7,
-        "action_horizon": 8,
-        "past_action_window_size": 0,
-        "repeated_diffusion_steps": 8,
-        # Layer index to connect VLM hidden states to action head (-1 = last layer)
-        "connect_layer_index": -1,
-        # Inference denoising steps
-        "num_inference_timesteps": 4,
-        "diffusion_model_cfg": {
-            "cross_attention_dim": 2048,
-            "dropout": 0.2,
-            "final_dropout": True,
-            "interleave_self_attention": True,
-            "norm_type": "ada_norm",
-            "num_layers": 16,
-            "output_dim": 1024,
-            "positional_embeddings": None,
-        },
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            "action_model_type": "DiT-B",
+            "action_hidden_dim": 1024,
+            "hidden_size": 1024,
+            "add_pos_embed": True,
+            "max_seq_len": 1024,
+            "action_dim": 7,
+            "state_dim": 7,
+            "future_action_window_size": 7,
+            "action_horizon": 8,
+            "past_action_window_size": 0,
+            "repeated_diffusion_steps": 8,
+            # Layer index to connect VLM hidden states to action head (-1 = last layer)
+            "connect_layer_index": -1,
+            # Inference denoising steps
+            "num_inference_timesteps": 4,
+            "diffusion_model_cfg": {
+                "cross_attention_dim": 2048,
+                "dropout": 0.2,
+                "final_dropout": True,
+                "interleave_self_attention": True,
+                "norm_type": "ada_norm",
+                "num_layers": 16,
+                "output_dim": 1024,
+                "positional_embeddings": None,
+            },
+        }
+    )
 
     # === Observation image size (resize before encoding) ===
     obs_image_size: Optional[list] = field(default_factory=lambda: [224, 224])
@@ -139,9 +144,11 @@ class Qwen_Dual(baseframework):
             in_features=self.dino_encoder.num_channels, out_features=self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
     def forward(
         self,
@@ -177,7 +184,7 @@ class Qwen_Dual(baseframework):
             actions = torch.tensor(
                 np.array(actions), device=last_hidden.device, dtype=last_hidden.dtype
             )  # [B, T, action_dim]
-            actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
+            actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
             # repeate for efficient training
             repeated_diffusion_steps = (
@@ -225,7 +232,6 @@ class Qwen_Dual(baseframework):
         return {"normalized_actions": normalized_actions}
 
     def align_model_input(self, examples: List[dict]):
-
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         wrist_views = (
             [to_pil_preserve(example["wrist_views"]) for example in examples] if "wrist_views" in examples[0] else None
@@ -292,6 +298,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

@@ -1,5 +1,5 @@
 # Copyright 2025 NVIDIA Corp. and affiliates. All rights reserved.
-# Modified by [Junqiu YU/ Fudan University] in [2025].
+# Modified by [Jinhui YE/ HKUST] in [2026].
 # Modification: [rm and add some connect adapter to match with starVLA, e.g., "rm "].
 
 
@@ -49,24 +49,12 @@ class CategorySpecificMLP(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(
-        self,
-        input_dim,
-        hidden_dim=1024,
-        output_dim=2048,
-        use_input_norm=False,
-    ):
+    def __init__(self, input_dim, hidden_dim=1024, output_dim=2048):
         super().__init__()
-        self.norm = (
-            nn.LayerNorm(input_dim, elementwise_affine=False, eps=1e-6)
-            if use_input_norm
-            else nn.Identity()
-        )
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
-        x = self.norm(x)
         return self.layer2(F.relu(self.layer1(x)))
 
 
@@ -207,6 +195,25 @@ DiTConfig = {
 
 
 class LayerwiseFlowmatchingActionHead(nn.Module):
+    """
+    Layer-wise cross-attention DiT action head.
+
+    NOTE on configuration boundary:
+        This module is intentionally decoupled from any specific VLM backbone.
+        It ONLY reads from ``global_config.framework.action_model`` (and its
+        ``diffusion_model_cfg`` sub-tree).  The framework (e.g. ``Qwen_PI`` /
+        ``Qwen_PI_v3``) is responsible for populating ``diffusion_model_cfg``
+        with the correct DiT shape **before** calling ``get_action_model``:
+
+            diffusion_model_cfg.num_layers           = <DiT depth>
+            diffusion_model_cfg.input_embedding_dim  = <DiT internal hidden>
+            diffusion_model_cfg.cross_attention_dim  = <DiT internal hidden>
+            diffusion_model_cfg.num_attention_heads  = input_embedding_dim // attention_head_dim
+
+        The head no longer reads ``framework.qwenvl.*`` directly.  See
+        ``starVLA/model/framework/VLM4A/diffusion_model_cfg.md`` for details.
+    """
+
     def __init__(
         self,
         global_config,
@@ -216,20 +223,30 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         action_config = global_config.framework.action_model
         diffusion_model_cfg = action_config.diffusion_model_cfg
 
-        # Update DiTConfig into diffusion_model_cfg
-        DiTConfig["num_layers"] = global_config.framework.qwenvl.num_vl_layers
-        DiTConfig["input_embedding_dim"] = global_config.framework.qwenvl.vl_hidden_dim
-        DiTConfig["num_attention_heads"] = DiTConfig["input_embedding_dim"] // DiTConfig["attention_head_dim"]
-        diffusion_model_cfg.update(DiTConfig)
-        # diffusion_model_cfg["interleave_self_attention"] = False
-        diffusion_model_cfg.cross_attention_dim = DiTConfig[
-            "input_embedding_dim"
-        ]  # should match vl embedding dim, but for some case we might want to change it for cross + self attention
-        self.input_embedding_dim = global_config.framework.qwenvl.vl_hidden_dim
-        self.model = DiT(**diffusion_model_cfg)  # TODO better way is copy LLM from VLM
+        # ------------------------------------------------------------------
+        # Pure consumer: trust diffusion_model_cfg.  Apply DiTConfig only as
+        # a fallback for keys the framework forgot to set.  This keeps the
+        # head free of any VLM-specific knowledge.
+        # ------------------------------------------------------------------
+        for k, v in DiTConfig.items():
+            if diffusion_model_cfg.get(k, None) is None:
+                diffusion_model_cfg[k] = v
+
+        # Build a plain dict view and drop framework-side hints that are NOT
+        # DiT constructor kwargs (e.g. `action_dit_hidden_dim`).  This keeps the
+        # head agnostic of any framework convention while still being safe
+        # against accidentally-leaked hint keys.
+        _DIT_NON_KWARGS = {"action_dit_hidden_dim"}
+        diffusion_model_cfg_kwargs = {k: v for k, v in diffusion_model_cfg.items() if k not in _DIT_NON_KWARGS}
+
+        self.input_embedding_dim = diffusion_model_cfg_kwargs["input_embedding_dim"]
+        self.model = DiT(**diffusion_model_cfg_kwargs)  # TODO: ideally copy LLM init from VLM
         self.dit_out_hidden_size = self.input_embedding_dim
         self.action_dim = action_config.action_dim
-        self.action_horizon = action_config.future_action_window_size + 1
+        # `action_horizon` is the canonical chunk length.  Legacy YAMLs are
+        # normalised by share_tools.apply_config_compat upstream, so this
+        # head never reads `future_action_window_size`.
+        self.action_horizon = int(action_config.action_horizon)
         self.num_inference_timesteps = action_config.num_inference_timesteps
 
         self.state_encoder = (
@@ -249,7 +266,6 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             input_dim=self.input_embedding_dim,
             hidden_dim=1024,
             output_dim=self.action_dim,
-            use_input_norm=False, # set this to True will make the training loss start from a normal value
         )
         self.future_tokens = nn.Embedding(action_config.num_target_vision_tokens, self.input_embedding_dim)
         nn.init.normal_(self.future_tokens.weight, mean=0.0, std=0.02)
@@ -272,7 +288,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
     def forward(self, vl_embs_list: list, actions: torch.Tensor, state: torch.Tensor = None):
         """
         vl_embs: list of torch.Tensor, each shape (B, seq_length, feature_dim)
-        actions: shape (B, future_action_window_size, D_action)
+        actions: shape (B, action_horizon, D_action)
         """
         device = actions.device
         num_layers = len(vl_embs_list)

@@ -23,7 +23,7 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.framework.share_tools import merge_framework_config
+from starVLA.model.framework.share_tools import merge_framework_config, populate_layerwise_dit_cfg
 from starVLA.model.modules.action_model.LayerwiseFM_ActionHeader import LayerwiseFlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.model.tools import FRAMEWORK_REGISTRY
@@ -52,34 +52,38 @@ class QwenPIDefaultConfig:
     name: str = "QwenPI"
 
     # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
-    qwenvl: dict = field(default_factory=lambda: {
-        # Path to base VLM checkpoint (local or HF hub id)
-        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
-        # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
-        "attn_implementation": "flash_attention_2",
-        # VLM hidden dimension (auto-set at runtime from model config)
-        "vl_hidden_dim": 2048,
-        # Number of VL transformer layers (auto-set at runtime)
-        "num_vl_layers": 36,
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            # Path to base VLM checkpoint (local or HF hub id)
+            "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+            # Attention implementation: "flash_attention_2" | "eager" | "sdpa"
+            "attn_implementation": "flash_attention_2",
+            # VLM hidden dimension (auto-set at runtime from model config)
+            "vl_hidden_dim": 2048,
+            # Number of VL transformer layers (auto-set at runtime)
+            "num_vl_layers": 36,
+        }
+    )
 
     # === Action head (Layer-wise Flow-matching / cross-DiT) ===
-    action_model: dict = field(default_factory=lambda: {
-        # Action head architecture type
-        "action_model_type": "LayerwiseFM",
-        # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
-        "action_dim": 7,
-        # State dimension (proprioception input)
-        "state_dim": 7,
-        # How many future steps to predict
-        "future_action_window_size": 15,
-        # How many past steps included in action chunk (usually 0)
-        "past_action_window_size": 0,
-        # Repeat factor for flow-matching loss
-        "repeated_diffusion_steps": 2,
-        # Inference denoising steps
-        "num_inference_timesteps": 4,
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            # Action head architecture type
+            "action_model_type": "LayerwiseFM",
+            # Dimensionality of each action vector (e.g., 7 for 6-DoF + gripper)
+            "action_dim": 7,
+            # State dimension (proprioception input)
+            "state_dim": 7,
+            # Canonical chunk length (number of action steps the head predicts).
+            # Legacy YAMLs may use future_action_window_size = action_horizon - 1;
+            # apply_config_compat normalises both directions.
+            "action_horizon": 16,
+            # Repeat factor for flow-matching loss
+            "repeated_diffusion_steps": 2,
+            # Inference denoising steps
+            "num_inference_timesteps": 4,
+        }
+    )
 
     # === Observation image size (optional resize before encoding) ===
     obs_image_size: Optional[list] = None
@@ -122,11 +126,21 @@ class Qwen_PI(baseframework):
         self.config.framework.qwenvl.vl_hidden_dim = llm_hidden_size
         self.config.framework.qwenvl.num_vl_layers = num_vl_layers
 
+        # QwenPI: DiT runs at the LLM hidden size (no compression).  Tell the
+        # action head exactly that — the head itself does not look at qwenvl.*.
+        populate_layerwise_dit_cfg(
+            self.config,
+            dit_hidden_dim=llm_hidden_size,
+            num_dit_layers=num_vl_layers,
+        )
+
         self.action_model: LayerwiseFlowmatchingActionHead = get_action_model(config=self.config)
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
-        self.chunk_len = self.past_action_window_size + 1 + self.future_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
     def forward(
         self,
@@ -170,7 +184,7 @@ class Qwen_PI(baseframework):
             actions = torch.tensor(
                 np.array(actions), device=base_hidden.device, dtype=base_hidden.dtype
             )  # [B, T_full, action_dim]
-            actions_target = actions[:, -(self.future_action_window_size + 1) :, :]  # (B, chunk_len, action_dim)
+            actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
             repeated_diffusion_steps = (
                 self.config.framework.action_model.get("repeated_diffusion_steps", 4)
@@ -267,6 +281,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

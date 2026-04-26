@@ -55,38 +55,46 @@ class InternVLA_M1DefaultConfig:
     name: str = "InternVLA-M1"
 
     # === VLM backbone (Qwen2.5-VL / Qwen3-VL) ===
-    qwenvl: dict = field(default_factory=lambda: {
-        "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
-        "attn_implementation": "flash_attention_2",
-    })
+    qwenvl: dict = field(
+        default_factory=lambda: {
+            "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
+            "attn_implementation": "flash_attention_2",
+        }
+    )
 
     # === DINO encoder (multi-view spatial tokens) ===
-    dino: dict = field(default_factory=lambda: {
-        "dino_backbone": "dinov2_vits14",
-    })
+    dino: dict = field(
+        default_factory=lambda: {
+            "dino_backbone": "dinov2_vits14",
+        }
+    )
 
     # === Layer-wise QFormer (multi-layer feature aggregation) ===
-    layer_qformer: dict = field(default_factory=lambda: {
-        # Start layer index for QFormer (inclusive)
-        "qformer_start_layer": 20,
-        # End layer index for QFormer (exclusive)
-        "qformer_end_layer": 36,
-        # Number of learnable query tokens (must match DiT's n_conditon_token, default 64)
-        "num_query_tokens": 64,
-        # Input feature dim (aligned to VLM hidden_size, e.g. Qwen3-VL-4B-Instruct = 2048)
-        "input_dim": 2048,
-        # Output feature dim (aligned to DiT-B token_size = 768)
-        "ouptput_dim": 768,
-    })
+    layer_qformer: dict = field(
+        default_factory=lambda: {
+            # Start layer index for QFormer (inclusive)
+            "qformer_start_layer": 20,
+            # End layer index for QFormer (exclusive)
+            "qformer_end_layer": 36,
+            # Number of learnable query tokens (must match DiT's n_conditon_token, default 64)
+            "num_query_tokens": 64,
+            # Input feature dim (aligned to VLM hidden_size, e.g. Qwen3-VL-4B-Instruct = 2048)
+            "input_dim": 2048,
+            # Output feature dim (aligned to DiT-B token_size = 768)
+            "ouptput_dim": 768,
+        }
+    )
 
     # === Action head (DiT diffusion) ===
-    action_model: dict = field(default_factory=lambda: {
-        "action_model_type": "DiT-B",
-        "action_dim": 7,
-        "future_action_window_size": 15,
-        "past_action_window_size": 0,
-        "repeated_diffusion_steps": 4,
-    })
+    action_model: dict = field(
+        default_factory=lambda: {
+            "action_model_type": "DiT-B",
+            "action_dim": 7,
+            "future_action_window_size": 15,
+            "past_action_window_size": 0,
+            "repeated_diffusion_steps": 4,
+        }
+    )
 
     # === Observation image size (optional resize before encoding) ===
     obs_image_size: Optional[list] = None
@@ -131,8 +139,11 @@ class InternVLA_M1(baseframework):
             in_features=self.dino_encoder.num_channels, out_features=self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.future_action_window_size = self.config.framework.action_model.future_action_window_size
-        self.past_action_window_size = self.config.framework.action_model.past_action_window_size
+        # `action_horizon` is the single source of truth for chunk length.
+        # Legacy aliases (`future_action_window_size`, `past_action_window_size`)
+        # are normalised upstream by `share_tools.apply_config_compat`, so we
+        # only ever read `action_horizon` here.
+        self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
     def forward(
         self,
@@ -201,10 +212,9 @@ class InternVLA_M1(baseframework):
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
-
             # here is a tips to accelerate training speed, by repeating each sample for several times @ref to CogACT
             actions = torch.tensor(np.array(actions), device=action_condition.device)  # [B, chunk, 7]
-            actions_future = actions[:, -(self.future_action_window_size + 1) :, :]
+            actions_future = actions[:, -self.action_horizon :, :]
 
             # tips: Repeat 'actions' 'repeated_diffusion_steps' times, resulting in [repeated_diffusion_steps*B, T, D]
             repeated_diffusion_steps = (
@@ -258,7 +268,9 @@ class InternVLA_M1(baseframework):
         """
         if not isinstance(examples, list):
             examples = [examples]
-        batch_images = [example["image"] if isinstance(example["image"], list) else [example["image"]] for example in examples]
+        batch_images = [
+            example["image"] if isinstance(example["image"], list) else [example["image"]] for example in examples
+        ]
         instructions = [example["lang"] for example in examples]
 
         # align obs and lang
@@ -286,7 +298,6 @@ class InternVLA_M1(baseframework):
             dino_encoded_features = self.dino_pro(dino_encoded_features)  # [B, 256, D]
 
         with torch.autocast("cuda", dtype=torch.bfloat16):
-
             start_layer = self.config.framework.layer_qformer.qformer_start_layer
             end_layer = self.config.framework.layer_qformer.qformer_end_layer
             condition_features = qwenvl_outputs.hidden_states[start_layer:end_layer]
@@ -308,7 +319,7 @@ class InternVLA_M1(baseframework):
             # Sample random noise
             noise = torch.randn(
                 B,
-                self.future_action_window_size + 1,
+                self.action_horizon,
                 self.action_model.in_channels,
                 device=action_condition_feature.device,
             ).to(
@@ -422,6 +433,7 @@ if __name__ == "__main__":
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()

@@ -243,8 +243,8 @@ def merge_framework_config(default_config_cls, cfg):
         cfg._cfg.framework = merged_fw
         if hasattr(cfg, "_children") and "framework" in cfg._children:
             old_accessed = cfg._children["framework"]._local_accessed.copy()
-            del cfg._children["framework"]          # invalidate stale cache
-            new_child = cfg.framework               # re-create child around merged_fw
+            del cfg._children["framework"]  # invalidate stale cache
+            new_child = cfg.framework  # re-create child around merged_fw
             new_child._local_accessed.update(old_accessed)  # restore tracking
     elif isinstance(cfg, DictConfig):
         cfg.framework = merged_fw
@@ -256,6 +256,43 @@ def merge_framework_config(default_config_cls, cfg):
             overwatch.warning("Could not write merged framework config back to cfg.")
 
     return cfg
+
+
+def populate_layerwise_dit_cfg(cfg, *, dit_hidden_dim: int, num_dit_layers: int):
+    """
+    Populate ``framework.action_model.diffusion_model_cfg`` with the DiT shape
+    fields required by ``LayerwiseFlowmatchingActionHead``.
+
+    Why this helper exists:
+        The action head is intentionally agnostic of the VLM backbone — it only
+        consumes ``diffusion_model_cfg``.  Each framework (QwenPI, QwenPI_v3,
+        ...) is responsible for deciding the DiT shape (depth + hidden) from
+        whatever source it likes (LLM hidden, a compressed projector dim, ...)
+        and writing it here BEFORE calling ``get_action_model``.
+
+    Fields written (override any stale YAML values):
+        - num_layers           = num_dit_layers
+        - input_embedding_dim  = dit_hidden_dim
+        - cross_attention_dim  = dit_hidden_dim   (encoder is pre-projected)
+        - num_attention_heads  = dit_hidden_dim // attention_head_dim
+                                 (uses existing attention_head_dim if set, else 64)
+
+    Args:
+        cfg: Full OmegaConf config.
+        dit_hidden_dim: DiT internal hidden dim.
+        num_dit_layers: Number of DiT cross-attention layers.
+
+    Returns:
+        The (mutated) diffusion_model_cfg node.
+    """
+    dit_cfg = cfg.framework.action_model.diffusion_model_cfg
+    head_dim = dit_cfg.get("attention_head_dim", None) or 64
+    dit_cfg.attention_head_dim = head_dim
+    dit_cfg.num_layers = int(num_dit_layers)
+    dit_cfg.input_embedding_dim = int(dit_hidden_dim)
+    dit_cfg.cross_attention_dim = int(dit_hidden_dim)
+    dit_cfg.num_attention_heads = int(dit_hidden_dim) // int(head_dim)
+    return dit_cfg
 
 
 def read_model_config(pretrained_checkpoint):
@@ -298,6 +335,16 @@ def read_model_config(pretrained_checkpoint):
         with open(config_json, "r") as f:
             global_cfg = json.load(f)
 
+        # Normalise legacy / pre-v0.21 configs to current schema (idempotent;
+        # also ensures `past_action_window_size`, `action_horizon`,
+        # `future_action_window_size`, etc. are all present for downstream code).
+        try:
+            _oc = OmegaConf.create(global_cfg)
+            apply_config_compat(_oc)
+            global_cfg = OmegaConf.to_container(_oc, resolve=True)
+        except Exception as e:
+            overwatch.warning(f"apply_config_compat failed on `{config_json}`: {e}")
+
         # Load Dataset Statistics for Action Denormalization
         with open(dataset_statistics_json, "r") as f:
             norm_stats = json.load(f)
@@ -336,6 +383,8 @@ def read_mode_config(pretrained_checkpoint):
         # Load VLA Config (and corresponding base VLM `ModelConfig`) from `config.json`
         try:
             ocfg = OmegaConf.load(str(config_yaml))
+            # Normalise legacy / pre-v0.21 configs to current schema (idempotent).
+            apply_config_compat(ocfg)
             global_cfg = OmegaConf.to_container(ocfg, resolve=True)
         except Exception as e:
             overwatch.error(f"❌ Failed to load YAML config `{config_yaml}`: {e}")
@@ -348,3 +397,128 @@ def read_mode_config(pretrained_checkpoint):
         overwatch.error(f"❌ Pretrained checkpoint `{pretrained_checkpoint}` does not exist.")
         raise FileNotFoundError(f"Pretrained checkpoint `{pretrained_checkpoint}` does not exist.")
     return global_cfg, norm_stats
+
+
+# =============================================================================
+# Config compatibility / "tightening" layer (introduced in version_id "0.21").
+#
+# Goal: keep user-facing YAMLs short and unambiguous while preserving full
+# back-compat for old checkpoints' config.yaml. See bar/config_收紧.md for
+# the design rationale.
+#
+# This function is *idempotent* — calling it multiple times yields the same
+# result. It does NOT touch framework class signatures; instead it normalises
+# the OmegaConf tree so that downstream framework __init__ code (which still
+# reads e.g. `future_action_window_size`) keeps working unchanged.
+# =============================================================================
+
+CONFIG_VERSION = "0.21"
+
+
+def apply_config_compat(cfg, *, strict: bool = False):
+    """
+    Normalise an arbitrary (old or new) starVLA training config into the
+    current `version_id == "0.21"` schema.
+
+    Performed transformations (each applied only when needed):
+
+      1.  `framework.action_model.action_horizon` ↔ `future_action_window_size`
+          - `action_horizon` is canonical (preferred user-facing name).
+          - `future_action_window_size = action_horizon - 1` is auto-filled so
+            framework code that still reads the old key keeps working.
+          - If both are present and inconsistent, a warning is emitted and
+            `action_horizon` wins.
+
+      2.  `framework.action_model.diffusion_model_cfg.output_dim`
+          - Auto-filled from `framework.action_model.hidden_size` when missing.
+
+      3.  `framework.action_model.diffusion_model_cfg.cross_attention_dim`
+          - Auto-filled from `framework.qwenvl.vl_hidden_dim` when missing.
+            Frameworks that further override this at runtime (e.g. QwenGR00T)
+            are unaffected.
+
+      4.  `framework.action_model.action_hidden_dim`
+          - Auto-filled from `hidden_size` when missing. OFT-family frameworks
+            still overwrite this from VLM hidden_size at runtime.
+
+      5.  `framework.action_model.past_action_window_size`
+          - Auto-filled to `0` when missing. All released starVLA frameworks
+            run with past=0; the field is therefore dropped from user YAMLs
+            and only re-materialised here for legacy code that still reads it.
+
+      6.  `cfg.version_id` is stamped to `"0.21"`.
+
+    Args:
+        cfg: An OmegaConf DictConfig (or anything _to_omegaconf can wrap).
+        strict: If True, raise on inconsistent values instead of warning.
+
+    Returns:
+        The same `cfg` object (mutated in place) for chaining convenience.
+    """
+    from omegaconf import OmegaConf
+
+    if cfg is None:
+        return cfg
+
+    src_version = OmegaConf.select(cfg, "version_id", default=None)
+
+    # ---- 1. action_horizon ↔ future_action_window_size ----
+    am_path = "framework.action_model"
+    am = OmegaConf.select(cfg, am_path, default=None)
+    if am is not None:
+        ah = OmegaConf.select(am, "action_horizon", default=None)
+        fw = OmegaConf.select(am, "future_action_window_size", default=None)
+
+        if ah is None and fw is not None:
+            ah = int(fw) + 1
+            OmegaConf.update(cfg, f"{am_path}.action_horizon", ah, force_add=True)
+        elif ah is not None and fw is None:
+            fw = int(ah) - 1
+            OmegaConf.update(cfg, f"{am_path}.future_action_window_size", fw, force_add=True)
+        elif ah is not None and fw is not None and int(ah) != int(fw) + 1:
+            msg = (
+                f"[apply_config_compat] inconsistent action_horizon={ah} vs "
+                f"future_action_window_size={fw}; expected action_horizon == future + 1. "
+                "Using action_horizon as canonical."
+            )
+            if strict:
+                raise ValueError(msg)
+            overwatch.warning(msg)
+            OmegaConf.update(cfg, f"{am_path}.future_action_window_size", int(ah) - 1, force_add=True)
+
+        # ---- 2 & 3. diffusion_model_cfg auto-fill ----
+        dm_path = f"{am_path}.diffusion_model_cfg"
+        dm = OmegaConf.select(cfg, dm_path, default=None)
+        if dm is not None:
+            hidden_size = OmegaConf.select(am, "hidden_size", default=None)
+            if OmegaConf.select(dm, "output_dim", default=None) is None and hidden_size is not None:
+                OmegaConf.update(cfg, f"{dm_path}.output_dim", int(hidden_size), force_add=True)
+
+            if OmegaConf.select(dm, "cross_attention_dim", default=None) is None:
+                vl_hidden = OmegaConf.select(cfg, "framework.qwenvl.vl_hidden_dim", default=None)
+                if vl_hidden is not None:
+                    OmegaConf.update(cfg, f"{dm_path}.cross_attention_dim", int(vl_hidden), force_add=True)
+                # else: leave None — framework __init__ may auto-bind it
+
+        # ---- 4. action_hidden_dim fallback ----
+        if OmegaConf.select(am, "action_hidden_dim", default=None) is None:
+            hidden_size = OmegaConf.select(am, "hidden_size", default=None)
+            if hidden_size is not None:
+                OmegaConf.update(cfg, f"{am_path}.action_hidden_dim", int(hidden_size), force_add=True)
+
+        # ---- 5. past_action_window_size default ----
+        if OmegaConf.select(am, "past_action_window_size", default=None) is None:
+            OmegaConf.update(cfg, f"{am_path}.past_action_window_size", 0, force_add=True)
+
+    # ---- 6. stamp version ----
+    if src_version != CONFIG_VERSION:
+        try:
+            OmegaConf.update(cfg, "version_id", CONFIG_VERSION, force_add=True)
+        except Exception:
+            try:
+                cfg.version_id = CONFIG_VERSION
+            except Exception:
+                pass
+        overwatch.info(f"[apply_config_compat] normalised config from version_id={src_version!r} to {CONFIG_VERSION!r}")
+
+    return cfg

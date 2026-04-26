@@ -200,18 +200,59 @@ class FlowmatchingActionHead(nn.Module):
     ):
         super().__init__()
         config = full_config.framework.action_model
-        self.hidden_size = config.hidden_size  # @JinhuiYE
         self.full_config = full_config
+
+        # ------------------------------------------------------------------
+        # DiT architecture selection
+        #   action_model_type: "DiT-B" | "DiT-L"
+        #     DiT-B → input_embedding_dim=768,  heads=12, head_dim=64
+        #     DiT-L → input_embedding_dim=1536, heads=32, head_dim=48
+        #   diffusion_model_cfg overrides/extends the base DiT shape.
+        #   In particular, diffusion_model_cfg.cross_attention_dim MUST be
+        #   set by the framework to match the VLM hidden size BEFORE calling
+        #   get_action_model(), e.g.:
+        #       cfg.framework.action_model.diffusion_model_cfg.cross_attention_dim
+        #           = vlm.model.config.hidden_size
+        # ------------------------------------------------------------------
         action_model_type = config.action_model_type
         action_model_cfg = DiTConfig[action_model_type]
-
         self.input_embedding_dim = action_model_cfg["input_embedding_dim"]
+
         diffusion_model_cfg = config.diffusion_model_cfg
         diffusion_model_cfg = {**action_model_cfg, **diffusion_model_cfg}
         self.model = DiT(**diffusion_model_cfg)
+
+        # ------------------------------------------------------------------
+        # Action horizon (chunk length sent to the DiT)
+        #   Single source of truth: `action_horizon` (e.g. 8).
+        #   Legacy YAMLs that only provide `future_action_window_size` are
+        #   normalised to `action_horizon` upstream by
+        #   `share_tools.apply_config_compat`, so this code never touches
+        #   the legacy alias.
+        # ------------------------------------------------------------------
+        self.action_horizon = int(config.action_horizon)
+
+        # ------------------------------------------------------------------
+        # Action / state dimensions
+        #   action_dim: DoF of the robot action (e.g. 7 for 6-DoF + gripper)
+        #   state_dim:  proprioception dimension; set to 0/None to disable
+        #               the state_encoder branch entirely.
+        # ------------------------------------------------------------------
         self.action_dim = config.action_dim
-        self.action_horizon = config.future_action_window_size + 1
+
+        # ------------------------------------------------------------------
+        # Inference denoising steps
+        #   num_inference_timesteps: Euler steps during predict_action().
+        #   Typically 4–10; fewer = faster but less accurate.
+        # ------------------------------------------------------------------
         self.num_inference_timesteps = config.num_inference_timesteps
+
+        # ------------------------------------------------------------------
+        # hidden_size: intermediate MLP width for state_encoder / action_decoder.
+        #   Decoupled from input_embedding_dim so you can use a smaller hidden
+        #   for the MLP without changing the DiT latent size.
+        # ------------------------------------------------------------------
+        self.hidden_size = config.hidden_size
 
         self.state_encoder = (
             MLP(
@@ -232,13 +273,31 @@ class FlowmatchingActionHead(nn.Module):
             hidden_dim=self.hidden_size,
             output_dim=self.action_dim,
         )
+
+        # ------------------------------------------------------------------
+        # future_tokens: learnable query tokens prepended before the action
+        #   sequence so the DiT has dedicated "planning" slots.
+        #   num_target_vision_tokens controls how many such tokens are added.
+        # ------------------------------------------------------------------
         self.future_tokens = nn.Embedding(config.num_target_vision_tokens, self.input_embedding_dim)
         nn.init.normal_(self.future_tokens.weight, mean=0.0, std=0.02)
 
+        # ------------------------------------------------------------------
+        # Positional embedding over the action sequence
+        #   add_pos_embed: whether to add sinusoidal-style learned PE
+        #   max_seq_len:   max supported action sequence length
+        # ------------------------------------------------------------------
         if config.add_pos_embed:
             self.position_embedding = nn.Embedding(config.max_seq_len, self.input_embedding_dim)
             nn.init.normal_(self.position_embedding.weight, mean=0.0, std=0.02)
 
+        # ------------------------------------------------------------------
+        # Flow-matching noise schedule (Beta distribution)
+        #   noise_beta_alpha / noise_beta_beta: Beta(α, β) shape params.
+        #   noise_s: upper-clip of the sampled value so t ∈ [0, noise_s].
+        #   num_timestep_buckets: discretise continuous t into N buckets for
+        #     the timestep encoder inside DiT.
+        # ------------------------------------------------------------------
         self.beta_dist = Beta(config.noise_beta_alpha, config.noise_beta_beta)
         self.num_timestep_buckets = config.num_timestep_buckets
         self.config = config
@@ -255,7 +314,7 @@ class FlowmatchingActionHead(nn.Module):
     ):
         """
         vl_embs: shape (B, seq_length, feature_dim)
-        actions: shape (B, future_action_window_size, D_action)
+        actions: shape (B, action_horizon, action_dim)
         """
         device = vl_embs.device
 
@@ -308,8 +367,8 @@ class FlowmatchingActionHead(nn.Module):
         # Set initial actions as the sampled noise.
         batch_size = vl_embs.shape[0]
         device = vl_embs.device
-        actions = torch.randn(  # yes, here make sure action_horizon align with data loader? or share from clinet?
-            size=(batch_size, self.config.action_horizon, self.config.action_dim),
+        actions = torch.randn(
+            size=(batch_size, self.action_horizon, self.action_dim),
             dtype=vl_embs.dtype,
             device=device,
         )

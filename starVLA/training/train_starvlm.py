@@ -115,6 +115,10 @@ class VLAMTrainer(TrainerUtils):
         seed = self.config.seed + rank if hasattr(self.config, "seed") else rank + 3047
         set_seed(seed)
 
+        # Save config snapshots upfront so a later setup-step crash still
+        # leaves a from_pretrained-able run dir behind.
+        self._save_initial_configs()
+
         if hasattr(self.config.trainer, "pretrained_checkpoint") and self.config.trainer.pretrained_checkpoint:
             pretrained_checkpoint = self.config.trainer.pretrained_checkpoint
             reload_modules = (
@@ -135,7 +139,6 @@ class VLAMTrainer(TrainerUtils):
 
         self._init_wandb()
         self._init_checkpointing()
-        self._save_initial_configs()
 
     def _save_initial_configs(self):
         """Save full config and training script at the very start of training."""
@@ -284,7 +287,7 @@ class VLAMTrainer(TrainerUtils):
             logger.info("***** Training Configuration *****")
             logger.info(f"  Total optimization steps = {self.config.trainer.max_train_steps}")
             logger.info(f"  Per device batch size = {per_device_bs}")
-            logger.info(f"  Gradient accumulation steps = {self.config.trainer.gradient_accumulation_steps}")
+            logger.info(f"  Gradient accumulation steps = {self.accelerator.gradient_accumulation_steps}")
             logger.info(f"  Total batch size = {self.total_batch_size}")
 
     def _train_step(self, batch_vlm):
