@@ -78,7 +78,7 @@ flow-matching π, GR00T-style dual-system), and benchmark-agnostic deployment
 hooks. Each axis is decoupled, so a new framework variant typically reduces
 to swapping the backbone or the action head while reusing the rest.*
 
-<details>
+<details open>
 <summary><b>Data flow diagram (click to expand)</b></summary>
 
 ![StarVLA data flow](assets/starVLA_dataflow.png)
