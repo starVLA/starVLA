@@ -71,7 +71,23 @@ Training configs and efficiency benchmarks for community reference.
 ## Overview and Key Features
 
 ![Overview of the StarVLA framework](assets/starVLA_overview.png)
-*Overview of the StarVLA framework. We present a unified and modular pipeline that connects heterogeneous data sources, pluggable dataloaders, and flexible data representations with a standardized model forwarding interface. The framework supports diverse vision-language foundation models and VLA architectures, enabling end-to-end training and deployment.*
+*Overview of the StarVLA framework. StarVLA organises VLA research as a
+composable stack: a shared training infrastructure, pluggable foundation-model
+backbones (VLM / world model), interchangeable action heads (FAST, OFT,
+flow-matching π, GR00T-style dual-system), and benchmark-agnostic deployment
+hooks. Each axis is decoupled, so a new framework variant typically reduces
+to swapping the backbone or the action head while reusing the rest.*
+
+<details>
+<summary><b>Data flow diagram (click to expand)</b></summary>
+
+![StarVLA data flow](assets/starVLA_dataflow.png)
+*Data flow view of StarVLA. A unified, modular pipeline connects heterogeneous
+data sources, pluggable dataloaders, and flexible data representations through
+a standardised model-forwarding interface, enabling end-to-end training and
+deployment.*
+
+</details>
 
 <details open>
 <summary><b>Various VLA Frameworks</b></summary>

@@ -49,7 +49,10 @@ The evaluation should be run **from the repository root** using **two separate t
 
 ### Step 0. Download offical checkpoint
 
-1) Download the checkpoint:[Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1)
+Available SimplerEnv WidowX checkpoints (see [docs/model_zoo.md](../../docs/model_zoo.md) for the full list):
+
+- [Qwen3VL-GR00T-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-GR00T-Bridge-RT-1) — 65.3 avg success
+- [Qwen3VL-PI_v3-Bridge-RT-1](https://huggingface.co/StarVLA/Qwen3VL-PI_v3-Bridge-RT_1) — **69.8 avg success** (layer-wise cross-DiT flow-matching head, π₀.₅-style)
 
 
 
