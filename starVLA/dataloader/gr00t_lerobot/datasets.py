@@ -25,6 +25,7 @@ See `scripts/load_dataset.py` for examples on how to use these datasets.
 """
 import os
 import hashlib
+import io
 import json, torch
 import copy
 from collections import defaultdict
@@ -783,9 +784,13 @@ class LeRobotSingleDataset(Dataset):
                 channels = le_video_meta["shape"][le_video_meta["names"].index("channel")]
                 fps = le_video_meta["video_info"]["video.fps"]
             except (ValueError, KeyError):
-                # channels = le_video_meta["shape"][le_video_meta["names"].index("channels")]
-                channels = le_video_meta["info"]["video.channels"]
-                fps = le_video_meta["info"]["video.fps"]
+                try:
+                    channels = le_video_meta["info"]["video.channels"]
+                    fps = le_video_meta["info"]["video.fps"]
+                except (ValueError, KeyError):
+                    # Fallback for image-only datasets (e.g. VLA-Arena) that lack video_info
+                    channels = 3
+                    fps = le_info.get("fps", 30)
             simplified_modality_meta["video"][new_key] = {
                 "resolution": [width, height],
                 "channels": channels,
@@ -1608,6 +1613,43 @@ class LeRobotSingleDataset(Dataset):
         assert key.startswith("video."), f"Video key must start with 'video.', got {key}"
         # Get the sub-key
         key = key.replace("video.", "")
+
+        # Image-only LeRobot datasets (e.g. VLA-Arena) may store frames directly
+        # in parquet columns and have total_videos == 0 (no mp4 files). In this
+        # case, load frames from the original image column and pad by step indices.
+        original_key = self.lerobot_modality_meta.video[key].original_key
+        if original_key is None:
+            original_key = key
+        if self.curr_traj_data is not None and original_key in self.curr_traj_data.columns:
+            image_entries = self.curr_traj_data[original_key].tolist()
+
+            def _decode_image_entry(entry):
+                if isinstance(entry, np.ndarray):
+                    return entry
+                if isinstance(entry, Image.Image):
+                    return np.array(entry)
+                if isinstance(entry, dict):
+                    img_bytes = entry.get("bytes", None)
+                    img_path = entry.get("path", None)
+
+                    if img_bytes is not None:
+                        return np.array(Image.open(io.BytesIO(img_bytes)).convert("RGB"))
+
+                    if img_path is not None:
+                        path_obj = Path(img_path)
+                        if not path_obj.is_absolute():
+                            path_obj = self.dataset_path / path_obj
+                        return np.array(Image.open(path_obj).convert("RGB"))
+
+                raise TypeError(f"Unsupported image entry type: {type(entry)}")
+
+            frames = []
+            for idx in step_indices:
+                safe_idx = int(min(max(idx, 0), len(image_entries) - 1))
+                frames.append(_decode_image_entry(image_entries[safe_idx]))
+
+            return np.stack(frames)
+
         video_path = self.get_video_path(trajectory_id, key)
         # Get the action/state timestamps for each frame in the video
         assert self.curr_traj_data is not None, f"No data found for {trajectory_id=}"
@@ -2311,8 +2353,23 @@ class LeRobotMixtureDataset(Dataset):
 
         for attempt in range(max_retries):
             try:
-                while True: # @DUG
+                sample_tries = 0
+                max_sample_tries = 200
+                while True:
+                    sample_tries += 1
+                    if sample_tries > max_sample_tries:
+                        raise RuntimeError(
+                            f"Unable to sample a valid item after {max_sample_tries} attempts. "
+                            f"dataset={self.datasets[0].dataset_name if len(self.datasets)>0 else 'unknown'}"
+                        )
+
                     dataset, trajectory_id, step = self.sample_step(index)
+                    # If dataset has no physical videos (e.g., image frames in parquet
+                    # for VLA-Arena), do not gate sampling on mp4 existence.
+                    total_videos = int(dataset.lerobot_info_meta.get("total_videos", 0))
+                    if total_videos == 0:
+                        break
+
                     key = dataset.modality_keys["video"][0].replace("video.", "")
                     video_path = dataset.get_video_path(trajectory_id, key)
                     if os.path.exists(video_path):
