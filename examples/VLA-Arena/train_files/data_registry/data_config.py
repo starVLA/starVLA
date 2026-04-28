@@ -30,6 +30,7 @@ class VLAArenaFrankaDataConfig:
 
     video_keys = [
         "video.primary_image",   # agentview camera
+        "video.wrist_image",   # wrist camera
     ]
     state_keys = [
         "state.x",
@@ -54,7 +55,8 @@ class VLAArenaFrankaDataConfig:
 
     observation_indices = [0]
     action_indices = list(range(8))
-    state_indices = list(range(-16, 0))
+    # state_indices = list(range(-16, 0))
+    state_indices = [0]
 
     def modality_config(self):
         return {

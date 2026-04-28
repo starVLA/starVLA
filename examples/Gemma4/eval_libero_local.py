@@ -5,7 +5,7 @@ Skips the websocket policy server entirely — loads `Gemma4_PI.from_pretrained`
 in the same Python process as the LIBERO simulator and calls `predict_action`
 directly. Single GPU, single conda env (`gemma_vla`).
 
-Training used `obs: ["image_0"]` (agentview only), so we feed a single front
+Training used the agentview camera only, so we feed a single front
 camera view per step. Action chunk size = future_action_window_size + 1 = 8.
 
 Usage:

@@ -96,9 +96,6 @@ class InternVLA_M1DefaultConfig:
         }
     )
 
-    # === Observation image size (optional resize before encoding) ===
-    obs_image_size: Optional[list] = None
-
 
 @FRAMEWORK_REGISTRY.register("InternVLA-M1")
 class InternVLA_M1(baseframework):
@@ -274,7 +271,7 @@ class InternVLA_M1(baseframework):
         instructions = [example["lang"] for example in examples]
 
         # align obs and lang
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         instructions = [instruction.lower() for instruction in instructions]

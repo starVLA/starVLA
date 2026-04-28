@@ -100,7 +100,7 @@ if __name__ == "__main__":
                 },
             },
             "trainer": {"repeated_diffusion_steps": 2},
-            "datasets": {"vla_data": {"image_size": None}},
+            "datasets": {"vla_data": {"obs_image_size": None}},
         }
     )
 

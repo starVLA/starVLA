@@ -78,8 +78,6 @@ class CosmoPredict2OFTDefaultConfig:
         }
     )
 
-    obs_image_size: Optional[list] = None
-
 
 @FRAMEWORK_REGISTRY.register("CosmoPredict2OFT")
 class CosmoPredict2_OFT(baseframework):
@@ -153,7 +151,7 @@ class CosmoPredict2_OFT(baseframework):
         batch_images = [to_pil_preserve(example["image"]) for example in examples]
         instructions = [example["lang"] for example in examples]
 
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
