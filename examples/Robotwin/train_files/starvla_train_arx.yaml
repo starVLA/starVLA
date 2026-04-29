@@ -55,6 +55,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: playground/Datasets/arx-x5
     data_mix: arx_x5 # bridge_rt_1
     action_type: abs_qpos

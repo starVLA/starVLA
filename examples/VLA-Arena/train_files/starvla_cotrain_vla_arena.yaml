@@ -58,6 +58,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: playground/Datasets/VLA_ARENA_LEROBOT_DATA
     data_mix: vla_arena_L0_L    # see starVLA/dataloader/gr00t_lerobot/mixtures.py
     action_type: delta_eef        # 7-DOF delta EEF (pos + rotation + gripper)

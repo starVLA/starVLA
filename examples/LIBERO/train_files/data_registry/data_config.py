@@ -41,7 +41,7 @@ class Libero4in1DataConfig:
     def modality_config(self):
         return {
             "video": ModalityConfig(delta_indices=self.observation_indices, modality_keys=self.video_keys),
-            "state": ModalityConfig(delta_indices=self.state_indices, modality_keys=self.state_keys),
+            # "state": ModalityConfig(delta_indices=self.state_indices, modality_keys=self.state_keys), # igore state modality for now since some datasets don't have state and we want to be able to use them, can add back later if needed
             "action": ModalityConfig(delta_indices=self.action_indices, modality_keys=self.action_keys),
             "language": ModalityConfig(delta_indices=self.observation_indices, modality_keys=self.language_keys),
         }

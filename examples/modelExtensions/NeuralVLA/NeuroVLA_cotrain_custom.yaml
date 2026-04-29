@@ -62,7 +62,7 @@ datasets:
     per_device_batch_size: 4
 
   vla_data:
-    include_state: True
+    include_state: true
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/OXE_LEROBOT_DATASET
     data_mix: bridge_rt_1 # bridge_rt_1

@@ -56,6 +56,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: playground/Datasets/RoboTwin
     data_mix: robotwin_all_50
     action_type: abs_qpos

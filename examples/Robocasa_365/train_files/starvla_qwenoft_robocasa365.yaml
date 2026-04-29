@@ -25,6 +25,7 @@ framework:
 datasets:
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: playground/Datasets/robocasa365
     data_mix: robocasa365_open_drawer_target_human
     action_type: delta_ee

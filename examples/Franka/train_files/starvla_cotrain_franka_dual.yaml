@@ -55,6 +55,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: ./playground/Datasets
     data_mix: dual_franka_eef_joints
     action_type: delta_ee
