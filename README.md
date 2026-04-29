@@ -200,12 +200,12 @@ StarVLA emphasizes a modular model design. Each major framework file can be run 
 
 ```bash
 # model
-python starVLA/model/framework/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
+python starVLA/model/framework/VLM4A/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
 # dataloader
 python starVLA/dataloader/lerobot_datasets.py --config_yaml starvla_cotrain_oxe.yaml
 ```
 
-Note: `starVLA/model/framework/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
+Note: `starVLA/model/framework/VLM4A/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
 
 </details>
 
@@ -272,7 +272,7 @@ accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml  \
   --num_processes 8 \
   starVLA/training/train_internvla.py \
-  --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+  --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.action_model.new_module ${module_name} \ # plug-in a new module to action model
@@ -334,7 +334,7 @@ Empty `reload_modules` means full load all model. However, starVLA does not save
       --num_machines $SLURM_NNODES \
       --num_processes=${TOTAL_GPUS} \
       starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+      --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
       --framework.name QwenGR00T \
       --framework.qwenvl.base_vlm microsoft/Florence-2-large \
       --run_root_dir ${run_root_dir} \

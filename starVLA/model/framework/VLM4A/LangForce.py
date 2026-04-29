@@ -667,7 +667,7 @@ if __name__ == "__main__":
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_libero.yaml")
+    parser.add_argument("--config_yaml", type=str, default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml")
     args, clipargs = parser.parse_known_args()
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":

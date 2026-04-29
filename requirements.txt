@@ -31,3 +31,11 @@ timm
 tyro
 websockets
 tdigest==0.5.2.2
+
+# env for qwen3.5 tip: flash-linear-attention 会导致过去的版本不兼容，导致之前的ckpt 性能下降
+# torch==2.6.0+cu124
+# triton==3.2.0
+# flash-attn==2.7.4.post1
+# flash-linear-attention==0.3.2
+# causal_conv1d==1.5.0.post8
+# transformers==5.3.0

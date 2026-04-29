@@ -1365,16 +1365,11 @@ class LeRobotSingleDataset(Dataset):
 
     def _pack_sample(self, data: dict) -> dict:
         """Pack transformed modality data into training sample format."""
-        prim_images = []
-        wrist_views = []
+        step_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
             image = Image.fromarray(image).resize((224, 224))
-            if "wrist" not in video_key:
-                prim_images.append(image)
-            else:
-                wrist_views.append(image)
-        all_images = prim_images + wrist_views
+            step_images.append(image)
 
         language = data[self.modality_keys["language"][0]][0]
         action = []
@@ -1384,9 +1379,9 @@ class LeRobotSingleDataset(Dataset):
 
         sample = {
             "action": action,
-            "image": all_images,
+            "image": step_images,
             "lang": language,
-            "language": language,
+            "robot_tag": self.tag
         }
 
         if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
@@ -2322,7 +2317,7 @@ class LeRobotMixtureDataset(Dataset):
                 raw_data = dataset.get_step_data(trajectory_id, step)    
                 data = dataset.transforms(raw_data)
                 sample = dataset._pack_sample(data)
-                sample["robot_tag"] = dataset.tag
+                
                 return sample
                 
             except Exception as e:

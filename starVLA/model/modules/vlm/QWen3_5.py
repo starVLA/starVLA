@@ -190,7 +190,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        default="examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()

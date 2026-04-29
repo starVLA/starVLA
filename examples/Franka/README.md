@@ -65,7 +65,7 @@ action_model:
 Before starting training, you can verify that the model forward pass works correctly:
 
 ```bash
-python starVLA/model/framework/QwenOFT.py \
+python starVLA/model/framework/VLM4A/QwenOFT.py \
     --config_yaml examples/Franka/train_files/starvla_cotrain_franka_single.yaml
 ```
 

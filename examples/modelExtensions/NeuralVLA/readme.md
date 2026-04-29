@@ -18,11 +18,11 @@ Please replace the following files with the provided examples:
 
 - **Data config (state history indices)**
   - Target path:  
-    `starVLA/starVLA/dataloader/gr00t_lerobot/data_config.py`
+    `starVLA/dataloader/gr00t_lerobot/data_config.py`
 
 - **LIBERO evaluation script (sim env returns historical states)**
   - Target path:  
-    `starVLA/examples/LIBERO/eval_files/eval_libero.py`
+    `examples/LIBERO/eval_files/eval_libero.py`
 
 > After replacement, your pipeline will support reading **historical states** required by NeuroVLA.
 
@@ -94,8 +94,8 @@ Notes & Best Practices
 File Paths Summary
 
 Purpose	Path
-Dataset state history config	starVLA/starVLA/dataloader/gr00t_lerobot/data_config.py
-LIBERO eval returns historical states	starVLA/examples/LIBERO/eval_files/eval_libero.py
+Dataset state history config	starVLA/dataloader/gr00t_lerobot/data_config.py
+LIBERO eval returns historical states	examples/LIBERO/eval_files/eval_libero.py
 
 
 ⸻

@@ -31,7 +31,7 @@ accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml  \
   --num_processes 8 \
   starVLA/training/train_internvla.py \
-  --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+  --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.action_model.new_module ${module_name} \ # plug-in a new module to action model
@@ -91,7 +91,7 @@ Empty `reload_modules` means full load all model. However, starVLA does not save
       --num_machines $SLURM_NNODES \
       --num_processes=${TOTAL_GPUS} \
       starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+      --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
       --framework.framework_py QwenGR00T \
       --framework.qwenvl.base_vlm microsoft/Florence-2-large \
       --run_root_dir ${run_root_dir} \
