@@ -522,3 +522,38 @@ def apply_config_compat(cfg, *, strict: bool = False):
         overwatch.info(f"[apply_config_compat] normalised config from version_id={src_version!r} to {CONFIG_VERSION!r}")
 
     return cfg
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Discretised proprioceptive state → instruction prefix (π₀.5 style)
+# ──────────────────────────────────────────────────────────────────────
+import numpy as _np
+from typing import List as _List
+
+
+def state2str_transform(state: "_np.ndarray", num_bins: int = 256) -> str:
+    """Quantise a state vector into ``num_bins`` uniform bins over [-1, 1]
+    and return space-separated bin indices.
+
+    Example: [-0.5, 0.1, 0.8] -> "95 133 203"
+    """
+    discretized_state = _np.digitize(state, bins=_np.linspace(-1, 1, num_bins + 1)[:-1]) - 1
+    return " ".join(map(str, discretized_state))
+
+
+def add_discretized_state_to_instruction(
+    instructions: "_List[str]",
+    states: "_List[_np.ndarray]",
+    num_bins: int = 256,
+) -> "_List[str]":
+    """Append discretised proprioceptive state tokens to each instruction.
+
+    Format: ``<original instruction> [STATE] <bin indices> [ACTION]``
+    Lets the VLM attend to the robot state purely through its existing
+    text-token pathway — no extra encoder required (π₀.5 style).
+    """
+    updated_instructions = []
+    for instr, state in zip(instructions, states):
+        state_str = state2str_transform(state[0], num_bins=num_bins)
+        updated_instructions.append(f"{instr} [STATE] {state_str} [ACTION]")
+    return updated_instructions
