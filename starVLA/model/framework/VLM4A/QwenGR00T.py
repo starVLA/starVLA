@@ -297,12 +297,19 @@ if __name__ == "__main__":
     model: Qwen_GR00T = Qwen_GR00T(cfg)
     print(model)
 
+    action_dim = int(model.action_model.action_dim)
+    state_dim = int(model.action_model.config.get("state_dim", 0) or 0)
+    action_steps = 2 * int(model.action_horizon)
+
     image = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
     sample = {
-        "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
+        "action": np.random.uniform(-1, 1, size=(action_steps, action_dim)).astype(np.float16),
         "image": [image],
         "lang": "This is a fake instruction for testing.",
     }
+    if state_dim > 0:
+        sample["state"] = np.random.uniform(-1, 1, size=(1, state_dim)).astype(np.float16)
+
     sample2 = sample.copy()
     sample2["lang"] = "Another fake instruction for testing."
 
