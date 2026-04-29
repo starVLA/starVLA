@@ -62,6 +62,20 @@ class PolicyWarper:
         self.image_history.append(image)
         self.num_image_history = min(self.num_image_history + 1, self.horizon)
 
+    @staticmethod
+    def _select_instruction(instructions, batch_index: int):
+        if not isinstance(instructions, list):
+            return instructions
+        if len(instructions) == 0:
+            raise ValueError("instructions must not be an empty list")
+        if batch_index < len(instructions):
+            return instructions[batch_index]
+        if len(instructions) == 1:
+            return instructions[0]
+        raise IndexError(
+            f"instructions has length {len(instructions)}, but batch index {batch_index} was requested"
+        )
+
     def reset(self, task_description: str or tuple) -> None:
 
         self.task_description = task_description
@@ -111,11 +125,11 @@ class PolicyWarper:
         # prepare vla input
         examples = []
         batch_size = len(images)
-        instructions = [self.task_description] if isinstance(self.task_description, str) else self.task_description
+        instructions = self.task_description
         for b in range(batch_size):
             example = {
                 "image": images[b],  # A list of multi-view images for a single sample
-                "lang": instructions[b] if isinstance(instructions, list) else instructions,
+                "lang": self._select_instruction(instructions, b),
                 "state": input_state[b],  # N_history, 58 #Hack BUG
             }
             examples.append(example)
