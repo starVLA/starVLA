@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RoboCasa365 (PandaOmron) — full target/human training (Qwen3VL-OFT).
+# RoboCasa365 (PandaOmron) — full target/human training (QwenOFT).
 # Trains on ALL 50 target/human LeRobot tasks (18 atomic + 32 composite) under
 # the `robocasa365_target_human_all` named mixture.
 #

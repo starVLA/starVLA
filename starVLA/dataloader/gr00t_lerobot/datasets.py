@@ -2307,26 +2307,6 @@ class LeRobotMixtureDataset(Dataset):
         # Sample step
         base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
         return dataset, trajectory_id, base_index
-        if len(dataset.all_steps) == 0:
-            raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
-
-        if not self._sequential_step_sampling:
-            single_step_index = rng.choice(len(dataset.all_steps))
-        else:
-            step_pos = self._step_pos[dataset_index]
-            if step_pos >= len(dataset.all_steps):
-                order = np.arange(len(dataset.all_steps))
-                if self.mode == "train":
-                    seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-                    rng = np.random.default_rng(seed)
-                    rng.shuffle(order)
-                self._step_order[dataset_index] = order
-                step_pos = 0
-
-            single_step_index = self._step_order[dataset_index][step_pos]
-            self._step_pos[dataset_index] = step_pos + 1
-        trajectory_id, base_index = dataset.all_steps[single_step_index]
-        return dataset, trajectory_id, base_index
 
     
 
