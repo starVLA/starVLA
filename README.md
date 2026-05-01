@@ -30,11 +30,11 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 **[2026/05/01]** 🔥 We now provide a step-by-step guide for [integrating your own robot / dataset into StarVLA](docs/integrate_your_dataset.md).
 
+**[2026/05/01]** 🔥 We are building [agent skills](docs/agent_skills) to make StarVLA a powerful substrate for AI coding agents — we have verified that GitHub Copilot (Claude Opus 4.7) can autonomously integrate [examples/Robocasa_365](examples/Robocasa_365) and [examples/RoboChallenge_table30v2](examples/RoboChallenge_table30v2) from scratch. Going forward, StarVLA will be continuously optimised to be equally easy to use for humans and code agents.
+
 **[2026/05/01]** 🙏 Special thanks to the [AllenAI](https://github.com/allenai) team for providing optimised Docker environments and evaluation-acceleration support via [vla-evaluation-harness](https://github.com/allenai/vla-evaluation-harness)! If you need to speed up large-scale VLA benchmark evaluation, we recommend checking it out.
 
-**[2026/04/19]** 📋 As community PRs grow rapidly, we are establishing **PR guidelines** to maintain code quality and stability. Thank you all for your contributions! Please review the new [PR Guidelines](docs/PR_readme.md) and [Branching Strategy](docs/branching_strategy.md) before submitting PRs.
 
-**[2026/05/01]** 🔥 We are building [agent skills](docs/agent_skills) to make StarVLA a powerful substrate for AI coding agents — we have verified that GitHub Copilot (Claude Opus 4.7) can autonomously integrate [examples/Robocasa_365](examples/Robocasa_365) and [examples/RoboChallenge_table30v2](examples/RoboChallenge_table30v2) from scratch. Going forward, StarVLA will be continuously optimised to be equally easy to use for humans and code agents.
 
 **[2026/04/18]** 🔥 StarVLA now supports [DOMINO](examples/DOMINO), a dynamic manipulation benchmark for moving objects and time-varying scenes. Original DOMINO repository is [here](https://github.com/H-EmbodVis/DOMINO).
 
