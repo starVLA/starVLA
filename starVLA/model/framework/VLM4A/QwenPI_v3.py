@@ -172,7 +172,16 @@ class Qwen_PI_v3(baseframework):
         self.qwen_vl_interface = get_vlm_model(config=self.config)
 
         # Read the actual hidden size and layer count from the loaded VLM.
-        num_vl_layers, llm_hidden_size = 36, self.qwen_vl_interface.model.config.hidden_size
+        # `output_hidden_states=True` returns (num_hidden_layers + 1) tensors
+        # (embedding output + every layer's output), and we keep the last
+        # `num_hidden_layers` of them for layer-wise cross-attn — so the DiT
+        # depth and project_layers count must match `num_hidden_layers` exactly.
+        # Qwen3-VL stores num_hidden_layers under text_config; Qwen2.5-VL puts it
+        # on the top-level config.  getattr(..., vlm_hf_cfg) handles both cases.
+        vlm_hf_cfg = self.qwen_vl_interface.model.config
+        text_cfg = getattr(vlm_hf_cfg, "text_config", vlm_hf_cfg)
+        num_vl_layers = int(text_cfg.num_hidden_layers)
+        llm_hidden_size = int(vlm_hf_cfg.hidden_size)
         self.config.framework.qwenvl.vl_hidden_dim = llm_hidden_size
         self.config.framework.qwenvl.num_vl_layers = num_vl_layers
 
@@ -234,6 +243,24 @@ class Qwen_PI_v3(baseframework):
             )
         return [proj(vl_h) for proj, vl_h in zip(self.project_layers, vl_embs_list)]
 
+    def _encode_vl_hidden_states(
+        self, batch_images: List, instructions: List[str]
+    ) -> List[torch.Tensor]:
+        """Run QwenVL, project hidden states, and return the layer-wise embeddings for the Action DiT."""
+        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+            images=batch_images, instructions=instructions
+        )
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            qwenvl_outputs = self.qwen_vl_interface(
+                **qwen_inputs,
+                output_attentions=False,
+                output_hidden_states=True,
+                return_dict=True,
+            )
+            vl_embs_list = list(qwenvl_outputs.hidden_states[-self.num_action_dit_layers:])
+            vl_embs_list = self._project_vl_hidden_for_action(vl_embs_list)
+        return vl_embs_list
+
     def forward(
         self,
         examples: List[dict] = None,
@@ -262,22 +289,9 @@ class Qwen_PI_v3(baseframework):
         )
         state = None  # state is now encoded in the instruction tokens
 
-        # Step 1: build QwenVL-compatible inputs
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            qwenvl_outputs = self.qwen_vl_interface(
-                **qwen_inputs,
-                output_attentions=False,
-                output_hidden_states=True,
-                return_dict=True,
-            )
-            # Take the last N hidden states that match the number of DiT layers
-            # and project them to the Action DiT hidden dimension.
-            all_hidden = qwenvl_outputs.hidden_states
-            expected_layers = self.num_action_dit_layers
-            vl_embs_list = list(all_hidden[-expected_layers:])
-            vl_embs_list = self._project_vl_hidden_for_action(vl_embs_list)
-            base_hidden = vl_embs_list[-1]
+        # Step 1: encode through QwenVL
+        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        base_hidden = vl_embs_list[-1]
 
         # Step 2: compute flow-matching loss over the action chunk
         with torch.autocast("cuda", dtype=torch.float32):
@@ -300,7 +314,11 @@ class Qwen_PI_v3(baseframework):
                 state = torch.tensor(np.array(state), device=base_hidden.device, dtype=base_hidden.dtype)
                 state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
 
-            action_loss = self.action_model(vl_embs_list_repeated, actions_target_repeated, state_repeated)
+            action_loss = self.action_model(
+                vl_embs_list_repeated,
+                actions_target_repeated,
+                state_repeated,
+            )
 
         return {"action_loss": action_loss}
 
@@ -346,20 +364,9 @@ class Qwen_PI_v3(baseframework):
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
-        # Step 1: build QwenVL-compatible inputs
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            qwenvl_outputs = self.qwen_vl_interface(
-                **qwen_inputs,
-                output_attentions=False,
-                output_hidden_states=True,
-                return_dict=True,
-            )
-            all_hidden = qwenvl_outputs.hidden_states
-            expected_layers = self.num_action_dit_layers
-            vl_embs_list = list(all_hidden[-expected_layers:])
-            vl_embs_list = self._project_vl_hidden_for_action(vl_embs_list)
-            base_hidden = vl_embs_list[-1]
+        # Step 1: encode through QwenVL
+        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        base_hidden = vl_embs_list[-1]
 
         state = (
             torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
@@ -368,7 +375,9 @@ class Qwen_PI_v3(baseframework):
         )
         # Step 2: run the flow-matching sampler to produce the denoised action chunk.
         with torch.autocast("cuda", dtype=torch.float32):
-            pred_actions = self.action_model.predict_action(vl_embs_list, state)  # (B, action_horizon, action_dim)
+            pred_actions = self.action_model.predict_action(
+                vl_embs_list, state
+            )  # (B, action_horizon, action_dim)
 
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}

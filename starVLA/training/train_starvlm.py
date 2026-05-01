@@ -251,7 +251,9 @@ class VLAMTrainer(TrainerUtils):
         self._log_training_config()
         self._create_data_iterators()
         progress_bar = tqdm(
-            range(self.config.trainer.max_train_steps), disable=not self.accelerator.is_local_main_process
+            total=self.config.trainer.max_train_steps,
+            initial=self.completed_steps,
+            disable=not self.accelerator.is_local_main_process,
         )
 
         while self.completed_steps < self.config.trainer.max_train_steps:

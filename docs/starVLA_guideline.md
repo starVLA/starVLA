@@ -3,6 +3,11 @@
 This guide walks you through the complete StarVLA workflow — from installation to training to evaluation — using the **LIBERO** benchmark as a concrete, end-to-end example. By the end you will have a trained VLA policy and know how to evaluate it in simulation.
 
 > **Just want to evaluate a released checkpoint?** Jump to [Evaluate a Pretrained Checkpoint](#-evaluate-a-pretrained-checkpoint) — no training required.
+>
+> **Bringing your own dataset / robot?** Read [`integrate_your_dataset.md`](integrate_your_dataset.md)
+> for the end-to-end "use my own data" guide, or activate the bundled
+> [agent skill](agent_skills/integrate-starvla-dataset/README.md) to have a
+> code agent (Claude Code, VS Code Copilot, …) drive the integration for you.
 
 ---
 

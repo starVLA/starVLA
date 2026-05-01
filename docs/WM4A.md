@@ -1,5 +1,7 @@
 # WM4A: World Model for Action
 
+<a href="https://huggingface.co/collections/StarVLA/world-model-to-vla"><img src="https://img.shields.io/badge/HuggingFace-WM4A%20Checkpoints-orange?style=for-the-badge&logo=huggingface" alt="WM4A Checkpoints on HuggingFace"></a>
+
 WM4A repurposes **pretrained video-generation world models** as visual encoders for
 robot action prediction. Instead of using a Vision-Language Model (VLM) backbone,
 WM4A feeds images through a **Diffusion Transformer (DiT)** — the same architecture
