@@ -1,0 +1,27 @@
+{
+  "_comment": "<<TODO_BENCH>> — gr00t modality schema. Drop at meta/modality.json of every LeRobot dataset.",
+  "_critical": "annotation.human.task_description.original_key MUST be 'task_index'. Anything else silently breaks language conditioning.",
+
+  "video": {
+    "<<TODO_CAM_1>>": {"original_key": "observation.images.<<TODO_CAM_1>>"},
+    "<<TODO_CAM_2>>": {"original_key": "observation.images.<<TODO_CAM_2>>"}
+  },
+
+  "state": {
+    "<<TODO_STATE_GROUP_1>>": {"start": 0, "end": 6, "original_key": "observation.state"},
+    "<<TODO_STATE_GROUP_2>>": {"start": 6, "end": 7, "original_key": "observation.state"}
+  },
+
+  "action": {
+    "<<TODO_ACTION_GROUP_1>>": {"start": 0, "end": 7, "original_key": "action"},
+    "<<TODO_ACTION_GROUP_2>>": {"start": 7, "end": 8, "original_key": "action"}
+  },
+
+  "annotation": {
+    "human": {
+      "task_description": {
+        "original_key": "task_index"
+      }
+    }
+  }
+}
