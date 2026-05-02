@@ -33,7 +33,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
-    data_root_dir: playground/Datasets/LIBERO
+    data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
     data_mix: libero_all # libero_goal
     action_type: delta_qpos
     sequential_step_sampling: False
