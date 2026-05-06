@@ -1,7 +1,8 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-cd /home/jye624/Projcets/starVLA
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
+cd "${STARVLA_DIR}"
 SCRIPT_PATH="./examples/LIBERO/eval_files/auto_eval_scripts/eval_libero_parall.sh"
 
 ###############################################################################
@@ -93,4 +94,3 @@ for ((i=0; i<num_gpus; i++)); do
     echo "   GPU ${GPU_LIST[$i]}: ${gpu_job_count[$i]} jobs"
 done
 echo "=========================================="
-

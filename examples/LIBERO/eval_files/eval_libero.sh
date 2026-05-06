@@ -1,44 +1,37 @@
-#!/bin/bash
-# === Paths (adapted for this cluster) ===
-STARVLA_DIR=/home/jye624/Projcets/starVLA
+#!/usr/bin/env bash
+set -euo pipefail
 
-cd ${STARVLA_DIR}
-# === Checkpoint ===
-CKPT=${STARVLA_DIR}/playground/Checkpoints/0405_libero4in1_CosmoPredict2GR00T/checkpoints/steps_50000_pytorch_model.pt
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+LIBERO_HOME="${LIBERO_HOME:-}"
+LIBERO_PYTHON="${LIBERO_PYTHON:-python}"
+CKPT="${CKPT:-${STARVLA_DIR}/playground/Checkpoints/libero_example/checkpoints/steps_50000_pytorch_model.pt}"
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-6694}"
+TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_goal}"
+NUM_TRIALS_PER_TASK="${NUM_TRIALS_PER_TASK:-50}"
+MUJOCO_GL_VALUE="${MUJOCO_GL_VALUE:-egl}"
+PYOPENGL_PLATFORM_VALUE="${PYOPENGL_PLATFORM_VALUE:-egl}"
 
-###########################################################################################
-# === Please modify the following paths according to your environment ===
-export LIBERO_HOME=/home/jye624/Projcets/LIBERO
-export LIBERO_CONFIG_PATH=${LIBERO_HOME}/libero
-export LIBERO_Python=/home/jye624/.conda/envs/libero/bin/python
+if [[ -z "${LIBERO_HOME}" ]]; then
+  echo "LIBERO_HOME is required."
+  echo "Example: LIBERO_HOME=/path/to/LIBERO LIBERO_PYTHON=/path/to/python bash $0"
+  exit 1
+fi
 
-export PYTHONPATH=$PYTHONPATH:${LIBERO_HOME} # let eval_libero find the LIBERO tools
-export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from main repo
+cd "${STARVLA_DIR}"
+export LIBERO_CONFIG_PATH="${LIBERO_HOME}/libero"
+export PYTHONPATH="${PYTHONPATH:-}:${LIBERO_HOME}:${STARVLA_DIR}"
+export MUJOCO_GL="${MUJOCO_GL_VALUE}"
+export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM_VALUE}"
 
-export MUJOCO_GL=egl
-export PYOPENGL_PLATFORM=egl
+FOLDER_NAME="$(echo "${CKPT}" | awk -F'/' '{print $(NF-2)"_"$(NF-1)"_"$NF}')"
+MODEL_ROOT="$(echo "${CKPT}" | awk -F'/checkpoints/' '{print $1}')"
+VIDEO_OUT_PATH="${MODEL_ROOT}/results/${TASK_SUITE_NAME}/${FOLDER_NAME}"
 
-host="127.0.0.1"
-base_port=6694
-unnorm_key="franka"
-your_ckpt=${CKPT}
-
-# export DEBUG=true
-
-folder_name=$(echo "$your_ckpt" | awk -F'/' '{print $(NF-2)"_"$(NF-1)"_"$NF}')
-# model_root: playground/Checkpoints/<run_id>
-model_root=$(echo "$your_ckpt" | awk -F'/checkpoints/' '{print $1}')
-# === End of environment variable configuration ===
-###########################################################################################
-
-task_suite_name=libero_goal
-num_trials_per_task=50
-video_out_path="${model_root}/results/${task_suite_name}/${folder_name}"
-
-${LIBERO_Python} ./examples/LIBERO/eval_files/eval_libero.py \
-    --args.pretrained-path ${your_ckpt} \
-    --args.host "$host" \
-    --args.port $base_port \
-    --args.task-suite-name "$task_suite_name" \
-    --args.num-trials-per-task "$num_trials_per_task" \
-    --args.video-out-path "$video_out_path"
+"${LIBERO_PYTHON}" ./examples/LIBERO/eval_files/eval_libero.py \
+  --args.pretrained-path "${CKPT}" \
+  --args.host "${HOST}" \
+  --args.port "${PORT}" \
+  --args.task-suite-name "${TASK_SUITE_NAME}" \
+  --args.num-trials-per-task "${NUM_TRIALS_PER_TASK}" \
+  --args.video-out-path "${VIDEO_OUT_PATH}"

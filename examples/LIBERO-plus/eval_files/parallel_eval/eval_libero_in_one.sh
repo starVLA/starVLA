@@ -1,24 +1,22 @@
-#!/bin/bash
-eval "$(conda shell.bash hook)"
-# source activate
-conda activate python3.10
-# pip install -r requirements.txt
-# pip list
-# ls /usr/lib64/libOSMesa.so*
-###########################################################################################
-# === Please modify the following paths according to your environment ===
-export LIBERO_HOME=path_to_LIBERO-plus_code
-export LIBERO_CONFIG_PATH=${LIBERO_HOME}/libero
-export MUJOCO_GL=osmesa
-export PYTHONPATH=$PYTHONPATH:${LIBERO_HOME} # let eval_libero find the LIBERO tools
-export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from main repo
+#!/usr/bin/env bash
+set -euo pipefail
 
-unnorm_key="franka"
-tasks_per_gpu=3
-your_ckpt=path_to_checkpoint
-output_dir=path_to_output_dir
-# === End of environment variable configuration ===
-###########################################################################################
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
+LIBERO_HOME="${LIBERO_HOME:-}"
+LIBERO_PYTHON="${LIBERO_PYTHON:-python}"
+MUJOCO_GL="${MUJOCO_GL:-osmesa}"
+tasks_per_gpu="${tasks_per_gpu:-3}"
+your_ckpt="${your_ckpt:-/path/to/checkpoint.pt}"
+output_dir="${output_dir:-${STARVLA_DIR}/results/libero_plus_parallel_eval}"
+
+if [[ -z "${LIBERO_HOME}" ]]; then
+  echo "LIBERO_HOME is required."
+  exit 1
+fi
+
+cd "${STARVLA_DIR}"
+export LIBERO_CONFIG_PATH="${LIBERO_HOME}/libero"
+export PYTHONPATH="${PYTHONPATH:-}:${LIBERO_HOME}:${STARVLA_DIR}"
 
 task_suite_name=$1
 start_idx=$2
@@ -46,7 +44,7 @@ for ((i=0; i<tasks_per_gpu; i++)); do
 
     echo "Part $((i)): start=$current_start, end=$current_end ([$current_start, $current_end))"
     # torchrun --nproc_per_node=$gpu_per_pod --nnodes=$WORLD_SIZE --node_rank=$RANK --master_addr=$((MASTER_ADDR+i)) --master_port=$MASTER_PORT 
-    python ./examples/LIBERO-plus/eval_files/parallel_eval/eval_libero_model.py \
+    "${LIBERO_PYTHON}" ./examples/LIBERO-plus/eval_files/parallel_eval/eval_libero_model.py \
     --pretrained_path $your_ckpt \
     --task_suite_name $task_suite_name \
     --num_trials_per_task $num_trials_per_task \
