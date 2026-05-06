@@ -109,9 +109,6 @@ class LangForceDefaultConfig:
         }
     )
 
-    # === Observation image size (optional resize before encoding) ===
-    obs_image_size: Optional[list] = None
-
     # === LangForce-specific loss / regularizer weights ===
     # KL weight: maximize LLR via -kl_weight * kl_loss
     kl_weight: float = 0.1
@@ -631,7 +628,7 @@ class LangForce(baseframework):
         instructions_posteriori = [ex["lang"] + self.latent_action_query for ex in examples]
         state = [ex["state"] for ex in examples] if "state" in examples[0] else None
 
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -670,7 +667,7 @@ if __name__ == "__main__":
     from omegaconf import OmegaConf
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="./starVLA/config/training/starvla_cotrain_libero.yaml")
+    parser.add_argument("--config_yaml", type=str, default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml")
     args, clipargs = parser.parse_known_args()
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":

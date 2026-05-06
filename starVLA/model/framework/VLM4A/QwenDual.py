@@ -97,9 +97,6 @@ class QwenDualDefaultConfig:
         }
     )
 
-    # === Observation image size (resize before encoding) ===
-    obs_image_size: Optional[list] = field(default_factory=lambda: [224, 224])
-
 
 @FRAMEWORK_REGISTRY.register("QwenDual")
 class Qwen_Dual(baseframework):
@@ -239,7 +236,7 @@ class Qwen_Dual(baseframework):
         instructions = [example["lang"] for example in examples]  # [B, str]
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", [224, 224])
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", [224, 224])
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
         if train_obs_image_size and wrist_views is not None:
@@ -291,7 +288,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
+        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()

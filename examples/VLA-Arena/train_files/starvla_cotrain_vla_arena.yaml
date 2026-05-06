@@ -1,7 +1,6 @@
 run_id: starvla_vla_arena
 run_root_dir: results/Checkpoints
 seed: 42
-trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity
 wandb_project: starVLA_VLA_Arena
 is_debug: false
@@ -59,13 +58,12 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: playground/Datasets/VLA_ARENA_LEROBOT_DATA
     data_mix: vla_arena_L0_L    # see starVLA/dataloader/gr00t_lerobot/mixtures.py
     action_type: delta_eef        # 7-DOF delta EEF (pos + rotation + gripper)
     sequential_step_sampling: false
     CoT_prompt: "Your task is {instruction}. Identify the key objects and locate their bounding boxes in [x1,y1,x2,y2] format."
-    CoT_answer: bbox
-    default_image_resolution: [3, 224, 224]
     per_device_batch_size: 16
     video_backend: torchvision_av
 
@@ -73,7 +71,6 @@ datasets:
 # Trainer
 # ---------------------------------------------------------------------------
 trainer:
-  epochs: 100
   max_train_steps: 80000
   num_warmup_steps: 4000
   save_interval: 10000
@@ -90,7 +87,6 @@ trainer:
     vla: 1.0
     vlm: 0.1
   max_grad_norm: 1.0
-  warmup_ratio: 0.05
   weight_decay: 0.0
   logging_frequency: 100
   gradient_clipping: 1.0
@@ -100,5 +96,3 @@ trainer:
     betas: [0.9, 0.95]
     eps: 1.0e-08
     weight_decay: 1.0e-08
-
-  is_resume: false

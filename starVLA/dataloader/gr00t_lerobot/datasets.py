@@ -1370,16 +1370,11 @@ class LeRobotSingleDataset(Dataset):
 
     def _pack_sample(self, data: dict) -> dict:
         """Pack transformed modality data into training sample format."""
-        prim_images = []
-        wrist_views = []
+        step_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
             image = Image.fromarray(image).resize((224, 224))
-            if "wrist" not in video_key:
-                prim_images.append(image)
-            else:
-                wrist_views.append(image)
-        all_images = prim_images + wrist_views
+            step_images.append(image)
 
         language = data[self.modality_keys["language"][0]][0]
         action = []
@@ -1389,9 +1384,9 @@ class LeRobotSingleDataset(Dataset):
 
         sample = {
             "action": action,
-            "image": all_images,
+            "image": step_images,
             "lang": language,
-            "language": language,
+            "robot_tag": self.tag
         }
 
         if self.data_cfg is not None and self.data_cfg.get("include_state", False) not in ["False", False]:
@@ -2312,26 +2307,6 @@ class LeRobotMixtureDataset(Dataset):
         # Sample step
         base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
         return dataset, trajectory_id, base_index
-        if len(dataset.all_steps) == 0:
-            raise ValueError(f"Dataset {dataset.dataset_name} has no steps.")
-
-        if not self._sequential_step_sampling:
-            single_step_index = rng.choice(len(dataset.all_steps))
-        else:
-            step_pos = self._step_pos[dataset_index]
-            if step_pos >= len(dataset.all_steps):
-                order = np.arange(len(dataset.all_steps))
-                if self.mode == "train":
-                    seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-                    rng = np.random.default_rng(seed)
-                    rng.shuffle(order)
-                self._step_order[dataset_index] = order
-                step_pos = 0
-
-            single_step_index = self._step_order[dataset_index][step_pos]
-            self._step_pos[dataset_index] = step_pos + 1
-        trajectory_id, base_index = dataset.all_steps[single_step_index]
-        return dataset, trajectory_id, base_index
 
     
 
@@ -2379,7 +2354,7 @@ class LeRobotMixtureDataset(Dataset):
                 raw_data = dataset.get_step_data(trajectory_id, step)    
                 data = dataset.transforms(raw_data)
                 sample = dataset._pack_sample(data)
-                sample["robot_tag"] = dataset.tag
+                
                 return sample
                 
             except Exception as e:

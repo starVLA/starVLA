@@ -119,9 +119,6 @@ class QwenGR00TDefaultConfig:
         }
     )
 
-    # === Observation image size (optional resize before encoding) ===
-    obs_image_size: Optional[list] = None
-
     # # === Training precision flag === This is unnecessary, unused parameter
     # reduce_in_full_precision: bool = True
 
@@ -239,7 +236,7 @@ class Qwen_GR00T(baseframework):
 
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -280,7 +277,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
+        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()

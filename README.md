@@ -28,13 +28,19 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 **[2026/04/09]** 🚀 unified **multi-benchmark co-training** example (combining LIBERO, SimplerEnv, RoboTwin, VLA-Arena, etc.) is coming soon. Stay tuned!
 
-**[2026/04/19]** 📋 As community PRs grow rapidly, we are establishing **PR guidelines** to maintain code quality and stability. Thank you all for your contributions! Please review the new [PR Guidelines](docs/PR_readme.md) and [Branching Strategy](docs/branching_strategy.md) before submitting PRs.
+**[2026/05/01]** 🔥 We now provide a step-by-step guide for [integrating your own robot / dataset into StarVLA](docs/integrate_your_dataset.md).
+
+**[2026/05/01]** 🔥 We are building [agent skills](docs/agent_skills) to make StarVLA a powerful substrate for AI coding agents — we have verified that GitHub Copilot (Claude Opus 4.7) can autonomously integrate [examples/Robocasa_365](examples/Robocasa_365) and [examples/RoboChallenge_table30v2](examples/RoboChallenge_table30v2) from scratch. Going forward, StarVLA will be continuously optimised to be equally easy to use for humans and code agents.
+
+**[2026/05/01]** 🙏 Special thanks to the [AllenAI](https://github.com/allenai) team for providing optimised Docker environments and evaluation-acceleration support via [vla-evaluation-harness](https://github.com/allenai/vla-evaluation-harness)! If you need to speed up large-scale VLA benchmark evaluation, we recommend checking it out.
+
+
 
 **[2026/04/18]** 🔥 StarVLA now supports [DOMINO](examples/DOMINO), a dynamic manipulation benchmark for moving objects and time-varying scenes. Original DOMINO repository is [here](https://github.com/H-EmbodVis/DOMINO).
 
 **[2026/04/09]** 🎯 Thanks to the [RLinf](https://rlinf.readthedocs.io) team, StarVLA now supports **RL post-training**! Check out the [StarVLA × RLinf tutorial](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/starvla.html) to get started.
 
-**[2026/04/09]** 🔥 **WM4A (World Model for Action)** is now integrated! Use pretrained video-generation DiT models (Cosmos-Predict2, Wan2.2) as backbones for action prediction. See [docs/WM4A.md](docs/WM4A.md) for architecture details and training instructions.
+**[2026/04/09]** 🔥 **WM4A (World Model for Action)** is now integrated! Use pretrained video-generation DiT models (Cosmos-Predict2, Wan2.2) as backbones for action prediction. See [docs/WM4A.md](docs/WM4A.md) for architecture details and training instructions. Pretrained checkpoints are available at the [StarVLA/world-model-to-vla](https://huggingface.co/collections/StarVLA/world-model-to-vla) HuggingFace collection.
 
 
 **[2026/03/29]** 🔥 Thanks to the [ABot-M0](https://github.com/amap-cvlab/ABot-Manipulation) team for providing the [pre-trained weights](https://www.modelscope.cn/models/amap_cvlab/ABot-M0-Pretrain). For `Qwen3-VL 4B`, you can reload the `qwen_vl_interface` module in various frameworks!
@@ -125,12 +131,13 @@ Achieve **state-of-the-art (SOTA) performance** on a variety of benchmarks, as f
 - [x] **SimplerEnV**
 - [x] **LIBERO**
 - [x] **LIBERO-plus**
-- [x] **Robocasa**
-- [x] **RoboTwin**
+- [x] **Robocasa-GR1**
+- [x] **Robocasa365**
+- [x] **RoboTwin 2.0**
 - [x] **DOMINO**
 - [x] **BEHAVIOR**
+- [x] **Calvin**
 - [ ] **SO101**
-- [x] **Calvin** *See details in [`examples/calvin`](examples/calvin)
 - [ ] **RLBench**
 
 </details>
@@ -200,12 +207,12 @@ StarVLA emphasizes a modular model design. Each major framework file can be run 
 
 ```bash
 # model
-python starVLA/model/framework/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
+python starVLA/model/framework/VLM4A/QwenOFT.py --config_yaml starvla_cotrain_oxe.yaml
 # dataloader
 python starVLA/dataloader/lerobot_datasets.py --config_yaml starvla_cotrain_oxe.yaml
 ```
 
-Note: `starVLA/model/framework/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
+Note: `starVLA/model/framework/VLM4A/yourframework.py` is the single external API surface of the model; it should mirror (be structurally isomorphic to) the framework diagram in your paper.
 
 </details>
 
@@ -272,7 +279,7 @@ accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml  \
   --num_processes 8 \
   starVLA/training/train_internvla.py \
-  --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+  --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.action_model.new_module ${module_name} \ # plug-in a new module to action model
@@ -334,7 +341,7 @@ Empty `reload_modules` means full load all model. However, starVLA does not save
       --num_machines $SLURM_NNODES \
       --num_processes=${TOTAL_GPUS} \
       starVLA/training/train_starvla.py \
-      --config_yaml ./starVLA/config/training/starvla_cotrain_oxe.yaml \
+      --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
       --framework.name QwenGR00T \
       --framework.qwenvl.base_vlm microsoft/Florence-2-large \
       --run_root_dir ${run_root_dir} \
@@ -356,6 +363,14 @@ Note: To ensure better compatibility with already released checkpoints, we are c
 StarVLA is released under the MIT License, which permits commercial use, modification, distribution, and private use. Rebases are allowed for forks and feature branches; when rebasing from upstream StarVLA, use descriptive commit messages (e.g., "chore: rebase from StarVLA") and keep at least the two latest upstream commits as separate. See [License](LICENSE) for details.
 
 ```bibtex
+
+@article{ye2026starvla,
+  title={StarVLA-$$\backslash$alpha $: Reducing Complexity in Vision-Language-Action Systems},
+  author={Ye, Jinhui and Gao, Ning and Yang, Senqiao and Zheng, Jinliang and Wang, Zixuan and Chen, Yuxin and Chen, Pengguang and Chen, Yilun and Liu, Shu and Jia, Jiaya},
+  journal={arXiv preprint arXiv:2604.11757},
+  year={2026}
+}
+
 @article{community2026starvla,
   title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
   author={Community, StarVLA},

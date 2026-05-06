@@ -100,6 +100,10 @@ class _QWen_VL_Interface(nn.Module):
         self.processor = processor
         self.config = config
 
+        # align qwen2.5 with qwen3 / qwen3.5: top-level hidden_size does not exist
+        # on Qwen2_5_VLConfig, but text_config.hidden_size does.
+        self.model.config.hidden_size = self.model.config.text_config.hidden_size
+
         self._ACTION_TOKEN_MIN = _ACTION_TOKEN_MIN
         self._ACTION_TOKEN_MAX = _ACTION_TOKEN_MAX
 
@@ -309,7 +313,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_oxe.yaml",
+        default="examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()

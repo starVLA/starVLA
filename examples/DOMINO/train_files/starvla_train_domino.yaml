@@ -1,7 +1,6 @@
 run_id: starvla_domino_clean
 run_root_dir: results/Checkpoints
 seed: 42
-trackers: [jsonl, wandb]
 wandb_entity: your_wandb_entity
 wandb_project: starVLA_DOMINO
 is_debug: false
@@ -40,7 +39,6 @@ framework:
       num_layers: 16
       output_dim: 2560
       positional_embeddings: null
-  obs_image_size: [224, 224]
 
 datasets:
   vlm_data:
@@ -58,6 +56,7 @@ datasets:
 
   vla_data:
     dataset_py: lerobot_datasets
+    include_state: false
     data_root_dir: playground/Datasets/DOMINO
     # Available mixtures (see examples/DOMINO/train_files/data_registry/data_config.py):
     #   domino                 - 35 tasks x (Clean_Dynamic + Random_Dynamic)
@@ -68,15 +67,12 @@ datasets:
     action_type: abs_qpos
     action_mode: abs
     sequential_step_sampling: False
-    default_image_resolution: [3, 224, 224]
     per_device_batch_size: 16
     load_all_data_for_training: true
-    obs: ["image_0"]
-    image_size: [224, 224]
+    obs_image_size: [224, 224]
     video_backend: pyav
 
 trainer:
-  epochs: 100
   max_train_steps: 1000000
   num_warmup_steps: 5000
   save_interval: 5000
@@ -93,7 +89,6 @@ trainer:
     vla: 1.0
     vlm: 0.1
   max_grad_norm: 1.0
-  warmup_ratio: 0.1
   weight_decay: 0.0
   logging_frequency: 10
   gradient_clipping: 1.0
@@ -104,9 +99,3 @@ trainer:
     betas: [0.9, 0.95]
     eps: 1.0e-08
     weight_decay: 1.0e-08
-
-  is_resume: false
-  resume_epoch: null
-  resume_step: null
-  enable_gradient_checkpointing: true
-  enable_mixed_precision_training: true

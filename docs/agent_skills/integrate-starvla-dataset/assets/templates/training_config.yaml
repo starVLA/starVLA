@@ -1,0 +1,63 @@
+# <<TODO_BENCH>> training config — copy to:
+#   examples/<<TODO_BENCH>>/train_files/starvla_<<TODO_FRAMEWORK>>_<<TODO_BENCH>>.yaml
+#
+# CLI overrides this file:  --trainer.learning_rate.base 1e-4
+run_id: starvla_<<TODO_FRAMEWORK>>_<<TODO_BENCH>>_smoke
+run_root_dir: results/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_<<TODO_BENCH>>
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: <<TODO_FRAMEWORK>>          # QwenOFT | QwenFAST | QwenPI | QwenPI_v3 | QwenGR00T
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct
+    attn_implementation: flash_attention_2
+  action_model:
+    action_dim: <<TODO_ACTION_DIM>>     # match data_config.py action_keys total width
+    state_dim:  <<TODO_STATE_DIM>>      # match data_config.py state_keys  total width
+    action_horizon: 8                   # must equal len(action_indices) in data_config
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    data_root_dir: playground/Datasets/<<TODO_DATASET_PARENT_DIR>>   # parent of <task>_lerobot/
+    data_mix: <<TODO_MIXTURE_NAME>>     # name from DATASET_NAMED_MIXTURES
+    action_type: <<TODO_ACTION_TYPE>>   # delta_ee | delta_qpos | abs_ee | abs_qpos
+    sequential_step_sampling: false
+    per_device_batch_size: 2            # raise once it fits in VRAM
+    obs_image_size: [224, 224]
+    load_all_data_for_training: true
+    video_backend: torchvision_av       # try `decord` for speed
+
+trainer:
+  # SMOKE TEST FIRST — bump after Phase 5 gate passes.
+  max_train_steps: 100
+  num_warmup_steps: 10
+  save_interval: 100
+  eval_interval: 1000
+  learning_rate:
+    base: 2.5e-05
+    qwen_vl_interface: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06
+  freeze_modules: ''                    # 'qwen_vl' to freeze the VLM backbone
+  loss_scale:
+    vla: 1.0
+    vlm: 0.1
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1        # raise to 4 once you go past smoke
+  gradient_checkpointing: true          # leave true unless you have huge VRAM
+
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

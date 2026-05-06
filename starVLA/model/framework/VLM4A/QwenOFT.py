@@ -38,7 +38,7 @@ logger = initialize_overwatch(__name__)
 IGNORE_INDEX = -100
 
 from starVLA.model.framework.base_framework import baseframework
-from starVLA.model.framework.share_tools import merge_framework_config
+from starVLA.model.framework.share_tools import add_discretized_state_to_instruction, merge_framework_config
 from starVLA.model.modules.action_model.MLP_ActionHeader import get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
 from starVLA.training.trainer_utils.trainer_tools import resize_images
@@ -86,10 +86,6 @@ class QwenOFTDefaultConfig:
             "past_action_window_size": 0,
         }
     )
-
-    # === Observation image size (optional resize before encoding) ===
-    #  Set to [H, W] to resize; None = keep original resolution
-    obs_image_size: Optional[list] = None
 
 
 @FRAMEWORK_REGISTRY.register("QwenOFT")
@@ -166,6 +162,14 @@ class Qwenvl_OFT(baseframework):
         batch_images = [example["image"] for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         actions = [example["action"] for example in examples]  # label [B， len, 7]
+        state = (
+            [example["state"] for example in examples] if "state" in examples[0] else None
+        )  # List[ndarray (1, state_dim)] or None
+
+        # Optionally prepend discretised proprioceptive state tokens to each instruction (π₀.5 style).
+        instructions = (
+            self.add_discretized_state_to_instruction(instructions, state) if state is not None else instructions
+        )
 
         # step 0: add special action token to instruction
         action_tokens = (
@@ -227,8 +231,16 @@ class Qwenvl_OFT(baseframework):
             examples = [examples]
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
+        state = (
+            [example["state"] for example in examples] if "state" in examples[0] else None
+        )  # List[ndarray (1, state_dim)] or None
 
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
+        # Optionally prepend discretised proprioceptive state tokens to each instruction (π₀.5 style).
+        instructions = (
+            self.add_discretized_state_to_instruction(instructions, state) if state is not None else instructions
+        )
+
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -317,6 +329,9 @@ class Qwenvl_OFT(baseframework):
         action_queries = last_hidden.gather(dim=1, index=expanded_index)  # [B, chunk_len, H]
         return action_queries
 
+    # Discretised state → instruction prefix (π₀.5 style); shared with QwenPI_v3.
+    add_discretized_state_to_instruction = staticmethod(add_discretized_state_to_instruction)
+
 
 if __name__ == "__main__":
     import argparse
@@ -328,7 +343,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
+        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()
@@ -350,6 +365,7 @@ if __name__ == "__main__":
         "action": np.random.uniform(-1, 1, size=(16, 7)).astype(np.float16),
         "image": [image],
         "lang": "This is a fake instruction for testing.",
+        "state": np.random.uniform(-1, 1, size=(1, 7)).astype(np.float16),  # chunk, state_dim
     }
     sample2 = sample.copy()
     sample2["lang"] = "Another fake instruction for testing."
@@ -359,10 +375,17 @@ if __name__ == "__main__":
     model = model.to(device)
     forward_output = model(batch)
     action_loss = forward_output["action_loss"]
-    print(f"Action Loss: {action_loss.item()}")
+    print(f"[train] Action Loss (with state): {action_loss.item()}")
 
     predict_output = model.predict_action(examples=[batch[0]])
     normalized_actions = predict_output["normalized_actions"]
-    print(f"Unnormalized Action: {normalized_actions}")
+    print(f"[infer] Predicted Action shape: {normalized_actions.shape}")
+
+    # Backward-compat: examples without `state` should still work.
+    sample_no_state = {k: v for k, v in sample.items() if k != "state"}
+    forward_no_state = model([sample_no_state, sample_no_state])
+    print(f"[train] Action Loss (no state): {forward_no_state['action_loss'].item()}")
+    predict_no_state = model.predict_action(examples=[sample_no_state])
+    print(f"[infer] Predicted Action shape (no state): {predict_no_state['normalized_actions'].shape}")
 
     print("Finished")

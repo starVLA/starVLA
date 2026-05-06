@@ -3,6 +3,11 @@
 This guide walks you through the complete StarVLA workflow — from installation to training to evaluation — using the **LIBERO** benchmark as a concrete, end-to-end example. By the end you will have a trained VLA policy and know how to evaluate it in simulation.
 
 > **Just want to evaluate a released checkpoint?** Jump to [Evaluate a Pretrained Checkpoint](#-evaluate-a-pretrained-checkpoint) — no training required.
+>
+> **Bringing your own dataset / robot?** Read [`integrate_your_dataset.md`](integrate_your_dataset.md)
+> for the end-to-end "use my own data" guide, or activate the bundled
+> [agent skill](agent_skills/integrate-starvla-dataset/README.md) to have a
+> code agent (Claude Code, VS Code Copilot, …) drive the integration for you.
 
 ---
 
@@ -56,7 +61,7 @@ We have verified that `flash-attn==2.7.4.post1` works well with nvcc versions `1
 Run a quick smoke test to make sure the framework loads correctly:
 
 ```bash
-python starVLA/model/framework/QwenGR00T.py
+python starVLA/model/framework/VLM4A/QwenGR00T.py
 ```
 
 This requires [Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) at `./playground/Pretrained_models/Qwen3-VL-4B-Instruct` (see [Step 3](#3-prepare-pretrained-models)). It should print the model architecture and run a forward pass on fake data without errors.

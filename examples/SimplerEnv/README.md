@@ -128,7 +128,7 @@ Before running, you need to ensure that your framework can `forward` and `predic
 Try the following command:
 
 ```bash
-python starVLA/model/framework/QwenGR00T.py --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
+python starVLA/model/framework/VLM4A/QwenGR00T.py --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml
 ```
 
 Note: You can modify the following code snippet to align with your dataset:

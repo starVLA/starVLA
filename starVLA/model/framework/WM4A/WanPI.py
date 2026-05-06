@@ -92,8 +92,6 @@ class WanPIDefaultConfig:
         }
     )
 
-    obs_image_size: Optional[list] = None
-
 
 @FRAMEWORK_REGISTRY.register("WanPI")
 class Wan_PI(baseframework):
@@ -209,7 +207,7 @@ class Wan_PI(baseframework):
         instructions = [example["lang"] for example in examples]
         state = [example["state"] for example in examples] if "state" in examples[0] else None
 
-        train_obs_image_size = getattr(self.config.framework, "obs_image_size", None)
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
         if train_obs_image_size:
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
@@ -255,7 +253,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="./starVLA/config/training/starvla_cotrain_libero.yaml",
+        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()

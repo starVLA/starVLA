@@ -53,7 +53,7 @@ To add a custom VLM dataset, follow these steps:
 
 #### 2.1 Register Dataset (Python)
 
-Register your dataset by adding it to the `data_dict` in [qwen_data_config.py](./starVLA/dataloader/qwenvl_llavajson/qwen_data_config.py#L17).
+Register your dataset by adding it to the `data_dict` in [qwen_data_config.py](../../starVLA/dataloader/qwenvl_llavajson/qwen_data_config.py#L17).
 
 
 ```python
