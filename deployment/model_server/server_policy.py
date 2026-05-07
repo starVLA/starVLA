@@ -7,39 +7,36 @@ import logging
 import os
 import socket
 
-import torch
-
+from deployment.model_server.policy_wrapper import PolicyServerWrapper
 from deployment.model_server.tools.websocket_policy_server import WebsocketPolicyServer
-from starVLA.model.framework.base_framework import baseframework
 
 
 def main(args) -> None:
-    # Example usage:
-    # policy = YourPolicyClass()  # Replace with your actual policy class
-    # server = WebsocketPolicyServer(policy, host="localhost", port=10091)
-    # server.serve_forever()
+    """Build the policy wrapper and start the websocket server.
 
-    vla = baseframework.from_pretrained(  # TODO should auto detect framework from model path
-        args.ckpt_path,
+    The wrapper now owns un-normalization + chunk_size discovery so that all
+    eval clients (LIBERO / SimplerEnv / etc.) just need to forward `examples`
+    and consume already-unnormalized actions from the response.
+    """
+    wrapper = PolicyServerWrapper(
+        ckpt_path=args.ckpt_path,
+        device="cuda",
+        use_bf16=args.use_bf16,
     )
-
-    if args.use_bf16:  # False
-        vla = vla.to(torch.bfloat16)
-    vla = vla.to("cuda").eval()
 
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
-    # start websocket server
+    # start websocket server; wrapper.metadata is sent at handshake.
     server = WebsocketPolicyServer(
-        policy=vla,
+        policy=wrapper,
         host="0.0.0.0",
         port=args.port,
         idle_timeout=args.idle_timeout,
-        metadata={"env": "simpler_env"},
+        metadata=wrapper.metadata,
     )
-    logging.info("server running ...")
+    logging.info("server running ... metadata=%s", wrapper.metadata)
     server.serve_forever()
 
 
