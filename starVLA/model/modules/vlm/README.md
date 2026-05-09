@@ -31,6 +31,8 @@ vlm = get_vlm_model(config)  # 根据 config.framework.qwenvl.base_vlm 路由
 | `QWen3.py` | `_QWen3_VL_Interface` | Qwen3-VL 系列 |
 | `QWen3_5.py` | `_QWen3_5_VL_Interface` | Qwen3.5-VL 系列 |
 | `Florence2.py` | `_Florence_Interface` | Florence-2 系列 |
+| `Gemma4.py` | `_Gemma4_VL_Interface` | Gemma-4 (E2B 等) |
+| `Molmo2.py` | `_Molmo2_VL_Interface` | AllenAI Molmo2 (4B / 8B / O-7B / VideoPoint-4B) |
 
 ## 与 World Model 的关系
 
