@@ -265,6 +265,8 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on reporting bug
 
 ### Projects Based on StarVLA
 
+**LDA-1B**: [*LDA-1B: Scaling Latent Dynamics Action Model via Universal Embodied Data Ingestion*](https://github.com/jiangranlv/LDA-1B)
+
 **NeuroVLA**: [*A Brain-like Embodied Intelligence for Fluid and Fast Reflexive Robotics Control*](https://github.com/guoweiyu/NeuroVLA)
 
 **PhysBrain**: [*Human Egocentric Data as a Bridge from Vision Language Models to Physical Intelligence*](https://zgc-embodyai.github.io/PhysBrain)
