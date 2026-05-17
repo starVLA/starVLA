@@ -35,6 +35,12 @@ datasets:
     action_type: delta_qpos
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
     per_device_batch_size: 16
+    num_workers: 4
+    pin_memory: false
+    persistent_workers: false
+    prefetch_factor: 2
+    drop_last: false
+    timeout: 0
     load_all_data_for_training: true
     video_backend: torchvision_av
 

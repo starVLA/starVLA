@@ -3,19 +3,20 @@
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
 """
-StarVLA’s trainer is built directly on native PyTorch + Accelerate + DeepSpeed, keeping the loop explicit and easy to hack.
+StarVLA's trainer is built directly on native PyTorch + Accelerate + DeepSpeed,
+keeping the loop explicit and easy to hack.
 Conventions:
 1. Store runtime state in dicts where possible (simplifies data info, procesing info, config, etc).
 2. Use multiple dataloaders to adapt heterogeneous data types / task mixtures.
-3. Put each training strategy in its own `trainer_*.py` file (avoid large if‑else chains).
+3. Put each training strategy in its own `trainer_*.py` file (avoid large if-else chains).
 """
 
 # Standard Library
 import argparse
 import json
 import os
+import time
 from pathlib import Path
-from typing import Tuple
 
 # Third-Party Libraries
 import torch
@@ -27,13 +28,18 @@ from accelerate.utils import set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoProcessor, get_scheduler
+from transformers import AutoProcessor
 
 # Local Modules
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
+from starVLA.training.trainer_utils.throughput import build_step_performance_metrics, count_batches_samples
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 deepspeed_plugin = DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
@@ -234,16 +240,39 @@ class VLAMTrainer(TrainerUtils):
         )
 
         while self.completed_steps < self.config.trainer.max_train_steps:
+            t_start_data = time.perf_counter()
             batch_vlm = self._get_next_batch()
+            t_end_data = time.perf_counter()
+
+            t_start_model = time.perf_counter()
             step_metrics = self._train_step(batch_vlm)
+            t_end_model = time.perf_counter()
 
             if self.accelerator.sync_gradients:
                 progress_bar.update(1)
                 self.completed_steps += 1
 
+            if self.accelerator.is_local_main_process:
+                progress_bar.set_postfix(
+                    {
+                        "data_times": f"{t_end_data - t_start_data:.3f}",
+                        "model_times": f"{t_end_model - t_start_model:.3f}",
+                    }
+                )
+
             if self.completed_steps % self.config.trainer.eval_interval == 0:
                 step_metrics = self.eval_action_model(step_metrics)
 
+            step_metrics["timing/data"] = t_end_data - t_start_data
+            step_metrics["timing/model"] = t_end_model - t_start_model
+            sample_count = count_batches_samples(batch_vlm) * self.accelerator.num_processes
+            step_metrics.update(
+                build_step_performance_metrics(
+                    data_time=t_end_data - t_start_data,
+                    model_time=t_end_model - t_start_model,
+                    sample_count=sample_count,
+                )
+            )
             self._log_metrics(step_metrics)
 
             if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:

@@ -1,28 +1,26 @@
-import os
 import copy
-import json
-import random
-import logging
-import re
-import time
-import math
 import itertools
-import ast
-from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, List, Tuple
-from io import BytesIO
-import base64
+import json
+import os
+import random
+import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from types import SimpleNamespace
+from typing import Dict, List
+
 import numpy as np
 import torch
-from torch.utils.data import Dataset
-from PIL import Image
-from decord import VideoReader
 import transformers
+from decord import VideoReader
 from omegaconf import OmegaConf
+from PIL import Image
+from torch.utils.data import Dataset
+from transformers import AutoProcessor
+
+from starVLA.dataloader.dataloader_options import build_dataloader_kwargs
 from starVLA.dataloader.qwenvl_llavajson.qwen_data_config import data_list
-from starVLA.dataloader.qwenvl_llavajson.rope2d import get_rope_index_25, get_rope_index_2
+from starVLA.dataloader.qwenvl_llavajson.rope2d import get_rope_index_2, get_rope_index_25
 
 IGNORE_INDEX = -100
 IMAGE_TOKEN_INDEX = 151655
@@ -46,16 +44,22 @@ def read_jsonl(path):
 def preprocess_qwen_2_visual(
     sources,
     tokenizer: transformers.PreTrainedTokenizer,
-    grid_thw: List = [],
+    grid_thw: List | None = None,
     visual_type: str = "image",
 ) -> Dict:
+    if grid_thw is None:
+        grid_thw = []
     roles = {"human": "user", "gpt": "assistant"}
     system_message = "You are a helpful assistant."
     if visual_type not in ["image", "video"]:
         raise ValueError("visual_type must be either 'image' or 'video'")
 
     tokenizer = copy.deepcopy(tokenizer)
-    chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+    chat_template = (
+        "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] "
+        "+ '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}"
+        "{{ '<|im_start|>assistant\n' }}{% endif %}"
+    )
     tokenizer.chat_template = chat_template
 
     visual_replicate_index = 0
@@ -65,7 +69,7 @@ def preprocess_qwen_2_visual(
         try:
             if roles[source[0]["from"]] != roles["human"]:
                 source = source[1:]
-        except:
+        except Exception:
             print(sources)
 
         input_id, target = [], []
@@ -77,7 +81,7 @@ def preprocess_qwen_2_visual(
             try:
                 role = conv["role"]
                 content = conv["content"]
-            except:
+            except Exception:
                 role = conv["from"]
                 content = conv["value"]
 
@@ -263,7 +267,6 @@ class LazySupervisedDataset(Dataset):
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         num_base_retries = 3
-        num_final_retries = 30
 
         # try the current sample first
         for attempt_idx in range(num_base_retries):
@@ -309,7 +312,7 @@ class LazySupervisedDataset(Dataset):
                 if len(image_file) > 1:
                     image_file = [os.path.join(image_folder, file) for file in image_file]
                     results = [self.process_image_unified(file) for file in image_file]
-                    image, grid_thw = zip(*results)
+                    image, grid_thw = zip(*results, strict=False)
                 else:
                     image_file = image_file[0]
                     image_file = os.path.join(image_folder, image_file)
@@ -340,7 +343,7 @@ class LazySupervisedDataset(Dataset):
                 if len(video_file) > 1:
                     video_file = [os.path.join(video_folder, file) for file in video_file]
                     results = [self.process_video(file) for file in video_file]
-                    video, grid_thw, second_per_grid_ts = zip(*results)
+                    video, grid_thw, second_per_grid_ts = zip(*results, strict=False)
                 else:
                     video_file = video_file[0]
                     video_file = os.path.join(video_folder, video_file)
@@ -567,7 +570,8 @@ def make_vlm_dataloader(cfg):
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         cfg.framework.qwenvl.base_vlm,
         model_max_length=data_args.model_max_length,
-        padding_side="left",  # flash Attention version of Qwen2.5_VL. Make sure to  call `tokenizer.padding_side  = 'left'` before tokenizing the input.
+        # Flash Attention Qwen2.5-VL expects left padding before tokenizing inputs.
+        padding_side="left",
         use_fast=False,
     )
 
@@ -589,7 +593,7 @@ def make_vlm_dataloader(cfg):
         train_dataset,
         batch_size=cfg.datasets.vlm_data.per_device_batch_size,
         collate_fn=data_collator,
-        num_workers=4,
+        **build_dataloader_kwargs(data_args),
     )
 
     return {
@@ -597,23 +601,27 @@ def make_vlm_dataloader(cfg):
     }
 
 
-from transformers import AutoTokenizer, AutoProcessor
-
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_yaml", type=str, default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml", help="Path to YAML config")
+    parser.add_argument(
+        "--config_yaml",
+        type=str,
+        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
+        help="Path to YAML config",
+    )
     args, clipargs = parser.parse_known_args()
 
     if os.getenv("DEBUGPY_ENABLE", "0") == "1":
         import debugpy
+
         debugpy.listen(("0.0.0.0", 10092))
         print("Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()
 
     cfg = OmegaConf.load(args.config_yaml)
-    
+
     data_args = cfg.datasets.vlm_data
     image_processor = AutoProcessor.from_pretrained(
         cfg.framework.qwenvl.base_vlm,
