@@ -227,6 +227,7 @@ temp/*
 
 tmp
 
+wandb/*
 
 **/*.pt
 **/*.mp4
