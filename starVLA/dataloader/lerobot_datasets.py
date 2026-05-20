@@ -6,6 +6,7 @@
 
 from pathlib import Path
 from typing import Sequence
+import copy
 from omegaconf import OmegaConf
 
 from starVLA.dataloader.gr00t_lerobot.datasets import LeRobotSingleDataset, LeRobotMixtureDataset
@@ -36,7 +37,16 @@ def make_LeRobotSingleDataset(
     :return: A LeRobotSingleDataset object.
     """
     
-    data_config = ROBOT_TYPE_CONFIG_MAP[robot_type]
+    data_config = copy.deepcopy(ROBOT_TYPE_CONFIG_MAP[robot_type])
+    if data_cfg is not None:
+        action_indices = data_cfg.get("action_indices", None)
+        action_horizon = data_cfg.get("action_horizon", None)
+        if action_indices is not None:
+            data_config.action_indices = [int(idx) for idx in list(action_indices)]
+            print(f"[data-config] robot_type={robot_type} action_indices={data_config.action_indices}")
+        elif action_horizon is not None:
+            data_config.action_indices = list(range(int(action_horizon)))
+            print(f"[data-config] robot_type={robot_type} action_horizon={action_horizon} action_indices={data_config.action_indices}")
     modality_config = data_config.modality_config()
     transforms = data_config.transform()
     dataset_path = data_root_dir / data_name

@@ -10,6 +10,7 @@ Flow-matching header is copyright from GR00T N1.5,
 
 import sys
 from pathlib import Path
+import re
 
 # Add workspace root to Python path if not already there
 _workspace_root = Path(__file__).parent.parent.parent.parent.parent
@@ -21,6 +22,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
+from torch import nn
 from PIL import Image
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
@@ -119,8 +121,183 @@ class QwenGR00TDefaultConfig:
         }
     )
 
+    # === Lightweight VLM-to-action connector ===
+    vl_connector: dict = field(
+        default_factory=lambda: {
+            # Disabled by default so old configs/checkpoints remain strict-load compatible.
+            "enabled": False,
+            # "residual_mlp" keeps the original Qwen hidden states and adds a small adapter delta.
+            "type": "residual_mlp",
+            # Bottleneck width for the MLP adapter.
+            "hidden_dim": 512,
+            "num_layers": 2,
+            "dropout": 0.0,
+            "residual_scale": 1.0,
+            # With residual_mlp this starts exactly as identity and learns the adapter gradually.
+            "zero_init": True,
+        }
+    )
+
     # # === Training precision flag === This is unnecessary, unused parameter
-    # reduce_in_full_precision: bool = True
+# reduce_in_full_precision: bool = True
+
+
+class VLMTokenConnector(nn.Module):
+    """Small trainable adapter between Qwen hidden states and the action head."""
+
+    def __init__(self, input_dim: int, config: Optional[dict] = None) -> None:
+        super().__init__()
+        config = config or {}
+        connector_type = str(config.get("type", "residual_mlp")).lower()
+        self.enabled = bool(config.get("enabled", False)) and connector_type not in {"identity", "none"}
+        self.residual = connector_type in {"residual_mlp", "residual"}
+        self.residual_scale = float(config.get("residual_scale", 1.0))
+
+        if not self.enabled:
+            self.net = nn.Identity()
+            return
+
+        if connector_type not in {"mlp", "residual_mlp", "residual"}:
+            raise ValueError(f"Unsupported vl_connector.type={connector_type!r}")
+
+        hidden_dim = int(config.get("hidden_dim", input_dim))
+        num_layers = max(1, int(config.get("num_layers", 2)))
+        dropout = float(config.get("dropout", 0.0))
+
+        layers: list[nn.Module] = [nn.LayerNorm(input_dim)]
+        if num_layers == 1:
+            layers.append(nn.Linear(input_dim, input_dim))
+        else:
+            layers.append(nn.Linear(input_dim, hidden_dim))
+            for _ in range(num_layers - 2):
+                layers.extend([nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden_dim, hidden_dim)])
+            layers.extend([nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden_dim, input_dim)])
+
+        self.net = nn.Sequential(*layers)
+        if self.residual and bool(config.get("zero_init", True)):
+            final_linear = next((layer for layer in reversed(layers) if isinstance(layer, nn.Linear)), None)
+            if final_linear is not None:
+                nn.init.zeros_(final_linear.weight)
+                if final_linear.bias is not None:
+                    nn.init.zeros_(final_linear.bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if not self.enabled:
+            return hidden_states
+        delta = self.net(hidden_states)
+        if self.residual:
+            return hidden_states + self.residual_scale * delta
+        return delta
+
+
+class LoRALinear(nn.Module):
+    """Dependency-free LoRA wrapper for exploratory Qwen adaptation."""
+
+    def __init__(self, base: nn.Linear, rank: int, alpha: float, dropout: float) -> None:
+        super().__init__()
+        if rank <= 0:
+            raise ValueError(f"LoRA rank must be positive, got {rank}")
+        self.base = base
+        self.rank = int(rank)
+        self.alpha = float(alpha)
+        self.scaling = self.alpha / self.rank
+        self.dropout = nn.Dropout(float(dropout)) if dropout > 0 else nn.Identity()
+
+        for param in self.base.parameters():
+            param.requires_grad = False
+
+        device = base.weight.device
+        dtype = base.weight.dtype
+        self.lora_A = nn.Parameter(torch.empty(self.rank, base.in_features, device=device, dtype=dtype))
+        self.lora_B = nn.Parameter(torch.zeros(base.out_features, self.rank, device=device, dtype=dtype))
+        nn.init.kaiming_uniform_(self.lora_A, a=np.sqrt(5))
+
+        self.lora_A._starvla_trainable_after_freeze = True
+        self.lora_B._starvla_trainable_after_freeze = True
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        base_out = self.base(x)
+        lora_x = self.dropout(x).to(dtype=self.lora_A.dtype)
+        update = torch.matmul(torch.matmul(lora_x, self.lora_A.t()), self.lora_B.t()) * self.scaling
+        return base_out + update.to(dtype=base_out.dtype)
+
+
+def _as_list(value, default: list[str]) -> list[str]:
+    if value is None:
+        return list(default)
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _get_nested_module(root: nn.Module, path: str) -> nn.Module:
+    module = root
+    for part in path.split("."):
+        module = getattr(module, part)
+    return module
+
+
+def apply_qwen_lora(qwen_model: nn.Module, config) -> list[str]:
+    """Attach LoRA to selected Qwen Linear modules before optimizer creation."""
+
+    lora_cfg = config.framework.get("qwen_lora", {}) if config is not None else {}
+    if not bool(lora_cfg.get("enabled", False)):
+        return []
+
+    rank = int(lora_cfg.get("rank", 8))
+    alpha = float(lora_cfg.get("alpha", 16))
+    dropout = float(lora_cfg.get("dropout", 0.05))
+    target_modules = set(_as_list(lora_cfg.get("target_modules", None), ["q_proj", "v_proj"]))
+    last_n_layers = int(lora_cfg.get("last_n_layers", 0))
+    max_modules = int(lora_cfg.get("max_modules", 0))
+
+    candidates: list[tuple[str, nn.Linear, Optional[int]]] = []
+    layer_indices: list[int] = []
+    layer_re = re.compile(r"(?:^|\.)(?:layers|h|blocks)\.(\d+)\.")
+
+    for name, module in qwen_model.named_modules():
+        if not isinstance(module, nn.Linear):
+            continue
+        if name.split(".")[-1] not in target_modules:
+            continue
+        match = layer_re.search(name)
+        layer_idx = int(match.group(1)) if match else None
+        if layer_idx is not None:
+            layer_indices.append(layer_idx)
+        candidates.append((name, module, layer_idx))
+
+    if last_n_layers > 0 and layer_indices:
+        min_layer = max(layer_indices) - last_n_layers + 1
+        candidates = [(name, module, idx) for name, module, idx in candidates if idx is not None and idx >= min_layer]
+
+    if max_modules > 0:
+        candidates = candidates[:max_modules]
+
+    applied: list[str] = []
+    for name, module, _ in candidates:
+        parent_path, child_name = name.rsplit(".", 1) if "." in name else ("", name)
+        parent = _get_nested_module(qwen_model, parent_path) if parent_path else qwen_model
+        if isinstance(getattr(parent, child_name), LoRALinear):
+            continue
+        setattr(parent, child_name, LoRALinear(module, rank=rank, alpha=alpha, dropout=dropout))
+        applied.append(name)
+
+    if not applied:
+        raise RuntimeError(
+            "qwen_lora.enabled=true but no target Linear modules were matched. "
+            f"target_modules={sorted(target_modules)}, last_n_layers={last_n_layers}"
+        )
+
+    print(
+        f"[qwen_lora] enabled rank={rank} alpha={alpha} dropout={dropout} "
+        f"targets={sorted(target_modules)} applied={len(applied)}"
+    )
+    for name in applied[:20]:
+        print(f"[qwen_lora]   {name}")
+    if len(applied) > 20:
+        print(f"[qwen_lora]   ... {len(applied) - 20} more")
+
+    return applied
 
 
 @FRAMEWORK_REGISTRY.register("QwenGR00T")
@@ -151,9 +328,13 @@ class Qwen_GR00T(baseframework):
         # Merge framework defaults with YAML config (YAML wins on conflicts)
         self.config = merge_framework_config(QwenGR00TDefaultConfig, config)
         self.qwen_vl_interface = get_vlm_model(config=self.config)
+        self.qwen_lora_modules = apply_qwen_lora(self.qwen_vl_interface.model, self.config)
         # align dims --> we should put them to config or no?
-        self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = (
-            self.qwen_vl_interface.model.config.hidden_size
+        vl_hidden_size = self.qwen_vl_interface.model.config.hidden_size
+        self.config.framework.action_model.diffusion_model_cfg.cross_attention_dim = vl_hidden_size
+        self.vl_connector = VLMTokenConnector(
+            input_dim=vl_hidden_size,
+            config=self.config.framework.get("vl_connector", {}),
         )
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
@@ -163,6 +344,13 @@ class Qwen_GR00T(baseframework):
         # are normalised upstream by `share_tools.apply_config_compat`, so we
         # only ever read `action_horizon` here.
         self.action_horizon = int(self.config.framework.action_model.action_horizon)
+
+    def _apply_vl_connector(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        connector = getattr(self, "vl_connector", None)
+        if connector is None or not getattr(connector, "enabled", False):
+            return hidden_states
+        with torch.autocast(hidden_states.device.type, dtype=torch.bfloat16, enabled=hidden_states.is_cuda):
+            return connector(hidden_states)
 
     def forward(
         self,
@@ -187,6 +375,7 @@ class Qwen_GR00T(baseframework):
             )
             # last_hidden_state: [B, seq_len, H]
             last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
+        last_hidden = self._apply_vl_connector(last_hidden)
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
@@ -252,6 +441,7 @@ class Qwen_GR00T(baseframework):
 
             # last_hidden_state: [B, seq_len, H]
             last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
+        last_hidden = self._apply_vl_connector(last_hidden)
 
         state = (
             torch.from_numpy(np.array(state)).to(last_hidden.device, dtype=last_hidden.dtype)

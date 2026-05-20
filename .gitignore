@@ -243,12 +243,22 @@ tmp
 !docs/PR_readme.md
 !docs/CONTRIBUTING.md
 !docs/faq.md
+!examples/calvin_autoresearch/docs/*.md
+!examples/calvin_autoresearch/docs/wmh_calvin_exploration_report_2026-05-20.md
 !docs/model_zoo.md
 !docs/starVLA_guideline.md
 !docs/WM4A.md
 
 
 logs/*
+wmh_links/
+safety_snapshots/
+STARVLA_env_check.txt
+STARVLA_pip_freeze.txt
+STARVLA_pip_list.txt
+examples/GTY_calvin
+__pycache__/
+*.py[cod]
 bar
 **/.nf*
 code

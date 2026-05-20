@@ -4,6 +4,7 @@
 
 import logging
 import os
+import inspect
 import time
 from typing import Dict, Optional, Tuple
 
@@ -44,15 +45,17 @@ class WebsocketClientPolicy:
 
             try:
                 headers = {"Authorization": f"Api-Key {self._api_key}"} if self._api_key else None
-                conn = websockets.sync.client.connect(
-                    self._uri,
-                    compression=None,
-                    max_size=None,
-                    additional_headers=headers,
-                    open_timeout=150,
-                    ping_interval=None,
-                    ping_timeout=60,
-                )
+                connect_kwargs = {
+                    "compression": None,
+                    "max_size": None,
+                    "additional_headers": headers,
+                    "open_timeout": 150,
+                    "ping_interval": None,
+                    "ping_timeout": 60,
+                }
+                supported_kwargs = inspect.signature(websockets.sync.client.connect).parameters
+                connect_kwargs = {k: v for k, v in connect_kwargs.items() if k in supported_kwargs}
+                conn = websockets.sync.client.connect(self._uri, **connect_kwargs)
                 metadata = msgpack_numpy.unpackb(conn.recv())
                 return conn, metadata
             except ConnectionRefusedError:

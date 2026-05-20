@@ -1,0 +1,338 @@
+[
+  {
+    "trajectory_id": 2,
+    "base_index": 32,
+    "task": "move_slider_left",
+    "mirrored_task": "move_slider_right",
+    "original_language": "slide the door to the left",
+    "mirrored_language": "slide the door to the right",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/00_2_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/00_2_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/00_2_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/00_2_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 18,
+    "base_index": 21,
+    "task": "push_pink_block_left",
+    "mirrored_task": "push_pink_block_right",
+    "original_language": "push left the pink block",
+    "mirrored_language": "push right the pink block",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/00_18_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/00_18_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/00_18_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/00_18_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 21,
+    "base_index": 32,
+    "task": "move_slider_left",
+    "mirrored_task": "move_slider_right",
+    "original_language": "move the sliding door to the left",
+    "mirrored_language": "move the sliding door to the right",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/01_21_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/01_21_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/01_21_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_left/01_21_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 29,
+    "base_index": 32,
+    "task": "move_slider_right",
+    "mirrored_task": "move_slider_left",
+    "original_language": "slide the door to the right side",
+    "mirrored_language": "slide the door to the left side",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/00_29_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/00_29_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/00_29_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/00_29_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 54,
+    "base_index": 22,
+    "task": "move_slider_right",
+    "mirrored_task": "move_slider_left",
+    "original_language": "grasp the door handle and slide the door to the right",
+    "mirrored_language": "grasp the door handle and slide the door to the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/01_54_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/01_54_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/01_54_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/move_slider_right/01_54_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 87,
+    "base_index": 22,
+    "task": "push_blue_block_left",
+    "mirrored_task": "push_blue_block_right",
+    "original_language": "slide left the blue block",
+    "mirrored_language": "slide right the blue block",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/00_87_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/00_87_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/00_87_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/00_87_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 117,
+    "base_index": 32,
+    "task": "push_pink_block_left",
+    "mirrored_task": "push_pink_block_right",
+    "original_language": "push the pink block towards the left",
+    "mirrored_language": "push the pink block towards the right",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/01_117_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/01_117_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/01_117_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_left/01_117_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 187,
+    "base_index": 18,
+    "task": "push_blue_block_right",
+    "mirrored_task": "push_blue_block_left",
+    "original_language": "go slide the blue block to the right",
+    "mirrored_language": "go slide the blue block to the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/00_187_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/00_187_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/00_187_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/00_187_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 207,
+    "base_index": 18,
+    "task": "push_pink_block_right",
+    "mirrored_task": "push_pink_block_left",
+    "original_language": "push the pink block to the right",
+    "mirrored_language": "push the pink block to the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/00_207_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/00_207_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/00_207_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/00_207_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 230,
+    "base_index": 32,
+    "task": "push_blue_block_left",
+    "mirrored_task": "push_blue_block_right",
+    "original_language": "push the blue block towards the left",
+    "mirrored_language": "push the blue block towards the right",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/01_230_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/01_230_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/01_230_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_left/01_230_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 240,
+    "base_index": 24,
+    "task": "push_red_block_left",
+    "mirrored_task": "push_red_block_right",
+    "original_language": "push the red block towards the left",
+    "mirrored_language": "push the red block towards the right",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/00_240_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/00_240_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/00_240_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/00_240_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 265,
+    "base_index": 32,
+    "task": "push_red_block_left",
+    "mirrored_task": "push_red_block_right",
+    "original_language": "slide the red block towards the left",
+    "mirrored_language": "slide the red block towards the right",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/01_265_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/01_265_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/01_265_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_left/01_265_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 271,
+    "base_index": 32,
+    "task": "push_blue_block_right",
+    "mirrored_task": "push_blue_block_left",
+    "original_language": "slide the blue block towards the right",
+    "mirrored_language": "slide the blue block towards the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/01_271_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/01_271_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/01_271_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_blue_block_right/01_271_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 370,
+    "base_index": 21,
+    "task": "push_pink_block_right",
+    "mirrored_task": "push_pink_block_left",
+    "original_language": "go slide the pink block to the right",
+    "mirrored_language": "go slide the pink block to the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/01_370_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/01_370_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/01_370_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_pink_block_right/01_370_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 399,
+    "base_index": 32,
+    "task": "push_red_block_right",
+    "mirrored_task": "push_red_block_left",
+    "original_language": "sweep the red block to the right",
+    "mirrored_language": "sweep the red block to the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/00_399_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/00_399_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/00_399_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/00_399_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  },
+  {
+    "trajectory_id": 497,
+    "base_index": 32,
+    "task": "push_red_block_right",
+    "mirrored_task": "push_red_block_left",
+    "original_language": "slide the red block towards the right",
+    "mirrored_language": "slide the red block towards the left",
+    "flip_wrist": true,
+    "images": {
+      "video.primary_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/01_497_primary_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/01_497_primary_image_after.jpg",
+        "flipped": true
+      },
+      "video.wrist_image": {
+        "before": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/01_497_wrist_image_before.jpg",
+        "after": "examples/calvin_autoresearch/reports/lr_mirror_diagnostics_20260519/preview_images_flip_wrist/push_red_block_right/01_497_wrist_image_after.jpg",
+        "flipped": true
+      }
+    }
+  }
+]

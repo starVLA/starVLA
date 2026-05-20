@@ -1,0 +1,39 @@
+Shared root:
+  /inspire/qb-ilm2/project/26summer-camp-10/public/seven/starvla_calvin
+
+Layout:
+  shared/
+    models/base/Qwen3-VL-4B-Instruct-Action
+    datasets/calvin_lerobot/calvin_abc_train_v3.0
+    datasets/calvin_original/task_D_D
+    env/starvla_env.shared.sh
+    manifests/assets.yaml
+    docs/
+    checkpoints/wmh_trained/
+    reports/
+
+  members/<member>/
+    runs/
+    checkpoints/
+    logs/
+    notes/
+    reports/
+    scratch/
+
+  templates/
+    link_member_project.sh
+
+Rules:
+  shared/ is for common allowed assets and WMH-trained outputs.
+  members/<member>/ is for member-owned experiment outputs.
+  Do not store upstream action-trained policy checkpoints anywhere in this workspace.
+  Code changes should still go through the WMH git fork/branch.
+
+Setup command when /public/seven is writable:
+  MEMBERS="WMH member_a member_b" bash examples/calvin_autoresearch/scripts/setup_shared_seven.sh
+
+Setup and link the current project in one step:
+  MEMBERS="WMH member_a member_b" LINK_CURRENT_PROJECT=1 bash examples/calvin_autoresearch/scripts/setup_shared_seven.sh
+
+Member local link command:
+  PROJECT_ROOT=/path/to/member/project bash examples/calvin_autoresearch/scripts/link_shared_assets.sh

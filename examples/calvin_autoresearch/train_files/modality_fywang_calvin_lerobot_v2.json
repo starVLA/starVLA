@@ -1,0 +1,97 @@
+{
+  "state": {
+    "x": {
+      "start": 0,
+      "end": 1,
+      "original_key": "observation.state"
+    },
+    "y": {
+      "start": 1,
+      "end": 2,
+      "original_key": "observation.state"
+    },
+    "z": {
+      "start": 2,
+      "end": 3,
+      "original_key": "observation.state"
+    },
+    "roll": {
+      "start": 3,
+      "end": 4,
+      "original_key": "observation.state"
+    },
+    "pitch": {
+      "start": 4,
+      "end": 5,
+      "original_key": "observation.state"
+    },
+    "yaw": {
+      "start": 5,
+      "end": 6,
+      "original_key": "observation.state"
+    },
+    "pad": {
+      "start": 6,
+      "end": 7,
+      "original_key": "observation.state"
+    },
+    "gripper": {
+      "start": 6,
+      "end": 7,
+      "original_key": "observation.state"
+    }
+  },
+  "action": {
+    "x": {
+      "start": 0,
+      "end": 1,
+      "original_key": "action"
+    },
+    "y": {
+      "start": 1,
+      "end": 2,
+      "original_key": "action"
+    },
+    "z": {
+      "start": 2,
+      "end": 3,
+      "original_key": "action"
+    },
+    "roll": {
+      "start": 3,
+      "end": 4,
+      "original_key": "action"
+    },
+    "pitch": {
+      "start": 4,
+      "end": 5,
+      "original_key": "action"
+    },
+    "yaw": {
+      "start": 5,
+      "end": 6,
+      "original_key": "action"
+    },
+    "gripper": {
+      "start": 6,
+      "end": 7,
+      "original_key": "action"
+    }
+  },
+  "video": {
+    "primary_image": {
+      "original_key": "observation.images.top"
+    },
+    "image_0": {
+      "original_key": "observation.images.top"
+    },
+    "wrist_image": {
+      "original_key": "observation.images.wrist"
+    }
+  },
+  "annotation": {
+    "human.action.task_description": {
+      "original_key": "task_index"
+    }
+  }
+}

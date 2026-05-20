@@ -115,7 +115,11 @@ def build_param_lr_groups(model, cfg):
         try:
             for attr in freeze_path.split("."):
                 module = getattr(module, attr)
-            frozen_params.update(id(p) for p in module.parameters())
+            frozen_params.update(
+                id(p)
+                for p in module.parameters()
+                if not getattr(p, "_starvla_trainable_after_freeze", False)
+            )
         except AttributeError:
             print(f"⚠️ freeze module path does not exist: {freeze_path}")
             continue
@@ -217,7 +221,10 @@ class TrainerUtils:
                         module = getattr(module, attr)
                     # if the module is successfully get, freeze it and its all submodule parameters
                     for param in module.parameters():
-                        param.requires_grad = False
+                        if getattr(param, "_starvla_trainable_after_freeze", False):
+                            param.requires_grad = True
+                        else:
+                            param.requires_grad = False
                     frozen.append(path)
                 except AttributeError:
                     # if the attribute does not exist, skip and print warning
@@ -235,7 +242,7 @@ class TrainerUtils:
         print the total number of parameters and trainable parameters of the model
         :param model: PyTorch model instance
         """
-        if dist.get_rank() != 0:
+        if dist.is_initialized() and dist.get_rank() != 0:
             return
         print("📊 model parameter statistics:")
         num_params = sum(p.numel() for p in model.parameters())
@@ -243,6 +250,11 @@ class TrainerUtils:
         print(
             f"# Parameters (in millions): {num_params / 10**6:.3f} Total, {num_trainable_params / 10**6:.3f} Trainable"
         )
+        print("📊 top-level trainable parameter statistics:")
+        for name, module in model.named_children():
+            total = sum(p.numel() for p in module.parameters())
+            trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+            print(f"  {name:32s} {trainable / 10**6:10.3f}M / {total / 10**6:10.3f}M trainable")
         return num_params, num_trainable_params
 
     @staticmethod

@@ -273,6 +273,62 @@ class VLATrainer(TrainerUtils):
             wandb.log(metrics, step=self.completed_steps)
             logger.info(f"Step {self.completed_steps}, Loss: {metrics})")
 
+    @staticmethod
+    def _module_grad_stats(module):
+        """Return trainable parameter count and local gradient norm for a module."""
+        if module is None:
+            return 0, 0, 0.0, 0.0
+
+        trainable_params = 0
+        tensors_with_grad = 0
+        squared_norm = 0.0
+        max_abs = 0.0
+        for param in module.parameters():
+            if not param.requires_grad:
+                continue
+            trainable_params += param.numel()
+            if param.grad is None:
+                continue
+            grad = param.grad.detach()
+            if grad.is_sparse:
+                grad = grad.coalesce().values()
+            grad = grad.float()
+            if grad.numel() == 0:
+                continue
+            tensors_with_grad += 1
+            squared_norm += float(torch.sum(grad * grad).item())
+            max_abs = max(max_abs, float(torch.max(torch.abs(grad)).item()))
+
+        return trainable_params, tensors_with_grad, squared_norm**0.5, max_abs
+
+    def _collect_grad_norm_metrics(self):
+        """Collect module-level gradient norms for state/connector sanity checks."""
+        if not bool(getattr(self.config.trainer, "log_grad_norms", False)):
+            return {}
+        if not self.accelerator.sync_gradients:
+            return {}
+
+        unwrapped = self.accelerator.unwrap_model(self.model)
+        action_model = getattr(unwrapped, "action_model", None)
+        modules = {
+            "qwen_vl_interface": getattr(unwrapped, "qwen_vl_interface", None),
+            "vl_connector": getattr(unwrapped, "vl_connector", None),
+            "state_projector": getattr(action_model, "state_encoder", None) if action_model is not None else None,
+            "action_model.dit": getattr(action_model, "model", None) if action_model is not None else None,
+            "action_model.action_encoder": getattr(action_model, "action_encoder", None) if action_model is not None else None,
+            "action_model.action_decoder": getattr(action_model, "action_decoder", None) if action_model is not None else None,
+            "action_model.future_tokens": getattr(action_model, "future_tokens", None) if action_model is not None else None,
+        }
+
+        metrics = {}
+        for name, module in modules.items():
+            trainable_params, tensors_with_grad, norm, max_abs = self._module_grad_stats(module)
+            metrics[f"grad_norm/{name}"] = norm
+            metrics[f"grad_max_abs/{name}"] = max_abs
+            metrics[f"grad_tensors/{name}"] = tensors_with_grad
+            metrics[f"trainable_params/{name}"] = trainable_params
+        return metrics
+
     def _create_data_iterators(self):
         """Create data iterators."""
         self.vla_iter = iter(self.vla_train_dataloader)
@@ -376,6 +432,7 @@ class VLATrainer(TrainerUtils):
                 total_loss = action_loss
 
             self.accelerator.backward(total_loss)
+            grad_metrics = self._collect_grad_norm_metrics()
 
             if self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
@@ -391,11 +448,18 @@ class VLATrainer(TrainerUtils):
 
         return {
             "action_dit_loss": action_loss.item(),
+            **grad_metrics,
         }
 
     def _finalize_training(self):
         """Training end processing."""
         if self.accelerator.is_main_process:
+            if bool(getattr(self.config.trainer, "skip_final_save", False)):
+                logger.info("Training complete. Final model save skipped because trainer.skip_final_save=true")
+                wandb.finish()
+                self.accelerator.wait_for_everyone()
+                return
+
             save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)

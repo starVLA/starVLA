@@ -22,6 +22,7 @@ Exposed API:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -44,6 +45,8 @@ class PolicyServerWrapper:
         unnorm_key: Optional[str] = None,
     ) -> None:
         self._ckpt_path = str(ckpt_path)
+        self._state_sanity_mode = os.environ.get("STARVLA_STATE_SANITY_MODE", "normal").lower().replace("-", "_")
+        self._state_shuffle_rng = np.random.default_rng(int(os.environ.get("STARVLA_STATE_SANITY_SEED", "0")))
 
         logging.info("PolicyServerWrapper: loading framework from %s", self._ckpt_path)
         framework = baseframework.from_pretrained(self._ckpt_path)
@@ -109,12 +112,16 @@ class PolicyServerWrapper:
     @property
     def metadata(self) -> Dict[str, Any]:
         """Model-invariant metadata; sent to client at websocket handshake."""
+        action_model_cfg = self._model_cfg["framework"]["action_model"]
         base = {
             "env": "starvla_policy_server",
             "ckpt_path": self._ckpt_path,
             "action_chunk_size": self._action_chunk_size,
+            "model_state_dim": int(action_model_cfg.get("state_dim") or 0),
+            "model_action_dim": int(action_model_cfg.get("action_dim") or 0),
             "available_unnorm_keys": self._available_unnorm_keys,
             "default_unnorm_key": self._default_unnorm_key,
+            "state_sanity_mode": self._state_sanity_mode,
         }
         # Enrich with per-embodiment keys when a default processor already exists.
         if self._default_unnorm_key is not None:
@@ -152,7 +159,30 @@ class PolicyServerWrapper:
                 )
         proc = self._get_processor(effective_key)
 
-        out = self._framework.predict_action(examples=examples, **kwargs)
+        prepared_examples: List[dict] = []
+        for example in examples:
+            if "state" not in example or example["state"] is None:
+                prepared_examples.append(example)
+                continue
+            prepared = dict(example)
+            prepared["state"] = proc.apply_state(prepared["state"])
+            prepared_examples.append(prepared)
+
+        if self._state_sanity_mode in {"zero", "zeros"}:
+            for prepared in prepared_examples:
+                if "state" in prepared and prepared["state"] is not None:
+                    prepared["state"] = np.zeros_like(prepared["state"], dtype=np.float32)
+        elif self._state_sanity_mode in {"shuffle", "batch_shuffle"}:
+            state_indices = [idx for idx, item in enumerate(prepared_examples) if item.get("state") is not None]
+            if len(state_indices) > 1:
+                shuffled = list(state_indices)
+                self._state_shuffle_rng.shuffle(shuffled)
+                states = [prepared_examples[idx]["state"] for idx in shuffled]
+                for dst_idx, state in zip(state_indices, states):
+                    prepared_examples[dst_idx] = dict(prepared_examples[dst_idx])
+                    prepared_examples[dst_idx]["state"] = state
+
+        out = self._framework.predict_action(examples=prepared_examples, **kwargs)
         normalized = np.asarray(out["normalized_actions"])  # (B, T, D)
 
         unnorm = np.stack(

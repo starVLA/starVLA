@@ -28,7 +28,8 @@ import hashlib
 import io
 import json, torch
 import copy
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Sequence
 import os, random
@@ -37,7 +38,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from PIL import Image
+from PIL import Image, ImageEnhance
 import torch.distributed as dist
 
 from starVLA.dataloader.gr00t_lerobot.video import get_all_frames, get_frames_by_timestamps
@@ -70,6 +71,574 @@ EPSILON = 5e-4
 #  LeRobot v3.0 dataset file names 
 LE_ROBOT3_TASKS_FILENAME = "meta/tasks.parquet"
 LE_ROBOT3_EPISODE_FILENAME = "meta/episodes/*/*.parquet"
+
+
+def _is_main_process() -> bool:
+    return (not dist.is_initialized()) or dist.get_rank() == 0
+
+
+def _cfg_get(cfg, key, default=None):
+    if cfg is None:
+        return default
+    try:
+        return cfg.get(key, default)
+    except AttributeError:
+        return getattr(cfg, key, default)
+
+
+def _as_plain_dict(value) -> dict:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    try:
+        return {k: value[k] for k in value.keys()}
+    except AttributeError:
+        return {}
+
+
+def canonicalize_calvin_task(task_text: str) -> str:
+    """Map CALVIN natural-language task variants to eval-like canonical ids.
+
+    This intentionally starts with conservative rules for the failure-heavy
+    tasks we want to oversample. Unmatched tasks return ``"other"``.
+    """
+    text = re.sub(r"[^a-z0-9]+", " ", str(task_text).lower()).strip()
+    tokens = set(text.split())
+
+    def has_any(*words: str) -> bool:
+        return any(word in text for word in words)
+
+    if "drawer" in tokens:
+        if has_any("push the object into the drawer", "push the block into the drawer", "into the drawer"):
+            return "push_into_drawer"
+        if has_any("place", "put") and has_any("in the drawer", "into the drawer"):
+            return "place_in_drawer"
+        if has_any("close", "push the drawer", "push the handle", "push the cabinet drawer"):
+            return "close_drawer"
+        if has_any("open", "pull the drawer", "pull the handle"):
+            return "open_drawer"
+
+    is_led = "led" in tokens or ("green" in tokens and ("light" in tokens or "lamp" in tokens))
+    is_lightbulb = (
+        "yellow" in tokens
+        or "lamp" in tokens
+        or "lightbulb" in tokens
+        or "bulb" in tokens
+        or ("light" in tokens and not is_led)
+    )
+    switch_down = "switch" in tokens and has_any("down", "downwards", "push the switch down", "move the switch down", "slide the switch down")
+    switch_up = "switch" in tokens and has_any("up", "upwards", "push the switch up", "move the switch up", "slide the switch up")
+    wants_off = has_any("turn off", "switch off", "toggle the light switch to turn off", "move the light switch to turn off") or switch_down
+    wants_on = has_any("turn on", "switch on", "toggle the light switch to turn on", "move the light switch to turn on") or switch_up
+    if is_led and wants_off:
+        return "turn_off_led"
+    if is_led and wants_on:
+        return "turn_on_led"
+    if switch_down and not is_led:
+        return "turn_off_lightbulb"
+    if switch_up and not is_led:
+        return "turn_on_lightbulb"
+    if is_lightbulb and wants_off:
+        return "turn_off_lightbulb"
+    if is_lightbulb and wants_on:
+        return "turn_on_lightbulb"
+
+    mentions_slider = "slider" in tokens or "sliding" in tokens or "door" in tokens or "cabinet" in tokens
+    if mentions_slider and "left" in tokens and has_any("slide", "move", "push"):
+        return "move_slider_left"
+    if mentions_slider and "right" in tokens and has_any("slide", "move", "push"):
+        return "move_slider_right"
+    if mentions_slider and has_any("place", "put") and has_any("in the slider", "on the slider", "onto the slider"):
+        return "place_in_slider"
+
+    if "unstack" in tokens or has_any("unstack"):
+        return "unstack_block"
+    if "stack" in tokens or has_any("stack"):
+        return "stack_block"
+
+    if has_any("rotate", "turn") and "block" in tokens:
+        for color in ("red", "blue", "pink"):
+            if color in tokens and "right" in tokens:
+                return f"rotate_{color}_block_right"
+            if color in tokens and "left" in tokens:
+                return f"rotate_{color}_block_left"
+
+    if has_any("lift", "pick up", "pick") and "block" in tokens:
+        for color in ("red", "blue", "pink"):
+            if color not in tokens:
+                continue
+            if "drawer" in tokens:
+                return f"lift_{color}_block_drawer"
+            if mentions_slider:
+                return f"lift_{color}_block_slider"
+            if "table" in tokens:
+                return f"lift_{color}_block_table"
+
+    if has_any("push", "slide", "sweep"):
+        for color in ("red", "blue", "pink"):
+            if color in tokens and "block" in tokens and "right" in tokens:
+                return f"push_{color}_block_right"
+            if color in tokens and "block" in tokens and "left" in tokens:
+                return f"push_{color}_block_left"
+
+    return "other"
+
+
+def _parse_task_balanced_sampler_cfg(data_cfg) -> dict:
+    sampler_cfg = _cfg_get(data_cfg, "sampler", {})
+    sampler_cfg = _as_plain_dict(sampler_cfg)
+    if str(sampler_cfg.get("type", "")).lower() != "task_balanced":
+        return {}
+    oversample_tasks = _as_plain_dict(sampler_cfg.get("oversample_tasks", {}))
+    return {str(task): float(weight) for task, weight in oversample_tasks.items()}
+
+
+def _parse_step_sampling_cfg(data_cfg) -> dict:
+    """Parse optional within-trajectory step curriculum.
+
+    The sampler still draws a normal ABC trajectory first.  This only changes
+    which step inside that trajectory is used, biasing toward middle/late demo
+    states that are closer to p2-p5 recovery conditions than pure uniform step
+    sampling.
+    """
+    raw_cfg = _as_plain_dict(_cfg_get(data_cfg, "step_sampling", {}))
+    if not raw_cfg or not bool(raw_cfg.get("enabled", False)):
+        return {"enabled": False}
+
+    sampler_type = str(raw_cfg.get("type", "progress_curriculum")).lower()
+    if sampler_type not in {"progress_curriculum", "progress_windows"}:
+        raise ValueError(f"Unsupported step_sampling.type={sampler_type!r}")
+
+    windows = []
+    for item in raw_cfg.get("windows", []):
+        window = _as_plain_dict(item)
+        start = float(window.get("start", 0.0))
+        end = float(window.get("end", 1.0))
+        weight = float(window.get("weight", 1.0))
+        if not (0.0 <= start < end <= 1.0):
+            raise ValueError(f"Invalid step_sampling window: {window}")
+        if weight <= 0:
+            raise ValueError(f"step_sampling window weight must be positive: {window}")
+        windows.append(
+            {
+                "name": str(window.get("name", f"{start:.2f}-{end:.2f}")),
+                "start": start,
+                "end": end,
+                "weight": weight,
+            }
+        )
+
+    if not windows:
+        early_end = float(raw_cfg.get("early_end", 0.30))
+        middle_start = float(raw_cfg.get("middle_start", early_end))
+        middle_end = float(raw_cfg.get("middle_end", 0.75))
+        late_start = float(raw_cfg.get("late_start", middle_end))
+        late_end = float(raw_cfg.get("late_end", 0.95))
+        windows = [
+            {
+                "name": "early",
+                "start": 0.0,
+                "end": early_end,
+                "weight": float(raw_cfg.get("early_weight", 0.45)),
+            },
+            {
+                "name": "middle",
+                "start": middle_start,
+                "end": middle_end,
+                "weight": float(raw_cfg.get("middle_weight", 1.80)),
+            },
+            {
+                "name": "late",
+                "start": late_start,
+                "end": late_end,
+                "weight": float(raw_cfg.get("late_weight", 1.30)),
+            },
+        ]
+
+    return {
+        "enabled": True,
+        "type": sampler_type,
+        "windows": windows,
+        "report": bool(raw_cfg.get("report", True)),
+    }
+
+
+def _parse_image_aug_cfg(data_cfg) -> dict:
+    aug_cfg = _as_plain_dict(_cfg_get(data_cfg, "image_augmentation", {}))
+    enabled = bool(aug_cfg.get("enabled", False))
+    if not enabled:
+        return {"enabled": False}
+    cfg = {
+        "enabled": True,
+        "apply_to": str(aug_cfg.get("apply_to", "hard_tasks")),
+        "probability": float(aug_cfg.get("probability", 0.5)),
+        "brightness": float(aug_cfg.get("brightness", 0.08)),
+        "contrast": float(aug_cfg.get("contrast", 0.08)),
+        "saturation": float(aug_cfg.get("saturation", 0.06)),
+        "hue": float(aug_cfg.get("hue", 0.015)),
+        "max_translate_ratio": float(aug_cfg.get("max_translate_ratio", 0.04)),
+        "protect_small_affordances": bool(aug_cfg.get("protect_small_affordances", True)),
+        "photometric": bool(aug_cfg.get("photometric", True)),
+        "crop_translate": bool(aug_cfg.get("crop_translate", True)),
+    }
+    scale_range = aug_cfg.get("scale_range", [0.96, 1.0])
+    cfg["scale_range"] = [float(scale_range[0]), float(scale_range[1])]
+    hard_tasks = aug_cfg.get("hard_tasks", None)
+    if hard_tasks is None:
+        hard_tasks = list(_as_plain_dict(_cfg_get(data_cfg, "sampler", {})).get("oversample_tasks", {}).keys())
+    cfg["hard_tasks"] = {str(task) for task in hard_tasks}
+    cfg["task_profiles"] = {str(k): _as_plain_dict(v) for k, v in _as_plain_dict(aug_cfg.get("task_profiles", {})).items()}
+    cfg["camera_profiles"] = {str(k): _as_plain_dict(v) for k, v in _as_plain_dict(aug_cfg.get("camera_profiles", {})).items()}
+    return cfg
+
+
+def _parse_language_aug_cfg(data_cfg) -> dict:
+    lang_cfg = _as_plain_dict(_cfg_get(data_cfg, "language_augmentation", {}))
+    enabled = bool(lang_cfg.get("enabled", False))
+    if not enabled:
+        return {"enabled": False}
+    hard_tasks = lang_cfg.get("hard_tasks", None)
+    if hard_tasks is None:
+        hard_tasks = list(_as_plain_dict(_cfg_get(data_cfg, "sampler", {})).get("oversample_tasks", {}).keys())
+    paraphrases = {}
+    for task, values in _as_plain_dict(lang_cfg.get("paraphrases", {})).items():
+        if isinstance(values, str):
+            values = [values]
+        paraphrases[str(task)] = [str(value) for value in list(values)]
+    return {
+        "enabled": True,
+        "apply_to": str(lang_cfg.get("apply_to", "hard_tasks")),
+        "probability": float(lang_cfg.get("probability", 0.3)),
+        "hard_tasks": {str(task) for task in hard_tasks},
+        "paraphrases": paraphrases,
+    }
+
+
+LR_MIRROR_TASK_SWAP = {
+    "move_slider_left": "move_slider_right",
+    "move_slider_right": "move_slider_left",
+    "push_red_block_left": "push_red_block_right",
+    "push_red_block_right": "push_red_block_left",
+    "push_blue_block_left": "push_blue_block_right",
+    "push_blue_block_right": "push_blue_block_left",
+    "push_pink_block_left": "push_pink_block_right",
+    "push_pink_block_right": "push_pink_block_left",
+}
+
+LR_MIRROR_DEFAULT_ACTION_TRANSFORM = {
+    "x": "negate",
+    "roll": "negate",
+    "yaw": "negate",
+}
+
+LR_MIRROR_DEFAULT_STATE_TRANSFORM = {
+    "x": "mirror_center",
+    "x_center": 0.03991219401359558,
+}
+
+_LEFT_RIGHT_WORD_RE = re.compile(r"\b(left|right)\b", flags=re.IGNORECASE)
+
+
+def _parse_lr_mirror_cfg(data_cfg) -> dict:
+    spatial_cfg = _as_plain_dict(_cfg_get(data_cfg, "spatial_augmentation", {}))
+    mirror_cfg = _as_plain_dict(spatial_cfg.get("left_right_mirror", _cfg_get(data_cfg, "left_right_mirror", {})))
+    if not bool(mirror_cfg.get("enabled", False)):
+        return {"enabled": False}
+
+    probability = float(mirror_cfg.get("probability", 0.25))
+    if probability < 0.0 or probability > 1.0:
+        raise ValueError(f"left_right_mirror.probability must be in [0, 1], got {probability}")
+
+    task_map = _as_plain_dict(mirror_cfg.get("tasks", LR_MIRROR_TASK_SWAP))
+    task_map = {str(task): str(mirrored) for task, mirrored in task_map.items()}
+    if not task_map:
+        raise ValueError("left_right_mirror.enabled=true requires at least one task mapping")
+
+    action_transform = _as_plain_dict(mirror_cfg.get("action_transform", LR_MIRROR_DEFAULT_ACTION_TRANSFORM))
+    action_transform = {str(key): str(value).lower() for key, value in action_transform.items()}
+
+    state_transform = _as_plain_dict(mirror_cfg.get("state_transform", LR_MIRROR_DEFAULT_STATE_TRANSFORM))
+    state_transform = {str(key): value for key, value in state_transform.items()}
+    state_transform["x"] = str(state_transform.get("x", "none")).lower()
+    if state_transform["x"] in {"mirror_center", "center"}:
+        state_transform["x_center"] = float(state_transform.get("x_center", LR_MIRROR_DEFAULT_STATE_TRANSFORM["x_center"]))
+
+    return {
+        "enabled": True,
+        "probability": probability,
+        "apply_to": str(mirror_cfg.get("apply_to", "lr_tasks")),
+        "flip_primary_image": bool(mirror_cfg.get("flip_primary_image", True)),
+        "flip_wrist_image": bool(mirror_cfg.get("flip_wrist_image", True)),
+        "tasks": task_map,
+        "action_transform": action_transform,
+        "state_transform": state_transform,
+    }
+
+
+def swap_left_right_text(text: str) -> str:
+    def replace(match: re.Match) -> str:
+        word = match.group(0)
+        mirrored = "right" if word.lower() == "left" else "left"
+        if word.isupper():
+            return mirrored.upper()
+        if word[:1].isupper():
+            return mirrored.capitalize()
+        return mirrored
+
+    return _LEFT_RIGHT_WORD_RE.sub(replace, str(text))
+
+
+def swap_left_right_task(canonical_task: str, cfg: dict) -> str:
+    return str(cfg.get("tasks", {}).get(str(canonical_task), str(canonical_task)))
+
+
+def _flip_image_array_left_right(frames: np.ndarray) -> np.ndarray:
+    frames = np.asarray(frames)
+    if frames.ndim < 2:
+        return frames.copy()
+    return np.flip(frames, axis=-2).copy()
+
+
+def _replace_language_values(value, replacement_fn):
+    if isinstance(value, np.ndarray):
+        return np.asarray([replacement_fn(item) if str(item) else item for item in value], dtype=object)
+    if isinstance(value, tuple):
+        return [replacement_fn(item) if str(item) else item for item in value]
+    if isinstance(value, list):
+        return [replacement_fn(item) if str(item) else item for item in value]
+    return replacement_fn(value)
+
+
+def _negate_raw_numeric_value(value):
+    out = np.asarray(value).copy()
+    out *= -1
+    return out
+
+
+def _mirror_raw_numeric_value_around_center(value, center: float):
+    out = np.asarray(value).copy()
+    return (2.0 * float(center) - out).astype(out.dtype, copy=False)
+
+
+def _should_flip_video_key(video_key: str, cfg: dict) -> bool:
+    clean_key = str(video_key).replace("video.", "")
+    if clean_key == "primary_image":
+        return bool(cfg.get("flip_primary_image", True))
+    if clean_key == "wrist_image":
+        return bool(cfg.get("flip_wrist_image", True))
+    return False
+
+
+def apply_calvin_lr_mirror(
+    raw_data: dict,
+    video_keys: Sequence[str],
+    language_keys: Sequence[str],
+    canonical_task: str,
+    rng: np.random.Generator,
+    cfg: dict,
+) -> tuple[dict, str]:
+    if not cfg.get("enabled", False):
+        return raw_data, canonical_task
+
+    task_map = cfg.get("tasks", {})
+    if str(cfg.get("apply_to", "lr_tasks")) == "lr_tasks" and canonical_task not in task_map:
+        return raw_data, canonical_task
+
+    mirrored_task = swap_left_right_task(canonical_task, cfg)
+    if mirrored_task == canonical_task:
+        return raw_data, canonical_task
+
+    if float(rng.random()) >= float(cfg.get("probability", 0.25)):
+        return raw_data, canonical_task
+
+    raw_data = dict(raw_data)
+
+    for key in video_keys:
+        if key in raw_data and _should_flip_video_key(key, cfg):
+            raw_data[key] = _flip_image_array_left_right(raw_data[key])
+
+    for key in language_keys:
+        if key in raw_data:
+            raw_data[key] = _replace_language_values(raw_data[key], swap_left_right_text)
+
+    for action_name, operation in cfg.get("action_transform", {}).items():
+        if str(operation).lower() in {"none", "identity", "keep"}:
+            continue
+        if str(operation).lower() != "negate":
+            raise ValueError(f"Unsupported left_right_mirror action transform for {action_name}: {operation}")
+        key = str(action_name)
+        if not key.startswith("action."):
+            key = f"action.{key}"
+        if key in raw_data:
+            raw_data[key] = _negate_raw_numeric_value(raw_data[key])
+
+    state_transform = cfg.get("state_transform", {})
+    state_x_operation = str(state_transform.get("x", "none")).lower()
+    if state_x_operation in {"mirror_center", "center"}:
+        if "state.x" in raw_data:
+            raw_data["state.x"] = _mirror_raw_numeric_value_around_center(
+                raw_data["state.x"],
+                float(state_transform.get("x_center", LR_MIRROR_DEFAULT_STATE_TRANSFORM["x_center"])),
+            )
+    elif state_x_operation not in {"none", "identity", "keep"}:
+        raise ValueError(f"Unsupported left_right_mirror state.x transform: {state_x_operation}")
+
+    return raw_data, mirrored_task
+
+
+def _merge_aug_profile(base_cfg: dict, *profiles: dict) -> dict:
+    merged = dict(base_cfg)
+    for profile in profiles:
+        for key, value in _as_plain_dict(profile).items():
+            if key in {"task_profiles", "camera_profiles", "hard_tasks", "apply_to", "enabled", "probability"}:
+                continue
+            if key == "scale_range":
+                merged[key] = [float(value[0]), float(value[1])]
+            elif key in {"brightness", "contrast", "saturation", "hue", "max_translate_ratio"}:
+                merged[key] = float(value)
+            elif key in {"photometric", "crop_translate", "protect_small_affordances"}:
+                merged[key] = bool(value)
+            else:
+                merged[key] = value
+    return merged
+
+
+def _resolve_image_aug_profile(cfg: dict, canonical_task: str, video_key: str) -> dict:
+    task_profile = _as_plain_dict(cfg.get("task_profiles", {})).get(canonical_task, {})
+    camera_profiles = _as_plain_dict(cfg.get("camera_profiles", {}))
+    camera_profile = camera_profiles.get(video_key, camera_profiles.get(video_key.replace("video.", ""), {}))
+    return _merge_aug_profile(cfg, task_profile, camera_profile)
+
+
+def _color_jitter_pil(image: Image.Image, rng: np.random.Generator, cfg: dict) -> Image.Image:
+    if not cfg.get("photometric", True):
+        return image
+    brightness = cfg["brightness"]
+    contrast = cfg["contrast"]
+    saturation = cfg["saturation"]
+    hue = cfg["hue"]
+
+    if brightness > 0:
+        image = ImageEnhance.Brightness(image).enhance(float(rng.uniform(1 - brightness, 1 + brightness)))
+    if contrast > 0:
+        image = ImageEnhance.Contrast(image).enhance(float(rng.uniform(1 - contrast, 1 + contrast)))
+    if saturation > 0:
+        image = ImageEnhance.Color(image).enhance(float(rng.uniform(1 - saturation, 1 + saturation)))
+    if hue > 0:
+        hsv = np.array(image.convert("HSV"), dtype=np.uint8)
+        shift = int(round(float(rng.uniform(-hue, hue)) * 255))
+        hsv[..., 0] = ((hsv[..., 0].astype(np.int16) + shift) % 256).astype(np.uint8)
+        image = Image.fromarray(hsv, mode="HSV").convert("RGB")
+    return image
+
+
+def _small_crop_translate_pil(image: Image.Image, rng: np.random.Generator, cfg: dict) -> Image.Image:
+    if not cfg.get("crop_translate", True):
+        return image
+    scale_low, scale_high = cfg["scale_range"]
+    max_translate_ratio = cfg["max_translate_ratio"]
+    if scale_low >= 1.0 and max_translate_ratio <= 0:
+        return image
+
+    width, height = image.size
+    scale = float(rng.uniform(scale_low, scale_high))
+    crop_w = max(1, int(round(width * scale)))
+    crop_h = max(1, int(round(height * scale)))
+    max_dx = int(round(width * max_translate_ratio))
+    max_dy = int(round(height * max_translate_ratio))
+
+    center_x = width // 2 + int(rng.integers(-max_dx, max_dx + 1)) if max_dx > 0 else width // 2
+    center_y = height // 2 + int(rng.integers(-max_dy, max_dy + 1)) if max_dy > 0 else height // 2
+    left = min(max(center_x - crop_w // 2, 0), width - crop_w)
+    top = min(max(center_y - crop_h // 2, 0), height - crop_h)
+    return image.crop((left, top, left + crop_w, top + crop_h)).resize((width, height), Image.BILINEAR)
+
+
+def _augment_image_array(frames: np.ndarray, rng: np.random.Generator, cfg: dict) -> np.ndarray:
+    frames = np.asarray(frames)
+    original_dtype = frames.dtype
+    is_float = np.issubdtype(original_dtype, np.floating)
+    single_frame = frames.ndim == 3
+    frame_batch = frames[None, ...] if single_frame else frames
+
+    augmented = []
+    for frame in frame_batch:
+        frame_array = np.asarray(frame)
+        if is_float:
+            max_value = float(np.nanmax(frame_array)) if frame_array.size else 1.0
+            if max_value <= 1.5:
+                frame_array = frame_array * 255.0
+        image = Image.fromarray(np.clip(frame_array, 0, 255).astype(np.uint8)).convert("RGB")
+        image = _color_jitter_pil(image, rng, cfg)
+        image = _small_crop_translate_pil(image, rng, cfg)
+        augmented.append(np.asarray(image, dtype=np.uint8))
+
+    out = np.stack(augmented)
+    if single_frame:
+        out = out[0]
+    if is_float:
+        if float(np.nanmax(frames)) <= 1.5:
+            out = out.astype(np.float32) / 255.0
+        return out.astype(original_dtype)
+    return out
+
+
+def apply_calvin_image_augmentation(
+    raw_data: dict,
+    video_keys: Sequence[str],
+    canonical_task: str,
+    rng: np.random.Generator,
+    cfg: dict,
+) -> dict:
+    if not cfg.get("enabled", False):
+        return raw_data
+    apply_to = cfg.get("apply_to", "hard_tasks")
+    if apply_to == "hard_tasks" and canonical_task not in cfg.get("hard_tasks", set()):
+        return raw_data
+    if float(rng.random()) >= cfg.get("probability", 0.5):
+        return raw_data
+
+    raw_data = dict(raw_data)
+    for key in video_keys:
+        if key not in raw_data:
+            continue
+        key_cfg = _resolve_image_aug_profile(cfg, canonical_task, key)
+        raw_data[key] = _augment_image_array(raw_data[key], rng, key_cfg)
+    return raw_data
+
+
+def apply_calvin_language_augmentation(
+    raw_data: dict,
+    language_keys: Sequence[str],
+    canonical_task: str,
+    rng: np.random.Generator,
+    cfg: dict,
+) -> dict:
+    if not cfg.get("enabled", False):
+        return raw_data
+    apply_to = cfg.get("apply_to", "hard_tasks")
+    if apply_to == "hard_tasks" and canonical_task not in cfg.get("hard_tasks", set()):
+        return raw_data
+    paraphrases = cfg.get("paraphrases", {}).get(canonical_task, [])
+    if not paraphrases:
+        return raw_data
+    if float(rng.random()) >= cfg.get("probability", 0.3):
+        return raw_data
+
+    replacement = str(paraphrases[int(rng.integers(0, len(paraphrases)))])
+    raw_data = dict(raw_data)
+    for key in language_keys:
+        if key not in raw_data:
+            continue
+        value = raw_data[key]
+        if isinstance(value, np.ndarray):
+            raw_data[key] = np.asarray([replacement if str(item) else item for item in value], dtype=object)
+        elif isinstance(value, (list, tuple)):
+            raw_data[key] = [replacement if str(item) else item for item in value]
+        else:
+            raw_data[key] = replacement
+    return raw_data
 
 
 def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
@@ -625,6 +1194,7 @@ class LeRobotSingleDataset(Dataset):
         self.curr_traj_id = None
 
         self._trajectory_ids, self._trajectory_lengths = self._get_trajectories()
+        self._trajectory_task_texts, self._trajectory_canonical_tasks = self._get_trajectory_task_labels()
         self._modality_keys = self._get_modality_keys()
         self._delta_indices = self._get_delta_indices()
         self._all_steps = self._get_all_steps()
@@ -658,6 +1228,14 @@ class LeRobotSingleDataset(Dataset):
         The order of the lengths is the same as the order of the trajectory IDs.
         """
         return self._trajectory_lengths
+
+    @property
+    def trajectory_task_texts(self) -> np.ndarray:
+        return self._trajectory_task_texts
+
+    @property
+    def trajectory_canonical_tasks(self) -> np.ndarray:
+        return self._trajectory_canonical_tasks
 
     @property
     def all_steps(self) -> list[tuple[int, int]]:
@@ -962,6 +1540,37 @@ class LeRobotSingleDataset(Dataset):
 
             # Should be able to directly read the saved index info here
             return np.array(trajectory_ids), np.array(trajectory_lengths)
+
+    def _get_trajectory_task_labels(self) -> tuple[np.ndarray, np.ndarray]:
+        task_text_by_episode: dict[int, str] = {}
+        if self._lerobot_version == "v2.0":
+            file_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
+            with open(file_path, "r") as f:
+                for line in f:
+                    episode = json.loads(line)
+                    tasks = episode.get("tasks", [])
+                    task_text_by_episode[int(episode["episode_index"])] = str(tasks[0]) if tasks else ""
+        elif self._lerobot_version == "v3.0":
+            file_paths = sorted(list((self.dataset_path).glob(LE_ROBOT3_EPISODE_FILENAME)))
+            for file_path in file_paths:
+                episodes_data = pd.read_parquet(file_path)
+                for _, episode in episodes_data.iterrows():
+                    task = ""
+                    if "tasks" in episode and isinstance(episode["tasks"], (list, tuple)) and episode["tasks"]:
+                        task = str(episode["tasks"][0])
+                    task_text_by_episode[int(episode["episode_index"])] = task
+
+        task_texts = []
+        canonical_tasks = []
+        for trajectory_id in self.trajectory_ids:
+            text = task_text_by_episode.get(int(trajectory_id), "")
+            task_texts.append(text)
+            canonical_tasks.append(canonicalize_calvin_task(text))
+        return np.asarray(task_texts, dtype=object), np.asarray(canonical_tasks, dtype=object)
+
+    def get_trajectory_canonical_task(self, trajectory_id: int) -> str:
+        trajectory_index = self.get_trajectory_index(trajectory_id)
+        return str(self.trajectory_canonical_tasks[trajectory_index])
 
     def _get_all_steps(self) -> list[tuple[int, int]]:
         """Get the trajectory IDs and base indices for all steps in the dataset.
@@ -2160,6 +2769,11 @@ class LeRobotMixtureDataset(Dataset):
         self.seed = seed
         self.mode = mode
         self.data_cfg = kwargs["data_cfg"] if "data_cfg" in kwargs else None
+        self._task_oversample_factors = _parse_task_balanced_sampler_cfg(self.data_cfg)
+        self._step_sampling_cfg = _parse_step_sampling_cfg(self.data_cfg)
+        self._lr_mirror_cfg = _parse_lr_mirror_cfg(self.data_cfg)
+        self._image_aug_cfg = _parse_image_aug_cfg(self.data_cfg)
+        self._language_aug_cfg = _parse_language_aug_cfg(self.data_cfg)
 
         # Set properties for sampling
 
@@ -2195,6 +2809,26 @@ class LeRobotMixtureDataset(Dataset):
             trajectory_sampling_weights = np.ones(len(dataset.trajectory_lengths))
             if self.balance_trajectory_weights:
                 trajectory_sampling_weights *= dataset.trajectory_lengths
+
+            if self._task_oversample_factors:
+                canonical_tasks = np.asarray(dataset.trajectory_canonical_tasks, dtype=object)
+                factors = np.asarray(
+                    [self._task_oversample_factors.get(str(task), 1.0) for task in canonical_tasks],
+                    dtype=np.float64,
+                )
+                trajectory_sampling_weights *= factors
+                if _is_main_process():
+                    raw_counts = Counter(str(task) for task in canonical_tasks)
+                    weighted_mass = defaultdict(float)
+                    for task, weight in zip(canonical_tasks, trajectory_sampling_weights):
+                        weighted_mass[str(task)] += float(weight)
+                    total_mass = sum(weighted_mass.values()) or 1.0
+                    print(f"[task-balanced] dataset={dataset.dataset_name} oversample={self._task_oversample_factors}")
+                    for task, mass in sorted(weighted_mass.items(), key=lambda item: item[1], reverse=True)[:20]:
+                        print(
+                            f"[task-balanced] {task:28s} episodes={raw_counts[task]:5d} "
+                            f"mass={mass / total_mass:.4f}"
+                        )
             
             # Check for zero or negative weights before normalization
             if np.any(trajectory_sampling_weights <= 0):
@@ -2246,6 +2880,15 @@ class LeRobotMixtureDataset(Dataset):
                 self._step_pos.append(0)
 
         self.update_metadata(metadata_config)
+
+        if self._step_sampling_cfg.get("enabled", False) and _is_main_process():
+            print(f"[step-sampling] type={self._step_sampling_cfg.get('type')}")
+            for window in self._step_sampling_cfg.get("windows", []):
+                print(
+                    "[step-sampling] "
+                    f"{window['name']:12s} start={window['start']:.2f} "
+                    f"end={window['end']:.2f} weight={window['weight']:.3f}"
+                )
 
     @property
     def dataset_lengths(self) -> np.ndarray:
@@ -2305,8 +2948,31 @@ class LeRobotMixtureDataset(Dataset):
         trajectory_id = dataset.trajectory_ids[trajectory_index]
 
         # Sample step
-        base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
+        trajectory_length = int(dataset.trajectory_lengths[trajectory_index])
+        base_index = self._sample_base_index_from_trajectory(trajectory_length, rng)
         return dataset, trajectory_id, base_index
+
+    def _sample_base_index_from_trajectory(self, trajectory_length: int, rng: np.random.Generator) -> int:
+        if trajectory_length <= 1:
+            return 0
+        cfg = self._step_sampling_cfg
+        if not cfg.get("enabled", False):
+            return int(rng.choice(trajectory_length))
+
+        windows = cfg.get("windows", [])
+        weights = np.asarray([float(window["weight"]) for window in windows], dtype=np.float64)
+        weights = weights / weights.sum()
+
+        for _ in range(8):
+            window = windows[int(rng.choice(len(windows), p=weights))]
+            low = int(np.floor(float(window["start"]) * (trajectory_length - 1)))
+            high = int(np.ceil(float(window["end"]) * (trajectory_length - 1)))
+            low = max(0, min(low, trajectory_length - 1))
+            high = max(low, min(high, trajectory_length - 1))
+            if high >= low:
+                return int(rng.integers(low, high + 1))
+
+        return int(rng.choice(trajectory_length))
 
     
 
@@ -2351,7 +3017,42 @@ class LeRobotMixtureDataset(Dataset):
                         break
                     index = random.randint(0, len(self) - 1)
                     
-                raw_data = dataset.get_step_data(trajectory_id, step)    
+                raw_data = dataset.get_step_data(trajectory_id, step)
+                canonical_task = dataset.get_trajectory_canonical_task(trajectory_id)
+                if self._lr_mirror_cfg.get("enabled", False):
+                    mirror_rng = np.random.default_rng(
+                        safe_hash((self.epoch, index, self.seed, int(trajectory_id), int(step), "lr_mirror"))
+                    )
+                    raw_data, canonical_task = apply_calvin_lr_mirror(
+                        raw_data=raw_data,
+                        video_keys=dataset.modality_keys["video"],
+                        language_keys=dataset.modality_keys["language"],
+                        canonical_task=canonical_task,
+                        rng=mirror_rng,
+                        cfg=self._lr_mirror_cfg,
+                    )
+                if self._language_aug_cfg.get("enabled", False):
+                    lang_rng = np.random.default_rng(
+                        safe_hash((self.epoch, index, self.seed, int(trajectory_id), int(step), "language_aug"))
+                    )
+                    raw_data = apply_calvin_language_augmentation(
+                        raw_data=raw_data,
+                        language_keys=dataset.modality_keys["language"],
+                        canonical_task=canonical_task,
+                        rng=lang_rng,
+                        cfg=self._language_aug_cfg,
+                    )
+                if self._image_aug_cfg.get("enabled", False):
+                    aug_rng = np.random.default_rng(
+                        safe_hash((self.epoch, index, self.seed, int(trajectory_id), int(step), "image_aug"))
+                    )
+                    raw_data = apply_calvin_image_augmentation(
+                        raw_data=raw_data,
+                        video_keys=dataset.modality_keys["video"],
+                        canonical_task=canonical_task,
+                        rng=aug_rng,
+                        cfg=self._image_aug_cfg,
+                    )
                 data = dataset.transforms(raw_data)
                 sample = dataset._pack_sample(data)
                 

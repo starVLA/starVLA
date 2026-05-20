@@ -1,0 +1,11 @@
+project_root: /inspire/qb-ilm2/project/26summer-camp-10/26220172
+starvla_root: /inspire/qb-ilm2/project/26summer-camp-10/26220172/WMH/starVLA
+best_checkpoint: /inspire/qb-ilm2/project/26summer-camp-10/public/seven/starvla_calvin/shared/checkpoints/wmh_trained/best_abc_to_d_steps_60000_pytorch_model.pt
+source_checkpoint: /inspire/qb-ilm2/project/26summer-camp-10/public/seven/starvla_calvin/members/WMH/runs/abc_pretrain_qwen3vl_gr00t_headonly_h200_60k_0518_163437/checkpoints/steps_60000_pytorch_model.pt
+training_run_dir: /inspire/qb-ilm2/project/26summer-camp-10/public/seven/starvla_calvin/members/WMH/runs/abc_pretrain_qwen3vl_gr00t_headonly_h200_60k_0518_163437
+base_model: /inspire/qb-ilm2/project/26summer-camp-10/26220172/models/Qwen3-VL-4B-Instruct-Action
+calvin_abc_lerobot: /inspire/qb-ilm2/project/26summer-camp-10/26220172/data/calvin_lerobot/calvin_abc_train_v3.0
+calvin_d_eval: /inspire/qb-ilm2/project/26summer-camp-10/public/inspire_shared/calvin_d_d
+oneclick_train: examples/calvin_autoresearch/scripts/run_train_abc_h200_oneclick.sh
+oneclick_eval: examples/calvin_autoresearch/scripts/run_eval_abc_to_d_oneclick.sh
+guardrail: no upstream action-trained policy checkpoints are used

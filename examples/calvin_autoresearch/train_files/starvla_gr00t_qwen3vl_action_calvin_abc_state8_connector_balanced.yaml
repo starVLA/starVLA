@@ -1,0 +1,116 @@
+run_id: baseline_qwen3vl_action_gr00t_calvin_abc_state8_connector_balanced_smoke
+run_root_dir: results/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starvla_calvin_autoresearch
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: QwenGR00T
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
+    attn_implementation: flash_attention_2
+    vl_hidden_dim: 2048
+  vl_connector:
+    enabled: true
+    type: residual_mlp
+    hidden_dim: 512
+    num_layers: 2
+    dropout: 0.0
+    residual_scale: 1.0
+    zero_init: true
+  action_model:
+    action_model_type: DiT-B
+    action_hidden_dim: 1024
+    hidden_size: 1024
+    add_pos_embed: true
+    max_seq_len: 1024
+    action_dim: 7
+    state_dim: 8
+    action_horizon: 8
+    repeated_diffusion_steps: 4
+    noise_beta_alpha: 1.5
+    noise_beta_beta: 1.0
+    noise_s: 0.999
+    num_timestep_buckets: 1000
+    num_inference_timesteps: 4
+    num_target_vision_tokens: 32
+    diffusion_model_cfg:
+      cross_attention_dim: 2048
+      dropout: 0.2
+      final_dropout: true
+      interleave_self_attention: true
+      norm_type: ada_norm
+      num_layers: 16
+      output_dim: 1024
+      positional_embeddings: null
+
+datasets:
+  vlm_data:
+    dataset_py: vlm_datasets
+    dataformat: llava_json
+    dataset_use: sharegpt4v_coco
+    eval_dataset: sharegpt4v_coco
+    data_flatten: false
+    base_interval: 2
+    max_pixels: 307200
+    min_pixels: 784
+    model_max_length: 2048
+    model_type: qwen3vl
+    per_device_batch_size: 1
+
+  vla_data:
+    dataset_py: lerobot_datasets
+    include_state: true
+    data_root_dir: playground/Datasets/calvin_lerobot
+    data_mix: calvin_abc_train_state_v3.0
+    lerobot_version: v2.0
+    action_type: delta_qpos
+    sequential_step_sampling: false
+    CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
+    per_device_batch_size: 1
+    load_all_data_for_training: true
+    obs_image_size: [224, 224]
+    video_backend: torchvision_av
+    sampler:
+      type: task_balanced
+      report_top_k: 30
+      oversample_tasks:
+        turn_off_lightbulb: 5.0
+        close_drawer: 4.0
+        move_slider_left: 3.0
+        turn_off_led: 3.0
+        push_red_block_right: 3.0
+        push_blue_block_right: 2.0
+        push_pink_block_right: 2.0
+        open_drawer: 2.0
+
+trainer:
+  max_train_steps: 1
+  num_warmup_steps: 0
+  save_interval: 1
+  eval_interval: 1000000
+  learning_rate:
+    base: 2.5e-05
+    vl_connector: 5.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06
+  freeze_modules: qwen_vl_interface
+  loss_scale:
+    vla: 1.0
+    vlm: 0.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 1
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  save_format: pt
+
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
