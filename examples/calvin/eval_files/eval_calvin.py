@@ -103,10 +103,8 @@ class CalvinPolicyClient:
         unnorm_key: str = "",
     ):
         self.client = ModelClient(
-            policy_ckpt_path=pretrained_path,
             host=host,
             port=port,
-            image_size=[resize_size, resize_size],
             unnorm_key=(unnorm_key or None),
         )
         self.resize_size = resize_size
@@ -204,6 +202,7 @@ def evaluate_policy_ddp(
     create_plan_tsne=False,
     reset=False,
     diverse_inst=False,
+    seed=0,
 ):
     """
     Run this function to evaluate a model on the CALVIN challenge.
@@ -233,6 +232,20 @@ def evaluate_policy_ddp(
     eval_log_dir = get_log_dir(eval_log_dir)
     with open(eval_sequences_path, "r") as f:
         eval_sequences = json.load(f)
+
+    # Reproducible subsampling: if num_sequences < total, take a random subset
+    # under a fixed seed. Same seed across runs => same subset, so different
+    # ckpts can be compared on identical sequences.
+    total = len(eval_sequences)
+    if num_sequences and 0 < num_sequences < total:
+        import random as _random
+        rng = _random.Random(int(seed))
+        sampled_indices = sorted(rng.sample(range(total), num_sequences))
+        eval_sequences = [eval_sequences[i] for i in sampled_indices]
+        print(f"[eval] Sampled {num_sequences}/{total} sequences with seed={seed}")
+    else:
+        print(f"[eval] Running all {total} sequences")
+
     # device_num = int(torch.distributed.get_world_size())
     # device_id = torch.distributed.get_rank()
     # assert num_sequences % device_num == 0
@@ -447,6 +460,7 @@ def main(args: Args):
         args.create_plan_tsne,
         args.reset,
         args.diverse_inst,
+        seed=args.seed,
     )
 
 

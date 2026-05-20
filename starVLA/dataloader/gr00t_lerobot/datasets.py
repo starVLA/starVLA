@@ -1298,16 +1298,33 @@ class LeRobotSingleDataset(Dataset):
         return self.lerobot_info_meta["chunks_size"]
 
     def _get_tasks(self) -> pd.DataFrame:
-        """Get the tasks for the dataset."""
+        """Get the tasks for the dataset.
+
+        If ``data_cfg.tasks_override_path`` is set, the tasks are loaded from
+        that file instead of the dataset's own ``meta/tasks.jsonl``. Useful
+        when the dataset directory is read-only (shared mount) and we want
+        to point training at a separately-prepared tasks file (e.g. an
+        LLM-paraphrased version). The override file must preserve every
+        original ``task_index`` so that ``self.tasks.loc[task_indices]``
+        lookups in ``get_language`` keep working.
+        """
+        override_path = None
+        if self.data_cfg is not None:
+            override_path = self.data_cfg.get("tasks_override_path", None)
+
         if self._lerobot_version == "v2.0":
-            tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
+            tasks_path = Path(override_path) if override_path else self.dataset_path / LE_ROBOT_TASKS_FILENAME
+            if override_path:
+                print(f"[dataset] Using tasks override: {tasks_path}")
             with open(tasks_path, "r") as f:
                 tasks = [json.loads(line) for line in f]
             df = pd.DataFrame(tasks)
             return df.set_index("task_index")
-        
+
         elif self._lerobot_version == "v3.0":
-            tasks_path = self.dataset_path / LE_ROBOT3_TASKS_FILENAME
+            tasks_path = Path(override_path) if override_path else self.dataset_path / LE_ROBOT3_TASKS_FILENAME
+            if override_path:
+                print(f"[dataset] Using tasks override: {tasks_path}")
             df = pd.read_parquet(tasks_path)
             df = df.reset_index()  # convert index to a column, typically named 'index'
             df = df.rename(columns={'index': 'task'})  # rename 'index' column to 'task'

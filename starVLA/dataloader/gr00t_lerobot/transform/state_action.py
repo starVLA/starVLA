@@ -96,7 +96,7 @@ class RotationTransform:
 
 
 class Normalizer:
-    valid_modes = ["q99", "mean_std", "min_max", "binary"]
+    valid_modes = ["q99", "mean_std", "min_max", "binary", "binary_sign"]
 
     def __init__(self, mode: str, statistics: dict, binary_threshold: float = 0.5):
         self.mode = mode
@@ -186,6 +186,8 @@ class Normalizer:
         elif self.mode == "binary":
             # Range of binary is [0, 1]
             normalized = (x > self.binary_threshold).to(x.dtype)
+        elif self.mode == "binary_sign":
+            normalized = (x > self.binary_threshold).to(x.dtype) * 2 - 1
         else:
             raise ValueError(f"Invalid normalization mode: {self.mode}")
 
@@ -209,6 +211,8 @@ class Normalizer:
             return (x + 1) / 2 * (max - min) + min
         elif self.mode == "binary":
             return (x > self.binary_threshold).to(x.dtype)
+        elif self.mode == "binary_sign":
+            return (x > 0).to(x.dtype) * 2 - 1
         else:
             raise ValueError(f"Invalid normalization mode: {self.mode}")
 
@@ -375,7 +379,7 @@ class StateActionTransform(InvertibleModalityTransform):
                     assert len(normalization_statistics["q01"]) == len(
                         normalization_statistics["q99"]
                     ), f"q01 and q99 statistics must have the same length, but got {normalization_statistics['q01']} and {normalization_statistics['q99']}"
-                elif normalization_mode == "binary":
+                elif normalization_mode in {"binary", "binary_sign"}:
                     assert (
                         len(normalization_statistics) == 1
                     ), f"Binary normalization should only have one value, but got {normalization_statistics}"
@@ -462,10 +466,10 @@ class StateActionTransform(InvertibleModalityTransform):
             # If the state is not continuous, we should not use normalization modes other than binary
             elif (
                 not self.modality_metadata[key].continuous
-                and self.normalization_modes[key] != "binary"
+                and self.normalization_modes[key] not in {"binary", "binary_sign"}
             ):
                 raise ValueError(
-                    f"{key} is not continuous, so it should be normalized using `binary` mode"
+                    f"{key} is not continuous, so it should be normalized using `binary` or `binary_sign` mode"
                 )
             # Initialize the normalizer
             else:

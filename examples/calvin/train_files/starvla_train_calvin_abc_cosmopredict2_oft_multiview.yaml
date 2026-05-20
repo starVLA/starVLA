@@ -1,0 +1,60 @@
+run_id: cosmopredict2_oft_calvin_abc_multiview
+run_root_dir: results/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_Calvin
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: CosmoPredict2OFT
+  world_model:
+    base_wm: ./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World
+    extract_layers: [-1]
+    multiview_mode: horizontal_concat
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/nvidia/Cosmos-Predict2-2B-Video2World
+    vl_hidden_dim: 2048
+  action_model:
+    action_model_type: MLP
+    action_hidden_dim: 2048
+    action_dim: 7
+    state_dim: 8
+    action_horizon: 8
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    include_state: false
+    data_root_dir: .
+    data_mix: calvin_task_ABC_D_multiview
+    action_type: delta_qpos
+    per_device_batch_size: 1
+    load_all_data_for_training: true
+    video_backend: torchvision_av
+
+trainer:
+  max_train_steps: 30000
+  num_warmup_steps: 2000
+  save_interval: 5000
+  eval_interval: 100
+  learning_rate:
+    base: 1.0e-6
+    action_query_proj: 1.0e-4
+    action_model: 1.0e-4
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-6
+  freeze_modules: backbone
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

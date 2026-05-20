@@ -44,15 +44,21 @@ class WebsocketClientPolicy:
 
             try:
                 headers = {"Authorization": f"Api-Key {self._api_key}"} if self._api_key else None
-                conn = websockets.sync.client.connect(
-                    self._uri,
+                _connect_kwargs = dict(
                     compression=None,
                     max_size=None,
                     additional_headers=headers,
                     open_timeout=150,
-                    ping_interval=None,
-                    ping_timeout=60,
                 )
+                # ping_interval / ping_timeout were added in websockets>=13.
+                # Old versions (e.g. 12.x in the calvin sim env) don't accept them.
+                import inspect as _inspect
+                _sig = _inspect.signature(websockets.sync.client.connect)
+                if "ping_interval" in _sig.parameters:
+                    _connect_kwargs["ping_interval"] = None
+                if "ping_timeout" in _sig.parameters:
+                    _connect_kwargs["ping_timeout"] = 60
+                conn = websockets.sync.client.connect(self._uri, **_connect_kwargs)
                 metadata = msgpack_numpy.unpackb(conn.recv())
                 return conn, metadata
             except ConnectionRefusedError:

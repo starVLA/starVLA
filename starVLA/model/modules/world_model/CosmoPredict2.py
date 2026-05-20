@@ -22,8 +22,10 @@ Key difference from VLM wrappers:
 
 from typing import Optional
 
+import numpy as np
 import torch
 import torch.nn as nn
+from PIL import Image
 
 from starVLA.training.trainer_utils import initialize_overwatch
 
@@ -56,6 +58,7 @@ class _CosmoPredict2_Interface(nn.Module):
             config.framework.get("qwenvl", {}).get("base_vlm", "nvidia/Cosmos-Predict2-2B-Video2World"),
         )
         self.config = config
+        self._base_wm_path = model_name
 
         # Import diffusers components
         from diffusers import (
@@ -77,6 +80,9 @@ class _CosmoPredict2_Interface(nn.Module):
         self.transformer = CosmosTransformer3DModel.from_pretrained(
             model_name, subfolder="transformer", torch_dtype=torch.bfloat16
         )
+        transformer_checkpoint = wm_cfg.get("transformer_checkpoint", None)
+        if transformer_checkpoint:
+            self._load_transformer_checkpoint(transformer_checkpoint)
         self.vae = AutoencoderKLWan.from_pretrained(
             model_name, subfolder="vae", torch_dtype=torch.bfloat16
         )
@@ -112,7 +118,169 @@ class _CosmoPredict2_Interface(nn.Module):
         # Which transformer blocks to extract features from (-1 = last)
         extract_layers = wm_cfg.get("extract_layers", [-1])
         self._extract_layers = extract_layers
+        self._multiview_mode = wm_cfg.get("multiview_mode", "horizontal_concat")
         self._register_hooks()
+
+    def _load_transformer_checkpoint(self, checkpoint_path: str):
+        """Load a standalone Cosmos transformer checkpoint after from_pretrained.
+
+        ``base_wm`` must still point to a valid Cosmos-Predict2 diffusers
+        directory because tokenizer/text_encoder/vae/scheduler/config are
+        loaded from there.  This optional file only overrides transformer
+        weights.
+        """
+        logger.info(f"Loading Cosmos transformer checkpoint from {checkpoint_path}")
+        checkpoint_path = str(checkpoint_path)
+        if checkpoint_path.endswith(".safetensors"):
+            from safetensors.torch import load_file
+
+            state_dict = load_file(checkpoint_path)
+        else:
+            state_dict = torch.load(checkpoint_path, map_location="cpu")
+
+        def _looks_like_state_dict(candidate):
+            return isinstance(candidate, dict) and any(torch.is_tensor(v) for v in candidate.values())
+
+        if isinstance(state_dict, dict) and not _looks_like_state_dict(state_dict):
+            for key in ("state_dict", "model", "module", "model_state_dict", "ema", "model_ema"):
+                maybe_state = state_dict.get(key, None)
+                if _looks_like_state_dict(maybe_state):
+                    state_dict = maybe_state
+                    break
+
+        if not _looks_like_state_dict(state_dict):
+            raise ValueError(f"Unsupported Cosmos transformer checkpoint format: {checkpoint_path}")
+
+        prefixes = (
+            "module._orig_mod.cosmos_backbone.transformer.",
+            "module._orig_mod.backbone.transformer.",
+            "module._orig_mod.world_model.transformer.",
+            "module._orig_mod.net.",
+            "_orig_mod.cosmos_backbone.transformer.",
+            "_orig_mod.backbone.transformer.",
+            "_orig_mod.world_model.transformer.",
+            "_orig_mod.net.",
+            "model.cosmos_backbone.transformer.",
+            "model.backbone.transformer.",
+            "model.world_model.transformer.",
+            "model.net.",
+            "module.cosmos_backbone.transformer.",
+            "module.backbone.transformer.",
+            "module.world_model.transformer.",
+            "module.net.",
+            "cosmos_backbone.transformer.",
+            "backbone.transformer.",
+            "world_model.transformer.",
+            "model.transformer.",
+            "module.transformer.",
+            "transformer.",
+            "net.",
+        )
+        target_state = self.transformer.state_dict()
+        target_keys = set(target_state.keys())
+        normalized = {}
+        ignored_keys = []
+        shape_mismatch = []
+
+        for key, value in state_dict.items():
+            normalized_key = key
+            for prefix in prefixes:
+                if normalized_key.startswith(prefix):
+                    normalized_key = normalized_key[len(prefix) :]
+                    break
+            if normalized_key not in target_keys and ".transformer." in normalized_key:
+                normalized_key = normalized_key.rsplit(".transformer.", maxsplit=1)[-1]
+
+            if normalized_key not in target_keys:
+                ignored_keys.append(key)
+                continue
+            if tuple(value.shape) != tuple(target_state[normalized_key].shape):
+                shape_mismatch.append((key, normalized_key, tuple(value.shape), tuple(target_state[normalized_key].shape)))
+                continue
+            normalized[normalized_key] = value
+
+        if not normalized and self._looks_like_original_cosmos_checkpoint(state_dict):
+            if self._load_transformer_from_single_file(checkpoint_path):
+                return
+
+        if not normalized:
+            sample_keys = list(state_dict.keys())[:8]
+            raise ValueError(
+                "No compatible Cosmos transformer weights found in checkpoint "
+                f"{checkpoint_path}. Sample checkpoint keys: {sample_keys}. "
+                f"Sample target keys: {list(target_keys)[:8]}"
+            )
+
+        missing, unexpected = self.transformer.load_state_dict(normalized, strict=False)
+        logger.info(
+            "Loaded Cosmos transformer checkpoint: "
+            f"loaded={len(normalized)}, missing={len(missing)}, "
+            f"ignored={len(ignored_keys)}, shape_mismatch={len(shape_mismatch)}, "
+            f"unexpected_after_filter={len(unexpected)}"
+        )
+        if ignored_keys:
+            logger.warning(f"Ignored Cosmos checkpoint keys sample: {ignored_keys[:8]}")
+        if shape_mismatch:
+            logger.warning(f"Shape-mismatched Cosmos checkpoint keys sample: {shape_mismatch[:4]}")
+
+    @staticmethod
+    def _looks_like_original_cosmos_checkpoint(state_dict):
+        keys = state_dict.keys()
+        return (
+            "net.x_embedder.proj.1.weight" in state_dict
+            and any(key.startswith("net.blocks.") for key in keys)
+        )
+
+    def _load_transformer_from_single_file(self, checkpoint_path: str) -> bool:
+        """Use diffusers' original-format Cosmos converter when key names differ."""
+        from_single_file = getattr(self.transformer.__class__, "from_single_file", None)
+        if from_single_file is None:
+            logger.warning(
+                "Cosmos checkpoint is original-format, but this diffusers version "
+                "does not expose CosmosTransformer3DModel.from_single_file()."
+            )
+            return False
+
+        dtype = next(self.transformer.parameters()).dtype
+        load_attempts = (
+            {
+                "config": self._base_wm_path,
+                "subfolder": "transformer",
+                "torch_dtype": dtype,
+                "low_cpu_mem_usage": False,
+            },
+            {
+                "config": self._base_wm_path,
+                "subfolder": "transformer",
+                "torch_dtype": dtype,
+            },
+            {"torch_dtype": dtype, "low_cpu_mem_usage": False},
+            {"torch_dtype": dtype},
+        )
+        last_error = None
+        for kwargs in load_attempts:
+            try:
+                logger.info(
+                    "Loading original-format Cosmos transformer checkpoint via "
+                    f"from_single_file with kwargs={list(kwargs.keys())}"
+                )
+                converted = self.transformer.__class__.from_single_file(checkpoint_path, **kwargs)
+                meta_tensors = [
+                    name
+                    for name, tensor in list(converted.named_parameters()) + list(converted.named_buffers())
+                    if getattr(tensor, "is_meta", False)
+                ]
+                if meta_tensors:
+                    raise RuntimeError(f"Converted Cosmos transformer still has meta tensors: {meta_tensors[:8]}")
+                self.transformer = converted
+                logger.info("Loaded original-format Cosmos transformer checkpoint via from_single_file.")
+                return True
+            except Exception as exc:
+                last_error = exc
+                logger.warning(f"Cosmos from_single_file attempt failed with kwargs={list(kwargs.keys())}: {exc}")
+
+        logger.warning(f"All Cosmos from_single_file attempts failed: {last_error}")
+        return False
 
     @property
     def model(self):
@@ -164,11 +332,73 @@ class _CosmoPredict2_Interface(nn.Module):
 
         return text_embeds, text_inputs.attention_mask
 
+    @staticmethod
+    def _to_pil_image(image):
+        if isinstance(image, Image.Image):
+            return image.convert("RGB")
+        if isinstance(image, np.ndarray):
+            if image.dtype != np.uint8:
+                image = image * 255 if np.nanmax(image) <= 1.0 else image
+                image = np.clip(image, 0, 255).astype(np.uint8)
+            return Image.fromarray(image).convert("RGB")
+        if torch.is_tensor(image):
+            array = image.detach().cpu()
+            if array.ndim == 3 and array.shape[0] in {1, 3}:
+                array = array.permute(1, 2, 0)
+            array = array.numpy()
+            if array.dtype != np.uint8:
+                array = array * 255 if np.nanmax(array) <= 1.0 else array
+                array = np.clip(array, 0, 255).astype(np.uint8)
+            return Image.fromarray(array).convert("RGB")
+        raise TypeError(f"Unsupported image type for Cosmos multiview concat: {type(image)}")
+
+    @classmethod
+    def _concat_multiview_images(cls, sample_imgs):
+        """Convert multiple camera views into one horizontal image frame.
+
+        Cosmos-Predict2 is a video world model. CALVIN multiview samples are
+        simultaneous camera views, not temporal frames, so we must not feed
+        ``[static, wrist]`` as a two-frame video.  Instead, stitch views
+        left-to-right and let Cosmos see a single observation frame.
+        """
+        if not isinstance(sample_imgs, (list, tuple)):
+            return [cls._to_pil_image(sample_imgs)]
+        if len(sample_imgs) == 0:
+            raise ValueError("Expected at least one image for Cosmos input.")
+        if len(sample_imgs) == 1:
+            return [cls._to_pil_image(sample_imgs[0])]
+
+        pil_images = [cls._to_pil_image(img) for img in sample_imgs]
+        target_height = max(img.height for img in pil_images)
+        resized = []
+        for img in pil_images:
+            if img.height != target_height:
+                new_width = max(1, round(img.width * target_height / img.height))
+                img = img.resize((new_width, target_height), Image.BICUBIC)
+            resized.append(img)
+
+        total_width = sum(img.width for img in resized)
+        canvas = Image.new("RGB", (total_width, target_height))
+        x_offset = 0
+        for img in resized:
+            canvas.paste(img, (x_offset, 0))
+            x_offset += img.width
+        return [canvas]
+
+    def _prepare_sample_images(self, sample_imgs):
+        if self._multiview_mode == "horizontal_concat":
+            return self._concat_multiview_images(sample_imgs)
+        if not isinstance(sample_imgs, (list, tuple)):
+            return [self._to_pil_image(sample_imgs)]
+        return [self._to_pil_image(img) for img in sample_imgs]
+
     def _encode_images(self, images, num_frames=None):
         """Encode observation images through VAE to get latent tokens.
 
-        Follows the Cosmos pipeline approach: pad images to uniform frame count
-        with last-frame repetition, then VAE-encode the whole video.
+        For CALVIN multiview, simultaneous camera views are first stitched
+        horizontally into one frame.  We only keep temporal-frame semantics
+        when ``world_model.multiview_mode`` is explicitly set away from
+        ``horizontal_concat``.
 
         Args:
             images: List of List of PIL Images [B, [imgs...]]
@@ -191,8 +421,7 @@ class _CosmoPredict2_Interface(nn.Module):
         preprocessed = []
         cond_frame_counts = []
         for sample_imgs in images:
-            if not isinstance(sample_imgs, (list, tuple)):
-                sample_imgs = [sample_imgs]
+            sample_imgs = self._prepare_sample_images(sample_imgs)
 
             video_tensor = self.video_processor.preprocess_video(sample_imgs, height=height, width=width)
             video_tensor = video_tensor.to(device=device, dtype=dtype)  # [1, C, n_imgs, H, W]

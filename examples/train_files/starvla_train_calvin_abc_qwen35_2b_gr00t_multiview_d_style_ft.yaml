@@ -1,0 +1,79 @@
+run_id: qwen35_2b_gr00t_calvin_abc_multiview_d_style_ft
+run_root_dir: results/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_Calvin
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: QwenGR00T
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen3.5-2B
+    attn_implementation: flash_attention_2
+    vl_hidden_dim: 2048
+  action_model:
+    action_model_type: DiT-B
+    hidden_size: 1024
+    action_hidden_dim: 1024
+    add_pos_embed: true
+    max_seq_len: 1024
+    action_dim: 7
+    state_dim: 0
+    action_horizon: 8
+    repeated_diffusion_steps: 4
+    noise_beta_alpha: 1.5
+    noise_beta_beta: 1.0
+    noise_s: 0.999
+    num_timestep_buckets: 1000
+    num_inference_timesteps: 4
+    num_target_vision_tokens: 32
+    diffusion_model_cfg:
+      dropout: 0.2
+      final_dropout: true
+      interleave_self_attention: true
+      norm_type: "ada_norm"
+      num_layers: 16
+      output_dim: 1024
+      positional_embeddings: null
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    include_state: false
+    data_root_dir: .
+    data_mix: calvin_task_ABC_D_multiview
+    action_type: delta_qpos
+    per_device_batch_size: 32
+    load_all_data_for_training: true
+    obs_image_size: [224, 224]
+    video_backend: torchvision_av
+    # === FINE-TUNE ADJUSTMENT: feed the LLM-paraphrased ABC instructions ===
+    tasks_override_path: /inspire/qb-ilm2/project/26summer-camp-10/26220319/starVLA/examples/calvin/train_files/abc_tasks_d_style.jsonl
+
+trainer:
+  # === FINE-TUNE ADJUSTMENT: continue training from teammate's 40k-step ckpt ===
+  pretrained_checkpoint: /inspire/qb-ilm2/project/26summer-camp-10/public/ten/ckpt/v0519/qwen35_2b_gr00t_calvin_abc_multiview_20260518_174631/checkpoints/steps_40000_pytorch_model.pt
+  # === FINE-TUNE ADJUSTMENT: shorter schedule, lower LR, less warmup ===
+  max_train_steps: 8000
+  num_warmup_steps: 300
+  save_interval: 1000
+  eval_interval: 8000
+  learning_rate:
+    base: 2.5e-6
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 2.5e-7
+  freeze_modules: ''
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

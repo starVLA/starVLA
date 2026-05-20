@@ -1,0 +1,96 @@
+{
+    "state": {
+        "x": {
+            "start": 0,
+            "end": 1,
+            "original_key": "state"
+        },
+        "y": {
+            "start": 1,
+            "end": 2,
+            "original_key": "state"
+        },
+        "z": {
+            "start": 2,
+            "end": 3,
+            "original_key": "state"
+        },
+        "roll": {
+            "start": 3,
+            "end": 4,
+            "original_key": "state"
+        },
+        "pitch": {
+            "start": 4,
+            "end": 5,
+            "original_key": "state"
+        },
+        "yaw": {
+            "start": 5,
+            "end": 6,
+            "original_key": "state"
+        },
+        "pad": {
+            "start": 6,
+            "end": 7,
+            "original_key": "state"
+        },
+        "gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "state"
+        }
+    },
+    "action": {
+        "x": {
+            "start": 0,
+            "end": 1,
+            "original_key": "actions"
+        },
+        "y": {
+            "start": 1,
+            "end": 2,
+            "original_key": "actions"
+        },
+        "z": {
+            "start": 2,
+            "end": 3,
+            "original_key": "actions"
+        },
+        "roll": {
+            "start": 3,
+            "end": 4,
+            "original_key": "actions"
+        },
+        "pitch": {
+            "start": 4,
+            "end": 5,
+            "original_key": "actions"
+        },
+        "yaw": {
+            "start": 5,
+            "end": 6,
+            "original_key": "actions"
+        },
+        "gripper": {
+            "start": 6,
+            "end": 7,
+            "original_key": "actions"
+        }
+    },
+    "video": {
+        "primary_image": {
+            "original_key": "image"
+        },
+        "image_0": {
+            "original_key": "image"
+        },
+        "wrist_image": {
+            "original_key": "wrist_image"
+        }
+    },
+    "annotation": {
+        "human.action.task_description": {"original_key": "task_index"}
+    }
+}
+

@@ -1,0 +1,389 @@
+{"task_index": 0, "task": "pick up the red block from the drawer"}
+{"task_index": 1, "task": "push the switch down"}
+{"task_index": 2, "task": "slide the door left"}
+{"task_index": 3, "task": "open the drawer"}
+{"task_index": 4, "task": "turn on the yellow lamp"}
+{"task_index": 5, "task": "place the object in the drawer"}
+{"task_index": 6, "task": "pick up the pink block from the drawer"}
+{"task_index": 7, "task": "rotate the red block right"}
+{"task_index": 8, "task": "rotate the pink block right"}
+{"task_index": 9, "task": "push the switch down"}
+{"task_index": 10, "task": "turn off the green light"}
+{"task_index": 11, "task": "put the object in the drawer"}
+{"task_index": 12, "task": "turn on the led"}
+{"task_index": 13, "task": "lift the red block from the shelf"}
+{"task_index": 14, "task": "put the block in the slider"}
+{"task_index": 15, "task": "rotate the blue block left"}
+{"task_index": 16, "task": "open the drawer"}
+{"task_index": 17, "task": "push down the button to turn off the green light"}
+{"task_index": 18, "task": "push the pink block left"}
+{"task_index": 19, "task": "place the object in the sliding cabinet"}
+{"task_index": 20, "task": "lift the pink block from the drawer"}
+{"task_index": 21, "task": "slide the door left"}
+{"task_index": 22, "task": "rotate the red block right"}
+{"task_index": 23, "task": "remove the top block"}
+{"task_index": 24, "task": "lift the red block"}
+{"task_index": 25, "task": "slide the door left"}
+{"task_index": 26, "task": "lift the red block from the drawer"}
+{"task_index": 27, "task": "remove the stacked block"}
+{"task_index": 28, "task": "lift the red block from the table"}
+{"task_index": 29, "task": "slide the door right"}
+{"task_index": 30, "task": "collapse the blocks"}
+{"task_index": 31, "task": "place the block in the sliding cabinet"}
+{"task_index": 32, "task": "lift the blue block up"}
+{"task_index": 33, "task": "rotate the red block right"}
+{"task_index": 34, "task": "move the door left"}
+{"task_index": 35, "task": "place the object in the slider"}
+{"task_index": 36, "task": "slide the door left"}
+{"task_index": 37, "task": "grasp the blue block lying in the cabinet"}
+{"task_index": 38, "task": "push the object into the drawer"}
+{"task_index": 39, "task": "open the drawer"}
+{"task_index": 40, "task": "pull the drawer handle"}
+{"task_index": 41, "task": "push the button to turn on the green light"}
+{"task_index": 42, "task": "grasp the pink block lying in the cabinet"}
+{"task_index": 43, "task": "slide the switch down"}
+{"task_index": 44, "task": "toggle the light switch to turn on the yellow light"}
+{"task_index": 45, "task": "grasp the blue block in the drawer"}
+{"task_index": 46, "task": "rotate the blue block left"}
+{"task_index": 47, "task": "lift the blue block from the drawer"}
+{"task_index": 48, "task": "lift the red block from the drawer"}
+{"task_index": 49, "task": "place the object in the drawer"}
+{"task_index": 50, "task": "stack the object on another"}
+{"task_index": 51, "task": "open the drawer"}
+{"task_index": 52, "task": "slide the door right"}
+{"task_index": 53, "task": "turn on the yellow light switch"}
+{"task_index": 54, "task": "place the block on another block"}
+{"task_index": 55, "task": "slide the door right"}
+{"task_index": 56, "task": "put the block on another block"}
+{"task_index": 57, "task": "rotate the red block left"}
+{"task_index": 58, "task": "turn on the led"}
+{"task_index": 59, "task": "lift the blue block from the table"}
+{"task_index": 60, "task": "turn on the green light"}
+{"task_index": 61, "task": "close the drawer"}
+{"task_index": 62, "task": "unstack the blocks"}
+{"task_index": 63, "task": "turn off the yellow light"}
+{"task_index": 64, "task": "turn on the light bulb"}
+{"task_index": 65, "task": "go towards the red block in the drawer and grasp it"}
+{"task_index": 66, "task": "slide the door left"}
+{"task_index": 67, "task": "stack the blocks"}
+{"task_index": 68, "task": "slide the door right"}
+{"task_index": 69, "task": "push the door left"}
+{"task_index": 70, "task": "turn on the green lamp"}
+{"task_index": 71, "task": "put the block in the drawer"}
+{"task_index": 72, "task": "grasp the pink block in the cabinet"}
+{"task_index": 73, "task": "slide the door left"}
+{"task_index": 74, "task": "turn off the green lamp"}
+{"task_index": 75, "task": "sweep the block into the drawer"}
+{"task_index": 76, "task": "slide the blue block left"}
+{"task_index": 77, "task": "rotate the blue block right"}
+{"task_index": 78, "task": "turn off the led"}
+{"task_index": 79, "task": "slide the door left"}
+{"task_index": 80, "task": "pick up the pink block from the sliding cabinet"}
+{"task_index": 81, "task": "lift the blue block up"}
+{"task_index": 82, "task": "close the drawer"}
+{"task_index": 83, "task": "turn off the yellow lamp"}
+{"task_index": 84, "task": "place the object in the cabinet"}
+{"task_index": 85, "task": "pick up the pink block from the sliding cabinet"}
+{"task_index": 86, "task": "place the object in the sliding cabinet"}
+{"task_index": 87, "task": "push the door right"}
+{"task_index": 88, "task": "rotate the red block left"}
+{"task_index": 89, "task": "rotate the pink block right"}
+{"task_index": 90, "task": "store the object in the drawer"}
+{"task_index": 91, "task": "pick up the red block"}
+{"task_index": 92, "task": "turn off the led"}
+{"task_index": 93, "task": "rotate the blue block left"}
+{"task_index": 94, "task": "push the pink block left"}
+{"task_index": 95, "task": "lift the blue block up"}
+{"task_index": 96, "task": "slide the door right"}
+{"task_index": 97, "task": "place the object in the slider"}
+{"task_index": 98, "task": "pick up the blue block from the slider"}
+{"task_index": 99, "task": "push the button to turn off the green light"}
+{"task_index": 100, "task": "put the block on another block"}
+{"task_index": 101, "task": "lift the blue block from the drawer"}
+{"task_index": 102, "task": "open the drawer"}
+{"task_index": 103, "task": "lift the pink block up"}
+{"task_index": 104, "task": "slide the block into the drawer"}
+{"task_index": 105, "task": "pick up the pink block from the drawer"}
+{"task_index": 106, "task": "lift the red block from the cabinet"}
+{"task_index": 107, "task": "turn the blue block left"}
+{"task_index": 108, "task": "rotate the red block right"}
+{"task_index": 109, "task": "open the drawer"}
+{"task_index": 110, "task": "slide the door right"}
+{"task_index": 111, "task": "close the drawer"}
+{"task_index": 112, "task": "lift the red block from the table"}
+{"task_index": 113, "task": "rotate the red block left"}
+{"task_index": 114, "task": "pick up the blue block from the shelf"}
+{"task_index": 115, "task": "turn on the led"}
+{"task_index": 116, "task": "place the block in the drawer"}
+{"task_index": 117, "task": "place the object in the drawer"}
+{"task_index": 118, "task": "lift the pink block from the table"}
+{"task_index": 119, "task": "grasp the pink block lying in the drawer"}
+{"task_index": 120, "task": "close the drawer"}
+{"task_index": 121, "task": "slide the door right"}
+{"task_index": 122, "task": "stack the blocks together"}
+{"task_index": 123, "task": "rotate the pink block left"}
+{"task_index": 124, "task": "lift the red block up"}
+{"task_index": 125, "task": "lift the pink block from the drawer"}
+{"task_index": 126, "task": "close the drawer"}
+{"task_index": 127, "task": "store the object in the drawer"}
+{"task_index": 128, "task": "move the door right"}
+{"task_index": 129, "task": "turn off the yellow light switch"}
+{"task_index": 130, "task": "slide the pink block left"}
+{"task_index": 131, "task": "lift the blue block from the sliding cabinet"}
+{"task_index": 132, "task": "pick up the red block from the drawer"}
+{"task_index": 133, "task": "move the door left"}
+{"task_index": 134, "task": "pick up the pink block from the drawer"}
+{"task_index": 135, "task": "slide the blue block right"}
+{"task_index": 136, "task": "slide the door left"}
+{"task_index": 137, "task": "grasp the red block lying in the sliding cabinet"}
+{"task_index": 138, "task": "lift the pink block up"}
+{"task_index": 139, "task": "remove a block from the stack"}
+{"task_index": 140, "task": "open the drawer"}
+{"task_index": 141, "task": "slide the door right"}
+{"task_index": 142, "task": "pick up the red block from the table"}
+{"task_index": 143, "task": "push the button to turn on the led"}
+{"task_index": 144, "task": "push the drawer"}
+{"task_index": 145, "task": "rotate the red block left"}
+{"task_index": 146, "task": "push the pink block right"}
+{"task_index": 147, "task": "lift the red block from the shelf"}
+{"task_index": 148, "task": "push the button down to turn off the led"}
+{"task_index": 149, "task": "put the object in the slider"}
+{"task_index": 150, "task": "move the door right"}
+{"task_index": 151, "task": "pick up the blue block from the table"}
+{"task_index": 152, "task": "pick up the blue block from the drawer"}
+{"task_index": 153, "task": "turn on the led"}
+{"task_index": 154, "task": "place the block on another block"}
+{"task_index": 155, "task": "push the blue block left"}
+{"task_index": 156, "task": "toggle the light switch to turn off the light bulb"}
+{"task_index": 157, "task": "move the switch up"}
+{"task_index": 158, "task": "push the red block left"}
+{"task_index": 159, "task": "store the block in the drawer"}
+{"task_index": 160, "task": "grasp the blue block in the cabinet"}
+{"task_index": 161, "task": "lift the pink block up"}
+{"task_index": 162, "task": "rotate the blue block right"}
+{"task_index": 163, "task": "pick up the blue block from the sliding cabinet"}
+{"task_index": 164, "task": "pull the drawer"}
+{"task_index": 165, "task": "grasp the red block in the slider"}
+{"task_index": 166, "task": "stack the block on another block"}
+{"task_index": 167, "task": "lift the blue block from the table"}
+{"task_index": 168, "task": "rotate the blue block right"}
+{"task_index": 169, "task": "slide the red block left"}
+{"task_index": 170, "task": "pick up the red block from the drawer"}
+{"task_index": 171, "task": "slide the blue block right"}
+{"task_index": 172, "task": "rotate the red block right"}
+{"task_index": 173, "task": "rotate the pink block left"}
+{"task_index": 174, "task": "slide the red block left"}
+{"task_index": 175, "task": "put the object in the sliding cabinet"}
+{"task_index": 176, "task": "put the object in the cabinet"}
+{"task_index": 177, "task": "push the blue block right"}
+{"task_index": 178, "task": "slide the door right"}
+{"task_index": 179, "task": "take off the top block from the tower"}
+{"task_index": 180, "task": "push the object into the drawer"}
+{"task_index": 181, "task": "toggle the light switch to turn on the light bulb"}
+{"task_index": 182, "task": "push the drawer handle"}
+{"task_index": 183, "task": "lift the blue block from the drawer"}
+{"task_index": 184, "task": "turn on the yellow light"}
+{"task_index": 185, "task": "move the light switch to turn on the light bulb"}
+{"task_index": 186, "task": "pick up the blue block from the table"}
+{"task_index": 187, "task": "turn off the green light"}
+{"task_index": 188, "task": "grasp the pink block from the drawer"}
+{"task_index": 189, "task": "push the button to turn on the green light"}
+{"task_index": 190, "task": "pick up the red block from the table"}
+{"task_index": 191, "task": "push the blue block left"}
+{"task_index": 192, "task": "pick up the blue block"}
+{"task_index": 193, "task": "grasp the blue block from the drawer"}
+{"task_index": 194, "task": "sweep the blue block left"}
+{"task_index": 195, "task": "push the sliding door right"}
+{"task_index": 196, "task": "grasp the red block lying in the drawer"}
+{"task_index": 197, "task": "lift the pink block from the table"}
+{"task_index": 198, "task": "lift the red block up"}
+{"task_index": 199, "task": "push the block into the drawer"}
+{"task_index": 200, "task": "lift the red block from the shelf"}
+{"task_index": 201, "task": "lift the blue block from the shelf"}
+{"task_index": 202, "task": "sweep the object into the drawer"}
+{"task_index": 203, "task": "turn the pink block left"}
+{"task_index": 204, "task": "put the block in the cabinet"}
+{"task_index": 205, "task": "grasp the red block in the cabinet"}
+{"task_index": 206, "task": "turn the red block left"}
+{"task_index": 207, "task": "lift the red block from the table"}
+{"task_index": 208, "task": "push the switch up"}
+{"task_index": 209, "task": "place the object in the sliding cabinet"}
+{"task_index": 210, "task": "rotate the blue block right"}
+{"task_index": 211, "task": "slide the pink block right"}
+{"task_index": 212, "task": "pick up the red block from the drawer"}
+{"task_index": 213, "task": "rotate the blue block right"}
+{"task_index": 214, "task": "place the block in the cabinet"}
+{"task_index": 215, "task": "push the blue block right"}
+{"task_index": 216, "task": "push the button to turn on the led"}
+{"task_index": 217, "task": "pick up the pink block from the drawer"}
+{"task_index": 218, "task": "lift the pink block from the table"}
+{"task_index": 219, "task": "sweep the blue block right"}
+{"task_index": 220, "task": "push the blue block left"}
+{"task_index": 221, "task": "put the block in the sliding cabinet"}
+{"task_index": 222, "task": "turn off the led light"}
+{"task_index": 223, "task": "slide the blue block right"}
+{"task_index": 224, "task": "sweep the red block right"}
+{"task_index": 225, "task": "turn on the led light"}
+{"task_index": 226, "task": "turn off the yellow light switch"}
+{"task_index": 227, "task": "place the object in the drawer"}
+{"task_index": 228, "task": "slide the door left"}
+{"task_index": 229, "task": "pick up the pink block from the table"}
+{"task_index": 230, "task": "store the object in the drawer"}
+{"task_index": 231, "task": "slide the pink block left"}
+{"task_index": 232, "task": "push the sliding door left"}
+{"task_index": 233, "task": "slide the blue block left"}
+{"task_index": 234, "task": "pick up the blue block from the cabinet"}
+{"task_index": 235, "task": "move the light switch to turn off the light bulb"}
+{"task_index": 236, "task": "put it in the slider"}
+{"task_index": 237, "task": "store the object in the drawer"}
+{"task_index": 238, "task": "grasp the red block in the slider"}
+{"task_index": 239, "task": "put the object in the drawer"}
+{"task_index": 240, "task": "rotate the pink block left"}
+{"task_index": 241, "task": "push the door right"}
+{"task_index": 242, "task": "grasp the blue block lying in the sliding cabinet"}
+{"task_index": 243, "task": "remove the block from the other one"}
+{"task_index": 244, "task": "rotate the pink block right"}
+{"task_index": 245, "task": "rotate the pink block right"}
+{"task_index": 246, "task": "turn off the light bulb"}
+{"task_index": 247, "task": "push the pink block left"}
+{"task_index": 248, "task": "slide the door left"}
+{"task_index": 249, "task": "close the drawer"}
+{"task_index": 250, "task": "slide the red block left"}
+{"task_index": 251, "task": "slide the red block right"}
+{"task_index": 252, "task": "grasp the pink block lying on the shelf"}
+{"task_index": 253, "task": "turn off the led"}
+{"task_index": 254, "task": "push the blue block right"}
+{"task_index": 255, "task": "push the door left"}
+{"task_index": 256, "task": "rotate the blue block left"}
+{"task_index": 257, "task": "rotate the red block left"}
+{"task_index": 258, "task": "rotate the blue block right"}
+{"task_index": 259, "task": "lift the pink block from the shelf"}
+{"task_index": 260, "task": "pick up the red block from the slider"}
+{"task_index": 261, "task": "lift the pink block from the slider"}
+{"task_index": 262, "task": "slide the door right"}
+{"task_index": 263, "task": "turn on the green light"}
+{"task_index": 264, "task": "lift the blue block"}
+{"task_index": 265, "task": "grasp the red block from the cabinet"}
+{"task_index": 266, "task": "pick up the blue block from the drawer"}
+{"task_index": 267, "task": "put the object in the slider"}
+{"task_index": 268, "task": "lift the red block up"}
+{"task_index": 269, "task": "rotate the blue block right"}
+{"task_index": 270, "task": "lift the red block from the drawer"}
+{"task_index": 271, "task": "place the object in the drawer"}
+{"task_index": 272, "task": "slide the red block right"}
+{"task_index": 273, "task": "slide the blue block left"}
+{"task_index": 274, "task": "turn on the led"}
+{"task_index": 275, "task": "place in slider"}
+{"task_index": 276, "task": "rotate the red block left"}
+{"task_index": 277, "task": "rotate the blue block left"}
+{"task_index": 278, "task": "store the object in the drawer"}
+{"task_index": 279, "task": "rotate the red block left"}
+{"task_index": 280, "task": "rotate the blue block left"}
+{"task_index": 281, "task": "grasp the blue block in the slider"}
+{"task_index": 282, "task": "lift the pink block from the drawer"}
+{"task_index": 283, "task": "pick up the pink block from the slider"}
+{"task_index": 284, "task": "push the button to turn on the led"}
+{"task_index": 285, "task": "rotate the blue block right"}
+{"task_index": 286, "task": "rotate the red block left"}
+{"task_index": 287, "task": "pick up the blue block from the drawer"}
+{"task_index": 288, "task": "put the object in the cabinet"}
+{"task_index": 289, "task": "slide the door right"}
+{"task_index": 290, "task": "lift the pink block"}
+{"task_index": 291, "task": "close the drawer"}
+{"task_index": 292, "task": "rotate the pink block left"}
+{"task_index": 293, "task": "rotate the blue block right"}
+{"task_index": 294, "task": "pick up the pink block from the table"}
+{"task_index": 295, "task": "rotate the pink block left"}
+{"task_index": 296, "task": "grasp the blue block lying in the slider"}
+{"task_index": 297, "task": "pick up the blue block from the drawer"}
+{"task_index": 298, "task": "lift the pink block from the shelf"}
+{"task_index": 299, "task": "push the button to turn off the led"}
+{"task_index": 300, "task": "push the button down to turn off the led"}
+{"task_index": 301, "task": "push the pink block left"}
+{"task_index": 302, "task": "slide the object into the drawer"}
+{"task_index": 303, "task": "lift the blue block from the shelf"}
+{"task_index": 304, "task": "push the blue block left"}
+{"task_index": 305, "task": "rotate the blue block right"}
+{"task_index": 306, "task": "lift the blue block from the slider"}
+{"task_index": 307, "task": "push the red block right"}
+{"task_index": 308, "task": "pick up the red block from the shelf"}
+{"task_index": 309, "task": "slide the blue block left"}
+{"task_index": 310, "task": "rotate the red block right"}
+{"task_index": 311, "task": "grasp the red block in the sliding cabinet"}
+{"task_index": 312, "task": "sweep the red block left"}
+{"task_index": 313, "task": "grasp the red block from the drawer"}
+{"task_index": 314, "task": "grasp the blue block in the sliding cabinet"}
+{"task_index": 315, "task": "grasp the pink block in the slider"}
+{"task_index": 316, "task": "pick up the pink block from the cabinet"}
+{"task_index": 317, "task": "lift the blue block from the table"}
+{"task_index": 318, "task": "pick up the pink block"}
+{"task_index": 319, "task": "turn off the led"}
+{"task_index": 320, "task": "place the object in the cabinet"}
+{"task_index": 321, "task": "slide the pink block right"}
+{"task_index": 322, "task": "lift the red block from the sliding cabinet"}
+{"task_index": 323, "task": "rotate the pink block left"}
+{"task_index": 324, "task": "grasp the pink block from the drawer"}
+{"task_index": 325, "task": "grasp the blue block lying in the drawer"}
+{"task_index": 326, "task": "slide the switch up"}
+{"task_index": 327, "task": "grasp the red block in the drawer"}
+{"task_index": 328, "task": "push the red block left"}
+{"task_index": 329, "task": "push the red block left"}
+{"task_index": 330, "task": "lift the pink block from the sliding cabinet"}
+{"task_index": 331, "task": "slide the pink block left"}
+{"task_index": 332, "task": "slide the pink block right"}
+{"task_index": 333, "task": "pick up the pink block from the shelf"}
+{"task_index": 334, "task": "push the blue block right"}
+{"task_index": 335, "task": "pick up the red block from the cabinet"}
+{"task_index": 336, "task": "pick up the red block from the sliding cabinet"}
+{"task_index": 337, "task": "grasp the pink block lying in the sliding cabinet"}
+{"task_index": 338, "task": "turn off the led"}
+{"task_index": 339, "task": "slide the pink block left"}
+{"task_index": 340, "task": "lift the pink block from the cabinet"}
+{"task_index": 341, "task": "push the red block left"}
+{"task_index": 342, "task": "rotate the blue block left"}
+{"task_index": 343, "task": "rotate the pink block right"}
+{"task_index": 344, "task": "slide the blue block right"}
+{"task_index": 345, "task": "sweep the pink block right"}
+{"task_index": 346, "task": "rotate the blue block right"}
+{"task_index": 347, "task": "slide the red block right"}
+{"task_index": 348, "task": "push the red block right"}
+{"task_index": 349, "task": "rotate the pink block right"}
+{"task_index": 350, "task": "sweep the pink block left"}
+{"task_index": 351, "task": "rotate the pink block left"}
+{"task_index": 352, "task": "rotate the pink block left"}
+{"task_index": 353, "task": "pick up the blue block from the sliding cabinet"}
+{"task_index": 354, "task": "slide the red block right"}
+{"task_index": 355, "task": "push the pink block right"}
+{"task_index": 356, "task": "lift the red block from the slider"}
+{"task_index": 357, "task": "grasp the pink block in the drawer"}
+{"task_index": 358, "task": "rotate the pink block left"}
+{"task_index": 359, "task": "push the red block right"}
+{"task_index": 360, "task": "go towards the blue block in the drawer and grasp it"}
+{"task_index": 361, "task": "rotate the blue block left"}
+{"task_index": 362, "task": "rotate the pink block left"}
+{"task_index": 363, "task": "pick up the red block from the sliding cabinet"}
+{"task_index": 364, "task": "rotate the red block left"}
+{"task_index": 365, "task": "rotate the red block right"}
+{"task_index": 366, "task": "grasp the pink block lying in the slider"}
+{"task_index": 367, "task": "slide the pink block right"}
+{"task_index": 368, "task": "push the pink block right"}
+{"task_index": 369, "task": "rotate the pink block right"}
+{"task_index": 370, "task": "grasp the pink block in the sliding cabinet"}
+{"task_index": 371, "task": "push the red block right"}
+{"task_index": 372, "task": "rotate the blue block left"}
+{"task_index": 373, "task": "rotate the pink block right"}
+{"task_index": 374, "task": "push the pink block right"}
+{"task_index": 375, "task": "rotate the red block left"}
+{"task_index": 376, "task": "rotate the red block right"}
+{"task_index": 377, "task": "rotate the pink block right"}
+{"task_index": 378, "task": "rotate the pink block right"}
+{"task_index": 379, "task": "slide the red block left"}
+{"task_index": 380, "task": "rotate the red block right"}
+{"task_index": 381, "task": "rotate the pink block right"}
+{"task_index": 382, "task": "rotate the red block right"}
+{"task_index": 383, "task": "rotate the red block right"}
+{"task_index": 384, "task": "slide the door left"}
+{"task_index": 385, "task": "lift the blue block from the shelf"}
+{"task_index": 386, "task": "lift the blue block from the cabinet"}
+{"task_index": 387, "task": "rotate the blue block left"}
+{"task_index": 388, "task": "place the block in the slider"}
