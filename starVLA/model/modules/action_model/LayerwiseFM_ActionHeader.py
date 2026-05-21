@@ -415,6 +415,225 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             actions = actions + dt * pred_velocity
         return actions
 
+    def predict_action_realtime(
+        self,
+        vl_embs_list: list,
+        state: torch.Tensor = None,
+        prev_action_chunk: torch.Tensor = None,
+        inference_delay: int = 1,
+        mode: str = "pigdm",
+        suffix_length: int | None = None,
+        prefix_attention_schedule: str = "exp",
+        max_guidance_weight: float = 10.0,
+    ) -> torch.Tensor:
+        """RTC-aware flow-matching inference.
+
+        Conditions sampling on the previous chunk's un-executed actions as a
+        known prefix, so chunks splice smoothly under execution latency.
+
+        Args:
+            vl_embs_list: layer-wise VL embeddings, list of (B, seq, D).
+            state: optional state tensor (B, 1, state_dim).
+            prev_action_chunk: (B, action_horizon, action_dim) normalised
+                actions from the previous prediction.
+            inference_delay: number of leading timesteps to fix as prefix (d).
+            mode: "pigdm" (default, VJP-guided; works without retraining,
+                ~2x cost per step) or "simulated_delay" (naive
+                replace-and-denoise with per-position timesteps; requires
+                model trained with simulated-delay loss).
+            suffix_length: ΠGDM only. Number of trailing timesteps with
+                weight 0. Defaults to ``inference_delay``.
+            prefix_attention_schedule: ΠGDM only. Weight schedule for the
+                transition zone — "exp", "linear", "ones", or "zeros".
+            max_guidance_weight: ΠGDM only. Cap on the guidance weight.
+
+        Returns:
+            actions: (B, action_horizon, action_dim) predicted actions.
+        """
+        if prev_action_chunk is None or inference_delay <= 0:
+            return self.predict_action(vl_embs_list, state)
+
+        import math
+
+        batch_size = vl_embs_list[0].shape[0]
+        device = vl_embs_list[0].device
+        dtype = vl_embs_list[0].dtype
+
+        def _prefix_weights(start: int, end: int, total: int, schedule: str) -> torch.Tensor:
+            """ΠGDM prefix attention weight schedule across the action horizon."""
+            start = min(start, end)
+            positions = torch.arange(total, device=device, dtype=torch.float32)
+            if schedule == "ones":
+                w = torch.ones(total, device=device)
+            elif schedule == "zeros":
+                w = (positions < start).float()
+            elif schedule in ("linear", "exp"):
+                w = ((start - 1 - positions) / (end - start + 1) + 1).clamp(0, 1)
+                if schedule == "exp":
+                    w = w * torch.expm1(w) / (math.e - 1)
+            else:
+                raise ValueError(f"Invalid schedule: {schedule}")
+            return torch.where(positions >= end, torch.zeros_like(w), w)
+
+        def _forward_velocity(actions, timesteps, state_features):
+            """Single DiT forward pass returning predicted velocity."""
+            B = actions.shape[0]
+            action_features = self.action_encoder(actions, timesteps)
+            if self.config.add_pos_embed:
+                pos_ids = torch.arange(action_features.shape[1], dtype=torch.long, device=device)
+                pos_embs = self.position_embedding(pos_ids).unsqueeze(0)
+                action_features = action_features + pos_embs
+            future_tokens = self.future_tokens.weight.unsqueeze(0).expand(B, -1, -1)
+            sa_embs = (
+                torch.cat((state_features, future_tokens, action_features), dim=1)
+                if state_features is not None
+                else torch.cat((future_tokens, action_features), dim=1)
+            )
+            temb = self.model.timestep_encoder(timesteps)
+            model_output = sa_embs
+            for layer_idx, layer in enumerate(self.model.transformer_blocks):
+                model_output = layer(
+                    hidden_states=model_output,
+                    encoder_hidden_states=vl_embs_list[layer_idx],
+                    temb=temb,
+                )
+            pred = self.action_decoder(model_output)
+            return pred[:, -self.action_horizon :]
+
+        T_prev = prev_action_chunk.shape[1]
+        if T_prev < self.action_horizon:
+            pad = torch.zeros(
+                batch_size,
+                self.action_horizon - T_prev,
+                prev_action_chunk.shape[2],
+                device=device,
+                dtype=prev_action_chunk.dtype,
+            )
+            prev_action_chunk = torch.cat([prev_action_chunk, pad], dim=1)
+
+        num_steps = self.num_inference_timesteps
+        dt = 1.0 / num_steps
+
+        actions = torch.randn(
+            size=(batch_size, self.action_horizon, self.action_dim),
+            dtype=dtype,
+            device=device,
+        )
+
+        state_features = self.state_encoder(state) if state is not None else None
+
+        if mode == "pigdm":
+            # ── ΠGDM: pseudo-inverse guided diffusion ──
+            if suffix_length is None:
+                suffix_length = inference_delay
+            prefix_attention_end = self.action_horizon - suffix_length
+            weights = _prefix_weights(
+                inference_delay,
+                prefix_attention_end,
+                self.action_horizon,
+                prefix_attention_schedule,
+            )
+            prev = prev_action_chunk.to(dtype)
+
+            for t_step in range(num_steps):
+                t_cont = t_step / float(num_steps)
+                t_bucket = int(t_cont * self.num_timestep_buckets)
+                timesteps_tensor = torch.full(
+                    (batch_size,),
+                    t_bucket,
+                    device=device,
+                    dtype=torch.long,
+                )
+
+                with torch.enable_grad():
+                    x_t = actions.detach().requires_grad_(True)
+                    v_t = _forward_velocity(x_t, timesteps_tensor, state_features)
+                    x_1_hat = x_t + v_t * (1.0 - t_cont)
+                    error = (prev - x_1_hat) * weights[None, :, None]
+                    pinv_correction = torch.autograd.grad(
+                        x_1_hat,
+                        x_t,
+                        grad_outputs=error,
+                    )[0]
+
+                # Guidance weight schedule from ΠGDM paper
+                t = t_cont
+                inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2 + 1e-8)
+                c = (1 - t) / (t + 1e-8)
+                gw = min(c * inv_r2, max_guidance_weight)
+
+                v_corrected = v_t.detach() + gw * pinv_correction.detach()
+                actions = actions.detach() + dt * v_corrected
+
+            return actions
+
+        # ── simulated_delay mode ──
+        with torch.no_grad():
+            prefix_mask = torch.zeros(
+                1,
+                self.action_horizon,
+                1,
+                device=device,
+                dtype=torch.bool,
+            )
+            prefix_mask[:, :inference_delay, :] = True
+
+            for t_step in range(num_steps):
+                t_cont = t_step / float(num_steps)
+                actions = torch.where(prefix_mask, prev_action_chunk.to(dtype), actions)
+
+                t_bucket = int(t_cont * self.num_timestep_buckets)
+                t_bucket_prefix = int(1.0 * self.num_timestep_buckets) - 1
+                timesteps_tensor = torch.full(
+                    (batch_size, self.action_horizon),
+                    t_bucket,
+                    device=device,
+                    dtype=torch.long,
+                )
+                timesteps_tensor[:, :inference_delay] = t_bucket_prefix
+
+                # Inline ActionEncoder with per-position timesteps
+                a_emb = self.action_encoder.layer1(actions)
+                tau_emb = self.action_encoder.pos_encoding(timesteps_tensor).to(dtype=a_emb.dtype)
+                x_enc = torch.cat([a_emb, tau_emb], dim=-1)
+                x_enc = swish(self.action_encoder.layer2(x_enc))
+                action_features = self.action_encoder.layer3(x_enc)
+
+                if self.config.add_pos_embed:
+                    pos_ids = torch.arange(action_features.shape[1], dtype=torch.long, device=device)
+                    pos_embs = self.position_embedding(pos_ids).unsqueeze(0)
+                    action_features = action_features + pos_embs
+
+                future_tokens = self.future_tokens.weight.unsqueeze(0).expand(batch_size, -1, -1)
+                sa_embs = (
+                    torch.cat((state_features, future_tokens, action_features), dim=1)
+                    if state_features is not None
+                    else torch.cat((future_tokens, action_features), dim=1)
+                )
+
+                temb_tensor = torch.full(
+                    (batch_size,),
+                    t_bucket,
+                    device=device,
+                    dtype=torch.long,
+                )
+                temb = self.model.timestep_encoder(temb_tensor)
+
+                model_output = sa_embs
+                for layer_idx, layer in enumerate(self.model.transformer_blocks):
+                    model_output = layer(
+                        hidden_states=model_output,
+                        encoder_hidden_states=vl_embs_list[layer_idx],
+                        temb=temb,
+                    )
+
+                pred = self.action_decoder(model_output)
+                pred_velocity = pred[:, -self.action_horizon :]
+                actions = actions + dt * pred_velocity
+                actions = torch.where(prefix_mask, prev_action_chunk.to(dtype), actions)
+
+            return actions
+
     @property
     def device(self):
         return next(iter(self.parameters())).device

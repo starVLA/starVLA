@@ -294,6 +294,73 @@ class Qwen_PI(baseframework):
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
+    @torch.inference_mode()
+    def predict_action_realtime(
+        self,
+        examples: Optional[List[dict]] = None,
+        prev_action_chunk_normalized: Optional[np.ndarray] = None,
+        inference_delay: int = 1,
+        **kwargs,
+    ) -> dict:
+        """RTC-aware inference: condition sampling on a known prefix.
+
+        Fixes a known prefix of the action chunk to the previous prediction
+        and resamples the rest, so chunks splice smoothly under execution
+        latency.  Mode / schedule kwargs are forwarded to the action head's
+        ``predict_action_realtime``.
+
+        Args:
+            examples: list of dict, same shape as ``predict_action``.
+            prev_action_chunk_normalized: (B, T, action_dim) *normalized*
+                continuous actions from the previous prediction.
+            inference_delay: number of leading timesteps to keep as prefix.
+            **kwargs: forwarded to ``self.action_model.predict_action_realtime``
+                (e.g. ``mode``, ``suffix_length``, ``prefix_attention_schedule``,
+                ``max_guidance_weight``).
+
+        Returns:
+            dict with key ``"normalized_actions"`` -> np.ndarray of shape
+            ``(B, T, action_dim)``.
+        """
+        if prev_action_chunk_normalized is None or inference_delay <= 0:
+            return self.predict_action(examples)
+
+        if type(examples) is not list:
+            examples = [examples]
+
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]
+        instructions = [example["lang"] for example in examples]
+        state = [example["state"] for example in examples] if "state" in examples[0] else None
+
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
+        if train_obs_image_size:
+            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+
+        vl_embs_list, _ = self._encode_vl_hidden_states(batch_images, instructions)
+        base_hidden = vl_embs_list[-1]
+
+        state_t = (
+            torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
+            if state is not None
+            else None
+        )
+
+        prev_chunk_t = torch.from_numpy(np.array(prev_action_chunk_normalized)).to(
+            base_hidden.device, dtype=torch.float32
+        )
+
+        with torch.autocast("cuda", dtype=torch.float32):
+            pred_actions = self.action_model.predict_action_realtime(
+                vl_embs_list,
+                state_t,
+                prev_action_chunk=prev_chunk_t,
+                inference_delay=inference_delay,
+                **kwargs,
+            )
+
+        normalized_actions = pred_actions.detach().cpu().numpy()
+        return {"normalized_actions": normalized_actions}
+
 
 if __name__ == "__main__":
     import argparse
