@@ -93,3 +93,4 @@ Use this for VLM-specific pre-training or fine-tuning.
 bash examples/VLN-CE/train_files/run_vlnce_train.sh
 ```
 
+You can change the `batch_size=8` and `grad_accum_steps=2` parameters to adjust the batch size and gradient accumulation steps, to fit the memory of your GPU.
