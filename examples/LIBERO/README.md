@@ -118,6 +118,18 @@ bash examples/LIBERO/data_preparation.sh
 
 Most of the required training files have been organized in [train_files](train_files).  
 
+### LIBERO State Dimension
+
+The default LIBERO training config keeps `datasets.vla_data.include_state` disabled, so `framework.action_model.state_dim` is not used in the shipped image/language/action-only setup.
+
+If you enable state input for QwenGR00T, keep the 8-D LIBERO state layout defined in `examples/LIBERO/train_files/data_registry/data_config.py`:
+
+```text
+x, y, z, roll, pitch, yaw, pad, gripper
+```
+
+In that case, set `framework.action_model.state_dim: 8`. The `state.pad` entry is a LIBERO padding placeholder and does not correspond to a second gripper qpos dimension.
+
 Please run the following command to start training:
 
 ```bash

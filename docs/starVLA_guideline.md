@@ -158,10 +158,12 @@ framework:
     attn_implementation: flash_attention_2
   action_model:
     action_dim: 7                # LIBERO: 7-DoF (xyz + rpy + gripper)
-    state_dim: 7
+    state_dim: 7                 # unused while datasets.vla_data.include_state is false
     future_action_window_size: 7 # predict 7 future steps
     action_horizon: 8            # total action chunk size
 ```
+
+> **Using LIBERO state input:** The default config leaves `datasets.vla_data.include_state` disabled. If you enable state input for QwenGR00T, keep the 8-D LIBERO state layout defined by `Libero4in1DataConfig.state_keys`: `x, y, z, roll, pitch, yaw, pad, gripper`, and set `framework.action_model.state_dim: 8`. The `state.pad` field is a LIBERO padding placeholder, not a second gripper qpos dimension.
 
 StarVLA supports four framework variants — just change `framework.name`:
 
