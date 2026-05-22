@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -44,7 +43,11 @@ def build_dataloader(
 
         vla_dataset_cfg = cfg.datasets.vla_data
 
-        vla_dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+        vla_dataset = get_vla_dataset(
+            data_cfg=vla_dataset_cfg,
+            balance_dataset_weights=vla_dataset_cfg.get("balance_dataset_weights", False),
+            balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
+        )
 
         vla_train_dataloader = DataLoader(
             vla_dataset,

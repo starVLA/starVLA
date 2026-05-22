@@ -17,8 +17,8 @@ if [[ "${CONDA_DEFAULT_ENV:-}" != "starVLA" ]]; then
   conda activate starVLA
 fi
 
-RAW_ROOT=${RAW_ROOT:-/project/vonneumann1/jye624/Datasets/RoboChallenge_table30v2/raw}
-LEROBOT_ROOT=${LEROBOT_ROOT:-/project/vonneumann1/jye624/Datasets/RoboChallenge_table30v2/lerobot}
+RAW_ROOT=${RAW_ROOT:-./playground/Datasets/RoboChallenge_table30v2/raw}
+LEROBOT_ROOT=${LEROBOT_ROOT:-./playground/Datasets/RoboChallenge_table30v2/lerobot}
 mkdir -p "${RAW_ROOT}" "${LEROBOT_ROOT}" tmp/logs
 
 # Step 1: pull the HF parts and untar to ${RAW_ROOT}/<task>/. Removes

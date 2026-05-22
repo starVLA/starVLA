@@ -1,14 +1,19 @@
-###########################################################################################
-# === Please modify the following paths according to your environment ===
-export LIBERO_HOME=/home/jye624/Projcets/LIBERO  # Root directory of the LIBERO project
-export LIBERO_python=/home/jye624/.conda/envs/libero/bin/python  # Path to the Python environment
-export starVLA_python=/home/jye624/.conda/envs/starVLA/bin/python  # Path to the Python environment
+#!/usr/bin/env bash
+set -euo pipefail
 
-# === End of environment variable configuration ===
-export LIBERO_CONFIG_PATH=${LIBERO_HOME}/libero  # Path to LIBERO configuration files
-export PYTHONPATH=$PYTHONPATH:${LIBERO_HOME} # let eval_libero find the LIBERO tools
-export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from starVLA repo
-###########################################################################################
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
+LIBERO_HOME="${LIBERO_HOME:-}"
+LIBERO_python="${LIBERO_python:-python}"
+starVLA_python="${starVLA_python:-python}"
+
+if [[ -z "${LIBERO_HOME}" ]]; then
+  echo "LIBERO_HOME is required."
+  exit 1
+fi
+
+cd "${STARVLA_DIR}"
+export LIBERO_CONFIG_PATH="${LIBERO_HOME}/libero"
+export PYTHONPATH="${PYTHONPATH:-}:${LIBERO_HOME}:${STARVLA_DIR}"
 
 
 
@@ -21,7 +26,6 @@ base_port=$4 # unique port for this eval instance
 
 num_trials_per_task=50
 host="127.0.0.1"
-unnorm_key="franka"
 
 CUDA_VISIBLE_DEVICES=$gpu_id ${starVLA_python} deployment/model_server/server_policy.py \
     --ckpt_path ${your_ckpt} \
@@ -54,9 +58,6 @@ ${LIBERO_python} ./examples/LIBERO/eval_files/eval_libero.py \
     2>&1 | tee ${log_path}/${folder_name}.log
 
 echo "Evaluation completed. Videos saved to ${video_out_path}, logs saved to ${log_path}/${folder_name}.log"
-
-
-
 
 if [ -n "$server_pid" ]; then
     echo "Killing server process with PID: $server_pid"

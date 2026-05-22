@@ -52,6 +52,23 @@ class EmbodimentTag(Enum):
     The Franka Emika Panda robot.
     """
 
+    ALOHA = 'aloha'
+    """
+    The ALOHA bimanual robot (RoboChallenge dual-arm).
+    """
+
+    UR5 = 'ur5'
+    """ The UR5 single-arm robot.
+    """
+
+    ARX5 = 'arx5'
+    """ The ARX5 single-arm robot.
+    """
+
+    DOS_W1 = 'dos-w1'
+    """ The DOS-W1 single-arm robot.
+    """
+
 # Embodiment tag string: to projector index in the Action Expert Module
 EMBODIMENT_TAG_MAPPING = {
     EmbodimentTag.NEW_EMBODIMENT.value: 31,
@@ -61,6 +78,10 @@ EMBODIMENT_TAG_MAPPING = {
     EmbodimentTag.AGIBOT_GENIE1.value: 26,
     EmbodimentTag.GR1.value: 24,
     EmbodimentTag.FRANKA.value: 25,
+    EmbodimentTag.ALOHA.value: 7,
+    EmbodimentTag.UR5.value: 8,
+    EmbodimentTag.ARX5.value: 9,
+    EmbodimentTag.DOS_W1.value: 10,
 }
 
 # Robot type to embodiment tag mapping

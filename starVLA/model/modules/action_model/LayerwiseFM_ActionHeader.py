@@ -280,15 +280,22 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
 
     def sample_time(self, batch_size, device, dtype):
         sample = self.beta_dist.sample([batch_size]).to(device, dtype=dtype)
-        return self.config.noise_s * (1 - sample)
+        return (self.config.noise_s - sample) / self.config.noise_s
 
     def prepare_input(self, batch: dict) -> BatchFeature:
         return BatchFeature(data=batch)
 
-    def forward(self, vl_embs_list: list, actions: torch.Tensor, state: torch.Tensor = None):
+    def forward(
+        self,
+        vl_embs_list: list,
+        actions: torch.Tensor,
+        state: torch.Tensor = None,
+        encoder_attention_mask=None,
+    ):
         """
         vl_embs: list of torch.Tensor, each shape (B, seq_length, feature_dim)
         actions: shape (B, action_horizon, D_action)
+        encoder_attention_mask: optional (B, seq_length) bool/int
         """
         device = actions.device
         num_layers = len(vl_embs_list)
@@ -331,6 +338,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             model_output = layer(
                 hidden_states=model_output,
                 encoder_hidden_states=vl_embs_list[layer_idx],  # Use layer-specific vl_embs
+                encoder_attention_mask=encoder_attention_mask,
                 temb=temb,
             )
 
@@ -343,7 +351,12 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         return loss
 
     @torch.no_grad()
-    def predict_action(self, vl_embs_list: list, state: torch.Tensor = None) -> torch.Tensor:
+    def predict_action(
+        self,
+        vl_embs_list: list,
+        state: torch.Tensor = None,
+        encoder_attention_mask=None,
+    ) -> torch.Tensor:
         # Set initial actions as the sampled noise.
         batch_size = vl_embs_list[0].shape[0]
         device = vl_embs_list[0].device
@@ -391,6 +404,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
                 model_output = layer(
                     hidden_states=model_output,
                     encoder_hidden_states=vl_embs_list[layer_idx],
+                    encoder_attention_mask=encoder_attention_mask,
                     temb=temb,
                 )
             # TODO miss self att and _process_output

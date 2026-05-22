@@ -178,6 +178,7 @@ class Qwen_GR00T(baseframework):
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
+        backbone_attention_mask = qwen_inputs.get("attention_mask", None)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -202,6 +203,10 @@ class Qwen_GR00T(baseframework):
             )
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
             last_hidden_repeated = last_hidden.repeat(repeated_diffusion_steps, 1, 1)
+            if backbone_attention_mask is not None:
+                backbone_attention_mask = backbone_attention_mask.repeat(repeated_diffusion_steps, 1).to(
+                    dtype=torch.bool
+                )
 
             state_repeated = None
             if state is not None:
@@ -209,7 +214,8 @@ class Qwen_GR00T(baseframework):
                 state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
 
             action_loss = self.action_model(
-                last_hidden_repeated, actions_target_repeated, state_repeated
+                last_hidden_repeated, actions_target_repeated, state_repeated,
+                encoder_attention_mask=backbone_attention_mask,
             )  # (B, chunk_len, action_dim)
 
         return {"action_loss": action_loss}
@@ -242,6 +248,9 @@ class Qwen_GR00T(baseframework):
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
+        backbone_attention_mask = qwen_inputs.get("attention_mask", None)
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -261,7 +270,9 @@ class Qwen_GR00T(baseframework):
 
         # Step 4: Action Expert Forward
         with torch.autocast("cuda", dtype=torch.float32):
-            pred_actions = self.action_model.predict_action(last_hidden, state)  # (B, chunk_len, action_dim)
+            pred_actions = self.action_model.predict_action(
+                last_hidden, state, encoder_attention_mask=backbone_attention_mask
+            )  # (B, chunk_len, action_dim)
 
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}

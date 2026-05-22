@@ -132,7 +132,7 @@ class Normalizer:
             normalized[..., ~mask] = x[..., ~mask].to(x.dtype)
 
             # Clip the normalized values to be between -1 and 1
-            normalized = torch.clamp(normalized, -1, 1)
+            normalized = torch.clamp(normalized, -2.2, 2.2)
 
         elif self.mode == "mean_std":
             # Range of mean_std is not fixed, but can be positive or negative

@@ -1,21 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 # run_policy_server.sh
 #
 # Launches the starVLA WebSocket policy server for VLA-Arena evaluation.
 # Run this script first, then launch eval_vla_arena.sh in a separate terminal.
 
-export PYTHONPATH=$(pwd):${PYTHONPATH}
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+starVLA_python="${starVLA_python:-python}"
+your_ckpt="${your_ckpt:-/path/to/checkpoint.pt}"
+gpu_id="${gpu_id:-0}"
+port="${port:-10090}"
+USE_BF16="${USE_BF16:-1}"
 
-###########################################################################################
-# === Please modify the following paths according to your environment ===
-export starVLA_python=python   # or: /path/to/conda/envs/starVLA/bin/python
+cd "${STARVLA_DIR}"
+export PYTHONPATH="${STARVLA_DIR}:${PYTHONPATH:-}"
 
-your_ckpt=/mnt/file2/jiachen/pr/starVLA/playground/test/qwen2.5-libero/checkpoints/steps_30000_pytorch_model.pt
-gpu_id=7
-port=1009${gpu_id}
-###########################################################################################
+CMD=(
+  "${starVLA_python}" deployment/model_server/server_policy.py
+  --ckpt_path "${your_ckpt}"
+  --port "${port}"
+)
 
-CUDA_VISIBLE_DEVICES=${gpu_id} ${starVLA_python} deployment/model_server/server_policy.py \
-    --ckpt_path ${your_ckpt} \
-    --port ${port} \
-    --use_bf16
+if [[ "${USE_BF16}" == "1" ]]; then
+  CMD+=(--use_bf16)
+fi
+
+CUDA_VISIBLE_DEVICES="${gpu_id}" "${CMD[@]}"

@@ -166,11 +166,12 @@ class Qwen_PI(baseframework):
 
     def _encode_vl_hidden_states(
         self, batch_images: List, instructions: List[str]
-    ) -> List[torch.Tensor]:
-        """Run QwenVL and return the last-N layer-wise hidden states for the Action DiT."""
+    ) -> tuple:
+        """Run QwenVL and return (layer-wise hidden states, attention_mask) for the Action DiT."""
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
             images=batch_images, instructions=instructions
         )
+        attention_mask = qwen_inputs.get("attention_mask", None)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -180,7 +181,7 @@ class Qwen_PI(baseframework):
             )
             expected_layers = len(self.action_model.model.transformer_blocks)
             vl_embs_list = list(qwenvl_outputs.hidden_states[-expected_layers:])
-        return vl_embs_list
+        return vl_embs_list, attention_mask
 
     def forward(
         self,
@@ -204,7 +205,7 @@ class Qwen_PI(baseframework):
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
         # Step 1: encode through QwenVL
-        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
 
         # Step 4: Action Expert Forward and Loss
@@ -224,6 +225,10 @@ class Qwen_PI(baseframework):
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
             # Repeat features for each layer
             vl_embs_list_repeated = [h.repeat(repeated_diffusion_steps, 1, 1) for h in vl_embs_list]
+            if backbone_attention_mask is not None:
+                backbone_attention_mask = backbone_attention_mask.repeat(repeated_diffusion_steps, 1).to(
+                    dtype=torch.bool
+                )
 
             state_repeated = None
             if state is not None:
@@ -234,6 +239,7 @@ class Qwen_PI(baseframework):
                 vl_embs_list_repeated,
                 actions_target_repeated,
                 state_repeated,
+                encoder_attention_mask=backbone_attention_mask,
             )  # (B, chunk_len, action_dim)
 
         return {"action_loss": action_loss}
@@ -269,8 +275,10 @@ class Qwen_PI(baseframework):
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
         # Step 1: encode through QwenVL
-        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
 
         state = (
             torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
@@ -280,7 +288,7 @@ class Qwen_PI(baseframework):
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action(
-                vl_embs_list, state
+                vl_embs_list, state, encoder_attention_mask=backbone_attention_mask
             )  # (B, chunk_len, action_dim)
 
         normalized_actions = pred_actions.detach().cpu().numpy()

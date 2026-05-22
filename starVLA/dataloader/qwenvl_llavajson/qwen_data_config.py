@@ -9,13 +9,28 @@ from pathlib import Path
 json_root = f"./playground/Datasets/LLaVA-OneVision-COCO/llava_jsons"
 image_root = f"./playground/Datasets/LLaVA-OneVision-COCO/images"
 
+vlnce_root = "./playground/Datasets/VLN-CE"
+
 SHAREGPT4V_COCO = {
     "annotation_path": f"{json_root}/sharegpt4v_coco.json",
     "data_path": f"{image_root}/",
 }
 
+R2R = {
+    "annotation_path": f"{vlnce_root}/R2R/annotations_qwenvl.json",
+    "data_path": f"{vlnce_root}/R2R/train/",
+}
+
+RXR = {
+    "annotation_path": f"{vlnce_root}/RxR/annotations_qwenvl.json",
+    "data_path": f"{vlnce_root}/RxR/train/",
+}
+
+
 data_dict = {
     "sharegpt4v_coco": SHAREGPT4V_COCO,
+    "r2r": R2R,
+    "rxr": RXR,
 }
 
 def parse_sampling_rate(dataset_name):

@@ -245,11 +245,12 @@ class Qwen_PI_v3(baseframework):
 
     def _encode_vl_hidden_states(
         self, batch_images: List, instructions: List[str]
-    ) -> List[torch.Tensor]:
-        """Run QwenVL, project hidden states, and return the layer-wise embeddings for the Action DiT."""
+    ) -> tuple:
+        """Run QwenVL, project hidden states, and return (layer-wise embeddings, attention_mask) for the Action DiT."""
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
             images=batch_images, instructions=instructions
         )
+        attention_mask = qwen_inputs.get("attention_mask", None)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -259,7 +260,7 @@ class Qwen_PI_v3(baseframework):
             )
             vl_embs_list = list(qwenvl_outputs.hidden_states[-self.num_action_dit_layers:])
             vl_embs_list = self._project_vl_hidden_for_action(vl_embs_list)
-        return vl_embs_list
+        return vl_embs_list, attention_mask
 
     def forward(
         self,
@@ -290,7 +291,7 @@ class Qwen_PI_v3(baseframework):
         state = None  # state is now encoded in the instruction tokens
 
         # Step 1: encode through QwenVL
-        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
 
         # Step 2: compute flow-matching loss over the action chunk
@@ -302,12 +303,16 @@ class Qwen_PI_v3(baseframework):
             actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
             repeated_diffusion_steps = (
-                self.config.trainer.get("repeated_diffusion_steps", 4) if self.config and self.config.trainer else 4
+                self.config.trainer.get("repeated_diffusion_steps", 16) if self.config and self.config.trainer else 4
             )
-            repeated_diffusion_steps = 2  # No repeat for the large action FM to save memory.
+            
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
             # Repeat every VLM layer embedding to match the duplicated action batch.
             vl_embs_list_repeated = [h.repeat(repeated_diffusion_steps, 1, 1) for h in vl_embs_list]
+            if backbone_attention_mask is not None:
+                backbone_attention_mask = backbone_attention_mask.repeat(repeated_diffusion_steps, 1).to(
+                    dtype=torch.bool
+                )
 
             state_repeated = None
             if state is not None:
@@ -318,6 +323,7 @@ class Qwen_PI_v3(baseframework):
                 vl_embs_list_repeated,
                 actions_target_repeated,
                 state_repeated,
+                encoder_attention_mask=backbone_attention_mask,
             )
 
         return {"action_loss": action_loss}
@@ -365,8 +371,10 @@ class Qwen_PI_v3(baseframework):
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
         # Step 1: encode through QwenVL
-        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
 
         state = (
             torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
@@ -376,7 +384,7 @@ class Qwen_PI_v3(baseframework):
         # Step 2: run the flow-matching sampler to produce the denoised action chunk.
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action(
-                vl_embs_list, state
+                vl_embs_list, state, encoder_attention_mask=backbone_attention_mask
             )  # (B, action_horizon, action_dim)
 
         normalized_actions = pred_actions.detach().cpu().numpy()

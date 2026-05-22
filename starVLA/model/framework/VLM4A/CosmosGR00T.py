@@ -130,6 +130,7 @@ class Cosmos_GR00T(baseframework):
         state = [example["state"] for example in examples] if "state" in examples[0] else None
 
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
+        backbone_attention_mask = qwen_inputs.get("attention_mask", None)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -150,13 +151,20 @@ class Cosmos_GR00T(baseframework):
             )
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
             last_hidden_repeated = last_hidden.repeat(repeated_diffusion_steps, 1, 1)
+            if backbone_attention_mask is not None:
+                backbone_attention_mask = backbone_attention_mask.repeat(repeated_diffusion_steps, 1).to(
+                    dtype=torch.bool
+                )
 
             state_repeated = None
             if state is not None:
                 state = torch.tensor(np.array(state), device=last_hidden.device, dtype=last_hidden.dtype)
                 state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
 
-            action_loss = self.action_model(last_hidden_repeated, actions_target_repeated, state_repeated)
+            action_loss = self.action_model(
+                last_hidden_repeated, actions_target_repeated, state_repeated,
+                encoder_attention_mask=backbone_attention_mask,
+            )
 
         return {"action_loss": action_loss}
 
@@ -173,6 +181,9 @@ class Cosmos_GR00T(baseframework):
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
+        backbone_attention_mask = qwen_inputs.get("attention_mask", None)
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -189,7 +200,9 @@ class Cosmos_GR00T(baseframework):
         )
 
         with torch.autocast("cuda", dtype=torch.float32):
-            pred_actions = self.action_model.predict_action(last_hidden, state)
+            pred_actions = self.action_model.predict_action(
+                last_hidden, state, encoder_attention_mask=backbone_attention_mask
+            )
 
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
