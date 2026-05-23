@@ -5,9 +5,11 @@ Utility classes defining a Metrics container and multiple Trackers to enable mod
 endpoints (e.g., JSONL local logs, Weights & Biases).
 """
 
-from typing import Tuple
-import re
 import json
+import os
+import re
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -184,6 +186,17 @@ import torch.distributed as dist
 
 
 class TrainerUtils:
+    @staticmethod
+    def _cfg_bool(value, default=False):
+        """Read bool-like OmegaConf / CLI values without treating "false" as truthy."""
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+        return bool(value)
+
     @staticmethod
     def freeze_backbones(model, freeze_modules=""):
         """
@@ -499,8 +512,8 @@ class TrainerUtils:
             print("No valid JSON part found")
             return None
 
-    def _get_latest_checkpoint(self, checkpoint_dir):
-        """Find the latest checkpoint in the directory based on step number."""
+    def _get_latest_model_checkpoint(self, checkpoint_dir):
+        """Find the latest model-only checkpoint in the directory by step number."""
         if not os.path.exists(checkpoint_dir):
             self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
             return None, 0
@@ -534,7 +547,111 @@ class TrainerUtils:
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
         return latest_checkpoint_path, completed_steps
 
-import os
+    def _get_latest_checkpoint(self, checkpoint_dir):
+        """Backward-compatible alias for the latest model-only checkpoint."""
+        return self._get_latest_model_checkpoint(checkpoint_dir)
+
+    def _get_latest_training_state(self, checkpoint_dir):
+        """Find the latest full training-state checkpoint directory by step number."""
+        if not os.path.exists(checkpoint_dir):
+            self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
+            return None, 0
+
+        checkpoints = [
+            f for f in os.listdir(checkpoint_dir)
+            if re.match(r"steps_(\d+)_state$", f)
+            and os.path.isdir(os.path.join(checkpoint_dir, f))
+        ]
+
+        if not checkpoints:
+            self.accelerator.print(f"No training-state checkpoints found in {checkpoint_dir}")
+            return None, 0
+
+        try:
+            checkpoints_with_steps = [
+                (ckpt, int(re.search(r"steps_(\d+)_state$", ckpt).group(1)))
+                for ckpt in checkpoints
+            ]
+        except AttributeError as e:
+            self.accelerator.print(f"Error parsing training-state checkpoint names: {e}")
+            return None, 0
+
+        checkpoints_with_steps.sort(key=lambda x: x[1])
+        latest_checkpoint, completed_steps = checkpoints_with_steps[-1]
+        latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+        self.accelerator.print(f"Latest training-state checkpoint found: {latest_checkpoint_path}")
+        return latest_checkpoint_path, completed_steps
+
+    def _resolve_training_state_checkpoint(self, checkpoint_dir, resume_from_checkpoint):
+        """Resolve a full training-state checkpoint request.
+
+        `resume_from_checkpoint` accepts:
+        - None / "" / False: no full resume.
+        - "latest" / True: latest `steps_<N>_state` directory in checkpoint_dir.
+        - explicit path to a `steps_<N>_state` directory.
+
+        Model-only `.pt` / `.safetensors` checkpoints are intentionally rejected
+        here so warm-start and full resume cannot be confused.
+        """
+        if not resume_from_checkpoint:
+            return None, 0
+
+        if isinstance(resume_from_checkpoint, str) and resume_from_checkpoint.strip().lower() in {
+            "",
+            "0",
+            "false",
+            "none",
+            "null",
+        }:
+            return None, 0
+
+        if resume_from_checkpoint is True or str(resume_from_checkpoint).lower() == "latest":
+            return self._get_latest_training_state(checkpoint_dir)
+
+        resume_path = os.fspath(resume_from_checkpoint)
+        if os.path.isfile(resume_path):
+            raise ValueError(
+                "resume_from_checkpoint expects a full training-state directory. "
+                "For model-only .pt/.safetensors files, use trainer.pretrained_checkpoint instead."
+            )
+
+        if not os.path.isdir(resume_path):
+            raise FileNotFoundError(f"Training-state checkpoint directory not found: {resume_path}")
+
+        state = self._load_trainer_state(resume_path, required=False)
+        completed_steps = state.get("completed_steps")
+        if completed_steps is None:
+            match = re.search(r"steps_(\d+)_state$", os.path.basename(os.path.normpath(resume_path)))
+            completed_steps = int(match.group(1)) if match else 0
+
+        return resume_path, int(completed_steps)
+
+    def _save_trainer_state(self, state_dir, completed_steps, extra=None):
+        """Save trainer-owned metadata next to Accelerator/DeepSpeed state."""
+        os.makedirs(state_dir, exist_ok=True)
+        trainer_state = {
+            "completed_steps": int(completed_steps),
+            "checkpoint_type": "training_state",
+            "version": 1,
+        }
+        if extra:
+            trainer_state.update(extra)
+
+        state_path = os.path.join(state_dir, "trainer_state.json")
+        with open(state_path, "w") as f:
+            json.dump(trainer_state, f, indent=2)
+        return state_path
+
+    def _load_trainer_state(self, state_dir, required=True):
+        """Load trainer-owned metadata from a full training-state checkpoint."""
+        state_path = os.path.join(state_dir, "trainer_state.json")
+        if not os.path.exists(state_path):
+            if required:
+                raise FileNotFoundError(f"Missing trainer state metadata: {state_path}")
+            return {}
+
+        with open(state_path, "r") as f:
+            return json.load(f)
 
 
 def is_main_process():
