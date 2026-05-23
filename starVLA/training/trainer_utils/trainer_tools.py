@@ -8,6 +8,7 @@ endpoints (e.g., JSONL local logs, Weights & Biases).
 import json
 import os
 import re
+import shutil
 from typing import Tuple
 
 import numpy as np
@@ -642,6 +643,24 @@ class TrainerUtils:
             json.dump(trainer_state, f, indent=2)
         return state_path
 
+    def _prepare_training_state_dir(self, state_dir):
+        """Create a clean temporary directory for atomic training-state saves."""
+        tmp_state_dir = state_dir + ".tmp"
+        if self.accelerator.is_main_process:
+            if os.path.exists(tmp_state_dir):
+                shutil.rmtree(tmp_state_dir)
+        self.accelerator.wait_for_everyone()
+        return tmp_state_dir
+
+    def _finalize_training_state_dir(self, tmp_state_dir, state_dir):
+        """Publish a fully written temporary training-state directory."""
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_main_process:
+            if os.path.exists(state_dir):
+                shutil.rmtree(state_dir)
+            os.replace(tmp_state_dir, state_dir)
+        self.accelerator.wait_for_everyone()
+
     def _load_trainer_state(self, state_dir, required=True):
         """Load trainer-owned metadata from a full training-state checkpoint."""
         state_path = os.path.join(state_dir, "trainer_state.json")
@@ -652,6 +671,73 @@ class TrainerUtils:
 
         with open(state_path, "r") as f:
             return json.load(f)
+
+    def _set_dataloader_resume_state(self, trainer_state):
+        """Store dataloader cursor metadata until iterators are created."""
+        self._dataloader_resume_state = trainer_state.get("dataloader_cursors", {}) if trainer_state else {}
+
+    def _get_dataloader_cursors(self):
+        """Return a JSON-serializable snapshot of tracked dataloader cursors."""
+        return getattr(self, "_dataloader_cursors", {})
+
+    def _create_tracked_iterator(self, tag, dataloader):
+        """Create an iterator restored to the saved epoch/batch cursor for `tag`."""
+        resume_state = getattr(self, "_dataloader_resume_state", {}).get(tag, {})
+        epoch = int(resume_state.get("epoch", 0))
+        batches_seen = int(resume_state.get("batches_seen_in_epoch", 0))
+
+        if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
+            dataloader.sampler.set_epoch(epoch)
+
+        if not hasattr(self, "_dataloader_cursors"):
+            self._dataloader_cursors = {}
+        self._dataloader_cursors[tag] = {
+            "epoch": epoch,
+            "batches_seen_in_epoch": batches_seen,
+        }
+
+        if batches_seen <= 0:
+            return iter(dataloader)
+
+        try:
+            from accelerate.data_loader import skip_first_batches
+
+            return iter(skip_first_batches(dataloader, batches_seen))
+        except Exception as exc:
+            logger.warning(
+                f"Falling back to manual dataloader skip for `{tag}` after skip_first_batches failed: {exc}"
+            )
+            iterator = iter(dataloader)
+            for _ in range(batches_seen):
+                next(iterator)
+            return iterator
+
+    def _next_tracked_batch(self, tag, dataloader, iterator_attr):
+        """Read the next training batch and update the saved dataloader cursor."""
+        if not hasattr(self, "_dataloader_cursors"):
+            self._dataloader_cursors = {}
+        if tag not in self._dataloader_cursors:
+            self._dataloader_cursors[tag] = {"epoch": 0, "batches_seen_in_epoch": 0}
+
+        iterator = getattr(self, iterator_attr)
+        try:
+            batch = next(iterator)
+        except StopIteration:
+            cursor = self._dataloader_cursors[tag]
+            cursor["epoch"] = int(cursor.get("epoch", 0)) + 1
+            cursor["batches_seen_in_epoch"] = 0
+
+            if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
+                dataloader.sampler.set_epoch(cursor["epoch"])
+
+            iterator = iter(dataloader)
+            setattr(self, iterator_attr, iterator)
+            batch = next(iterator)
+
+        self._dataloader_cursors[tag]["batches_seen_in_epoch"] = (
+            int(self._dataloader_cursors[tag].get("batches_seen_in_epoch", 0)) + 1
+        )
+        return batch
 
 
 def is_main_process():

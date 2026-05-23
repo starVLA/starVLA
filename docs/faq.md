@@ -102,9 +102,10 @@ Model-only `.pt` / `.safetensors` files should continue to use
 `trainer.pretrained_checkpoint`; `trainer.resume_from_checkpoint` expects a full
 `steps_<N>_state` directory.
 
-Note: native StarVLA dataloaders are recreated on resume. This restores the
-training state needed for continued optimization, but it does not guarantee a
-bitwise-identical dataloader cursor for interrupted runs.
+StarVLA also stores the native trainer's dataloader cursor in
+`trainer_state.json` and skips already-consumed training batches when resuming.
+For the closest-to-continuous behavior, resume with the same code, config,
+dataset ordering, distributed world size, and Accelerate/DeepSpeed config.
 </details>
 
 <details>

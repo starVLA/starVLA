@@ -279,6 +279,7 @@ class VLATrainer(TrainerUtils):
         self.accelerator.load_state(checkpoint_path)
         trainer_state = self._load_trainer_state(checkpoint_path, required=True)
         self.completed_steps = int(trainer_state.get("completed_steps", self.completed_steps))
+        self._set_dataloader_resume_state(trainer_state)
         self._resume_kind = "training_state"
         self.accelerator.print(f"Resumed full training state from {checkpoint_path} at step {self.completed_steps}")
         self.accelerator.wait_for_everyone()
@@ -312,6 +313,22 @@ class VLATrainer(TrainerUtils):
                 else:
                     raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
 
+        self.accelerator.wait_for_everyone()
+
+        if save_training_state:
+            state_dir = checkpoint_path + "_state"
+            tmp_state_dir = self._prepare_training_state_dir(state_dir)
+            self.accelerator.save_state(tmp_state_dir)
+            if self.accelerator.is_main_process:
+                self._save_trainer_state(
+                    tmp_state_dir,
+                    self.completed_steps,
+                    extra={"dataloader_cursors": self._get_dataloader_cursors()},
+                )
+            self._finalize_training_state_dir(tmp_state_dir, state_dir)
+            self.accelerator.wait_for_everyone()
+
+        if self.accelerator.is_main_process:
             summary_data = {"steps": self.completed_steps}
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
@@ -324,13 +341,6 @@ class VLATrainer(TrainerUtils):
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
-
-        if save_training_state:
-            state_dir = checkpoint_path + "_state"
-            self.accelerator.save_state(state_dir)
-            if self.accelerator.is_main_process:
-                self._save_trainer_state(state_dir, self.completed_steps)
-            self.accelerator.wait_for_everyone()
 
     def _log_metrics(self, metrics):
         """Record training metrics."""
@@ -345,21 +355,11 @@ class VLATrainer(TrainerUtils):
 
     def _create_data_iterators(self):
         """Create data iterators."""
-        self.vla_iter = iter(self.vla_train_dataloader)
+        self.vla_iter = self._create_tracked_iterator("vla", self.vla_train_dataloader)
 
     def _get_next_batch(self):
         """Get next batch (automatically handle data loop)."""
-        try:
-            batch_vla = next(self.vla_iter)
-        except StopIteration:
-            if not hasattr(self, "vla_epoch_count"):
-                self.vla_epoch_count = 0
-            self.vla_iter, self.vla_epoch_count = TrainerUtils._reset_dataloader(
-                self.vla_train_dataloader, self.vla_epoch_count
-            )
-            batch_vla = next(self.vla_iter)
-
-        return batch_vla
+        return self._next_tracked_batch("vla", self.vla_train_dataloader, "vla_iter")
 
     def train(self):
         """Execute training loop."""
@@ -393,7 +393,7 @@ class VLATrainer(TrainerUtils):
                 )
 
             if self.completed_steps % self.config.trainer.eval_interval == 0:
-                step_metrics = self.eval_action_model(step_metrics)
+                step_metrics = self.eval_action_model(step_metrics, examples=batch_vla)
 
             step_metrics["timing/data"] = t_end_data - t_start_data
             step_metrics["timing/model"] = t_end_model - t_start_model
@@ -407,9 +407,10 @@ class VLATrainer(TrainerUtils):
 
         self._finalize_training()
 
-    def eval_action_model(self, step_metrics: dict = None) -> float:
+    def eval_action_model(self, step_metrics: dict = None, examples=None) -> float:
         """Run simple action-eval on current batch and attach score to metrics."""
-        examples = self._get_next_batch()
+        if examples is None:
+            examples = self._get_next_batch()
         actions = [example["action"] for example in examples]
         output_dict = self.accelerator.unwrap_model(self.model).predict_action(
             examples=examples, use_ddim=True, num_ddim_steps=20
@@ -422,7 +423,6 @@ class VLATrainer(TrainerUtils):
             score = TrainerUtils.euclidean_distance(normalized_actions, actions)
             step_metrics["mse_score"] = score / num_pots
 
-        del examples
         dist.barrier()
         return step_metrics
 

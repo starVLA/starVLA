@@ -239,6 +239,7 @@ class VLAMTrainer(TrainerUtils):
         self.accelerator.load_state(checkpoint_path)
         trainer_state = self._load_trainer_state(checkpoint_path, required=True)
         self.completed_steps = int(trainer_state.get("completed_steps", self.completed_steps))
+        self._set_dataloader_resume_state(trainer_state)
         self._resume_kind = "training_state"
         self.accelerator.print(f"Resumed full training state from {checkpoint_path} at step {self.completed_steps}")
         self.accelerator.wait_for_everyone()
@@ -272,6 +273,22 @@ class VLAMTrainer(TrainerUtils):
                 else:
                     raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
 
+        self.accelerator.wait_for_everyone()
+
+        if save_training_state:
+            state_dir = checkpoint_path + "_state"
+            tmp_state_dir = self._prepare_training_state_dir(state_dir)
+            self.accelerator.save_state(tmp_state_dir)
+            if self.accelerator.is_main_process:
+                self._save_trainer_state(
+                    tmp_state_dir,
+                    self.completed_steps,
+                    extra={"dataloader_cursors": self._get_dataloader_cursors()},
+                )
+            self._finalize_training_state_dir(tmp_state_dir, state_dir)
+            self.accelerator.wait_for_everyone()
+
+        if self.accelerator.is_main_process:
             summary_data = {"steps": self.completed_steps}
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
                 f.write(json.dumps(summary_data) + "\n")
@@ -284,13 +301,6 @@ class VLAMTrainer(TrainerUtils):
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
-
-        if save_training_state:
-            state_dir = checkpoint_path + "_state"
-            self.accelerator.save_state(state_dir)
-            if self.accelerator.is_main_process:
-                self._save_trainer_state(state_dir, self.completed_steps)
-            self.accelerator.wait_for_everyone()
 
     def _log_metrics(self, metrics):
         """Record training metrics."""
@@ -308,17 +318,11 @@ class VLAMTrainer(TrainerUtils):
 
     def _create_data_iterators(self):
         """Create data iterators."""
-        self.vlm_iter = iter(self.vlm_train_dataloader)
+        self.vlm_iter = self._create_tracked_iterator("vlm", self.vlm_train_dataloader)
 
     def _get_next_batch(self):
         """Get next batch (automatically handle data loop)."""
-        try:
-            return next(self.vlm_iter)
-        except StopIteration:
-            if not hasattr(self, "vlm_epoch_count"):
-                self.vlm_epoch_count = 0
-            self.vlm_iter, self.vlm_epoch_count = self._reset_dataloader(self.vlm_train_dataloader, self.vlm_epoch_count)
-            return next(self.vlm_iter)
+        return self._next_tracked_batch("vlm", self.vlm_train_dataloader, "vlm_iter")
 
     def train(self):
         """Execute training loop."""
