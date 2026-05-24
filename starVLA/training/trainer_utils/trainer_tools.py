@@ -21,6 +21,14 @@ from accelerate.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _is_distributed_ready():
+    return dist.is_available() and dist.is_initialized()
+
+
+def _is_main_process():
+    return (not _is_distributed_ready()) or dist.get_rank() == 0
+
+
 # === Define Tracker Interface ===
 #
 
@@ -71,7 +79,7 @@ def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, to
         fused=fused_available,
     )
 
-    if dist.is_initialized() and dist.get_rank() == 0:
+    if _is_distributed_ready() and dist.get_rank() == 0:
         for group in optimizer.param_groups:
             logger.info(f"LR Group {group['name']}: lr={group['lr']}, num_params={len(group['params'])}")
 
@@ -156,7 +164,7 @@ def only_main_process(func):
     """
 
     def wrapper(*args, **kwargs):
-        if dist.is_initialized() and dist.get_rank() != 0:
+        if _is_distributed_ready() and dist.get_rank() != 0:
             return None  # non-main process does not execute
         return func(*args, **kwargs)
 
@@ -239,7 +247,7 @@ class TrainerUtils:
                     continue
 
         # accelerator.wait_for_everyone()  # synchronize when distributed training
-        if dist.get_rank == 0:
+        if _is_main_process():
             print(f"🔒 Frozen modules with re pattern: {frozen}")
         return model
 
@@ -249,7 +257,7 @@ class TrainerUtils:
         print the total number of parameters and trainable parameters of the model
         :param model: PyTorch model instance
         """
-        if dist.get_rank() != 0:
+        if not _is_main_process():
             return
         print("📊 model parameter statistics:")
         num_params = sum(p.numel() for p in model.parameters())
@@ -271,7 +279,7 @@ class TrainerUtils:
         """
         if not checkpoint_path:
             return []
-        if dist.get_rank() == 0:
+        if _is_main_process():
             print(f"📦 loading checkpoint: {checkpoint_path}")
         try:
             if _is_safetensors_path(checkpoint_path):
@@ -297,7 +305,7 @@ class TrainerUtils:
                     sub_state_dict = {k[len(prefix) :]: v for k, v in checkpoint.items() if k.startswith(prefix)}
                     if sub_state_dict:
                         module.load_state_dict(sub_state_dict, strict=True)
-                        if dist.get_rank() == 0:
+                        if _is_main_process():
                             print(f"✅ parameters loaded to module '{path}'")
                         loaded_modules.append(path)
                     else:
@@ -307,7 +315,7 @@ class TrainerUtils:
         else:  # full load
             try:
                 model.load_state_dict(checkpoint, strict=False)
-                if dist.get_rank() == 0:
+                if _is_main_process():
                     print("✅ loaded <full_model> model parameters")
                 loaded_modules = ["<full_model>"]
             except Exception as e:

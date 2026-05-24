@@ -49,6 +49,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 logger = get_logger(__name__)
 
 
+def _is_distributed_ready():
+    return dist.is_available() and dist.is_initialized()
+
+
+def _barrier_if_distributed():
+    if _is_distributed_ready():
+        dist.barrier()
+
+
 def load_fast_tokenizer():
     return AutoProcessor.from_pretrained("physical-intelligence/fast", trust_remote_code=True)
 
@@ -72,7 +81,7 @@ def prepare_data(cfg, accelerator, output_dir) -> Tuple[DataLoader, DataLoader]:
     vlm_train_dataloader = build_dataloader(cfg=cfg, dataset_py=cfg.datasets.vlm_data.dataset_py)
 
     accelerator.dataloader_config.dispatch_batches = False
-    dist.barrier()
+    _barrier_if_distributed()
     return vla_train_dataloader, vlm_train_dataloader
 
 
@@ -319,7 +328,7 @@ class VLAMTrainer(TrainerUtils):
 
     def _log_metrics(self, metrics):
         """Record training metrics."""
-        if self.completed_steps % self.config.trainer.logging_frequency == 0 and dist.get_rank() == 0:
+        if self.completed_steps % self.config.trainer.logging_frequency == 0 and self.accelerator.is_main_process:
             last_lrs = self.lr_scheduler.get_last_lr()
             for i, group in enumerate(self.optimizer.param_groups):
                 group_name = group.get("name", str(i))
@@ -379,7 +388,7 @@ class VLAMTrainer(TrainerUtils):
 
             if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
                 self._save_checkpoint()
-                dist.barrier()
+                self.accelerator.wait_for_everyone()
 
             if self.completed_steps >= self.config.trainer.max_train_steps:
                 break
@@ -402,7 +411,7 @@ class VLAMTrainer(TrainerUtils):
             score = TrainerUtils.euclidean_distance(normalized_actions, actions)
             step_metrics["mse_score"] = score / num_pots
 
-        dist.barrier()
+        self.accelerator.wait_for_everyone()
         return step_metrics
 
     def _log_training_config(self):
@@ -498,8 +507,9 @@ def main(cfg) -> None:
     trainer.train()
 
     logger.info("... and that's all, folks!")
-    dist.barrier()
-    dist.destroy_process_group()
+    _barrier_if_distributed()
+    if _is_distributed_ready():
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
