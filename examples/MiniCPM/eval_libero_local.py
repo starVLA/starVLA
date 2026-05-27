@@ -135,7 +135,7 @@ def run(args: EvalArgs) -> None:
     log.info(f"model on {device}, hidden_size={model.qwen_vl_interface.model.config.hidden_size}")
 
     norm_stats = model.norm_stats[args.unnorm_key]["action"]
-    chunk_size = model.future_action_window_size + 1
+    chunk_size = int(getattr(model, "action_horizon", model.config.framework.action_model.action_horizon))
     log.info(f"unnorm_key={args.unnorm_key}  action_chunk_size={chunk_size}")
     log.info(f"action min: {np.asarray(norm_stats['min'])}")
     log.info(f"action max: {np.asarray(norm_stats['max'])}")
