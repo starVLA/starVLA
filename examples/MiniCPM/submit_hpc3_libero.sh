@@ -18,11 +18,12 @@
 #   FRAMEWORK     - MiniCPMPI (default) or MiniCPMGR00T
 #   BASE_VLM      - HF model id or local path (default openbmb/MiniCPM-V-4.6)
 #   DATA_MIX      - libero_all / libero_spatial / libero_object / libero_goal / libero_10
-#   MAX_STEPS     - default 100000
-#   PER_DEVICE_BS - default 4
-#   GRAD_ACCUM    - default 4 (effective BS = 4×8×4 = 128)
+#   MAX_STEPS     - default 80000 (matches starVLA guideline)
+#   PER_DEVICE_BS - default 8
+#   GRAD_ACCUM    - default 8 (effective BS = 8×8×8 = 512)
 #   ATTN_IMPL     - default sdpa
 #   ZERO_STAGE    - default 2
+#   FREEZE_MODULES - default '' (unfreeze VLM, matches starVLA guideline)
 
 set -euo pipefail
 
@@ -33,13 +34,14 @@ export PYTHONPATH="${PROJECT_DIR}:${PROJECT_DIR}/starVLA"
 FRAMEWORK="${FRAMEWORK:-MiniCPMPI}"
 BASE_VLM="${BASE_VLM:-openbmb/MiniCPM-V-4.6}"
 DATA_MIX="${DATA_MIX:-libero_all}"
-MAX_STEPS="${MAX_STEPS:-100000}"
-PER_DEVICE_BS="${PER_DEVICE_BS:-4}"
+MAX_STEPS="${MAX_STEPS:-80000}"
+PER_DEVICE_BS="${PER_DEVICE_BS:-8}"
 ATTN_IMPL="${ATTN_IMPL:-sdpa}"
-GRAD_ACCUM="${GRAD_ACCUM:-4}"
+GRAD_ACCUM="${GRAD_ACCUM:-8}"
 ENABLE_GRAD_CKPT="${ENABLE_GRAD_CKPT:-true}"
 ZERO_STAGE="${ZERO_STAGE:-2}"
-RUN_ID="${RUN_ID:-minicpm_${FRAMEWORK}_${DATA_MIX}_${SLURM_JOB_ID:-local}}"
+FREEZE_MODULES="${FREEZE_MODULES:-}"
+RUN_ID="${RUN_ID:-minicpm_${FRAMEWORK}_${DATA_MIX}_unfreeze_${SLURM_JOB_ID:-local}}"
 
 LIBERO_DATA_ROOT="${LIBERO_DATA_ROOT:-playground/Datasets/LEROBOT_LIBERO_DATA}"
 CONFIG_YAML="examples/LIBERO/train_files/starvla_cotrain_libero.yaml"
@@ -63,6 +65,7 @@ echo "[minicpm-vla] FRAMEWORK=${FRAMEWORK}  BASE_VLM=${BASE_VLM}"
 echo "[minicpm-vla] DATA_MIX=${DATA_MIX}  STEPS=${MAX_STEPS}  PER_DEVICE_BS=${PER_DEVICE_BS}"
 echo "[minicpm-vla] GRAD_ACCUM=${GRAD_ACCUM}  effective BS = ${PER_DEVICE_BS}×8×${GRAD_ACCUM}"
 echo "[minicpm-vla] ENABLE_GRAD_CKPT=${ENABLE_GRAD_CKPT}  ZERO_STAGE=${ZERO_STAGE}"
+echo "[minicpm-vla] FREEZE_MODULES='${FREEZE_MODULES}'  (empty = unfreeze all)"
 echo "[minicpm-vla] RUN_ID=${RUN_ID}"
 
 accelerate launch \
@@ -81,6 +84,7 @@ accelerate launch \
   --datasets.vla_data.per_device_batch_size "${PER_DEVICE_BS}" \
   --trainer.gradient_accumulation_steps "${GRAD_ACCUM}" \
   --trainer.max_train_steps "${MAX_STEPS}" \
+  --trainer.freeze_modules "${FREEZE_MODULES}" \
   --trainer.save_interval 10000 \
   --trainer.logging_frequency 100 \
   --trainer.eval_interval 5000 \
