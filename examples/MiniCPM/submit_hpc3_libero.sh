@@ -8,22 +8,24 @@
 #SBATCH --output=logs/minicpm_vla_%j.log
 #
 # Slurm submission for MiniCPM-V 4.6 LIBERO training (8×GPU).
+# Aligned with upstream starVLA run_libero_train.sh:
+#   - Uses static deepspeed_zero2.yaml (GA hard-coded to 1 in ds_config.yaml)
+#   - Per-device BS=16, num_processes=8 -> effective BS = 128
+#   - Note: upstream's `trainer.gradient_accumulation_steps` in YAML is dead config;
+#     real GA is whatever ds_config.yaml says (1). We do NOT pass --grad-accum.
 #
 # Usage:
 #   sbatch examples/MiniCPM/submit_hpc3_libero.sh
 #   FRAMEWORK=MiniCPMGR00T sbatch examples/MiniCPM/submit_hpc3_libero.sh
-#   DATA_MIX=libero_spatial sbatch examples/MiniCPM/submit_hpc3_libero.sh
 #
 # Environment overrides:
 #   FRAMEWORK     - MiniCPMPI (default) or MiniCPMGR00T
 #   BASE_VLM      - HF model id or local path (default openbmb/MiniCPM-V-4.6)
-#   DATA_MIX      - libero_all / libero_spatial / libero_object / libero_goal / libero_10
-#   MAX_STEPS     - default 80000 (matches starVLA guideline)
-#   PER_DEVICE_BS - default 8
-#   GRAD_ACCUM    - default 8 (effective BS = 8×8×8 = 512)
+#   DATA_MIX      - libero_all / libero_spatial / ...
+#   MAX_STEPS     - default 80000 (upstream guideline)
+#   PER_DEVICE_BS - default 16  (matches upstream run_libero_train.sh)
 #   ATTN_IMPL     - default sdpa
-#   ZERO_STAGE    - default 2
-#   FREEZE_MODULES - default '' (unfreeze VLM, matches starVLA guideline)
+#   FREEZE_MODULES - default '' (unfreeze VLM, matches upstream)
 
 set -euo pipefail
 
@@ -35,16 +37,15 @@ FRAMEWORK="${FRAMEWORK:-MiniCPMPI}"
 BASE_VLM="${BASE_VLM:-openbmb/MiniCPM-V-4.6}"
 DATA_MIX="${DATA_MIX:-libero_all}"
 MAX_STEPS="${MAX_STEPS:-80000}"
-PER_DEVICE_BS="${PER_DEVICE_BS:-8}"
+PER_DEVICE_BS="${PER_DEVICE_BS:-16}"
 ATTN_IMPL="${ATTN_IMPL:-sdpa}"
-GRAD_ACCUM="${GRAD_ACCUM:-8}"
 ENABLE_GRAD_CKPT="${ENABLE_GRAD_CKPT:-true}"
-ZERO_STAGE="${ZERO_STAGE:-2}"
 FREEZE_MODULES="${FREEZE_MODULES:-}"
-RUN_ID="${RUN_ID:-minicpm_${FRAMEWORK}_${DATA_MIX}_unfreeze_${SLURM_JOB_ID:-local}}"
+RUN_ID="${RUN_ID:-minicpm_${FRAMEWORK}_${DATA_MIX}_upstream_${SLURM_JOB_ID:-local}}"
 
 LIBERO_DATA_ROOT="${LIBERO_DATA_ROOT:-playground/Datasets/LEROBOT_LIBERO_DATA}"
 CONFIG_YAML="examples/LIBERO/train_files/starvla_cotrain_libero.yaml"
+ACCEL_CONFIG="starVLA/config/deepseeds/deepspeed_zero2.yaml"
 RUN_ROOT_DIR="${RUN_ROOT_DIR:-results/Checkpoints}"
 
 mkdir -p "${RUN_ROOT_DIR}/${RUN_ID}" logs
@@ -55,18 +56,10 @@ export NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_TIMEOUT=10000
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-ACCEL_CONFIG=$(python3 examples/MiniCPM/_make_accelerate_config.py \
-    --grad-accum "${GRAD_ACCUM}" \
-    --num-processes 8 \
-    --zero-stage "${ZERO_STAGE}")
-echo "[minicpm-vla] generated accelerate config: ${ACCEL_CONFIG}"
-
 echo "[minicpm-vla] FRAMEWORK=${FRAMEWORK}  BASE_VLM=${BASE_VLM}"
 echo "[minicpm-vla] DATA_MIX=${DATA_MIX}  STEPS=${MAX_STEPS}  PER_DEVICE_BS=${PER_DEVICE_BS}"
-echo "[minicpm-vla] GRAD_ACCUM=${GRAD_ACCUM}  effective BS = ${PER_DEVICE_BS}×8×${GRAD_ACCUM}"
-echo "[minicpm-vla] ENABLE_GRAD_CKPT=${ENABLE_GRAD_CKPT}  ZERO_STAGE=${ZERO_STAGE}"
-echo "[minicpm-vla] FREEZE_MODULES='${FREEZE_MODULES}'  (empty = unfreeze all)"
-echo "[minicpm-vla] RUN_ID=${RUN_ID}"
+echo "[minicpm-vla] effective BS = ${PER_DEVICE_BS}×8×1 (GA=1 from ds_config.yaml)"
+echo "[minicpm-vla] FREEZE_MODULES='${FREEZE_MODULES}'  RUN_ID=${RUN_ID}"
 
 accelerate launch \
   --config_file "${ACCEL_CONFIG}" \
@@ -82,7 +75,6 @@ accelerate launch \
   --datasets.vla_data.data_root_dir "${LIBERO_DATA_ROOT}" \
   --datasets.vla_data.data_mix "${DATA_MIX}" \
   --datasets.vla_data.per_device_batch_size "${PER_DEVICE_BS}" \
-  --trainer.gradient_accumulation_steps "${GRAD_ACCUM}" \
   --trainer.max_train_steps "${MAX_STEPS}" \
   --trainer.freeze_modules "${FREEZE_MODULES}" \
   --trainer.save_interval 10000 \
