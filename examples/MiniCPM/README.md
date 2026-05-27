@@ -36,6 +36,22 @@ FRAMEWORK=MiniCPMGR00T sbatch examples/MiniCPM/submit_hpc3_libero.sh
 DATA_MIX=libero_spatial MAX_STEPS=50000 sbatch examples/MiniCPM/submit_hpc3_libero.sh
 ```
 
+### Evaluation
+
+```bash
+export PYTHONPATH=$PWD:$PYTHONPATH
+export LIBERO_HOME=/path/to/LIBERO
+export LIBERO_CONFIG_PATH=$LIBERO_HOME/libero
+export MUJOCO_GL=osmesa
+export HF_HUB_OFFLINE=1
+
+CUDA_VISIBLE_DEVICES=0 python examples/MiniCPM/eval_libero_local.py \
+  --ckpt /path/to/checkpoints/steps_40000_pytorch_model.pt \
+  --task-suite libero_spatial \
+  --num-trials 50 \
+  --seed 7
+```
+
 ## Architecture
 
 Only **3 core files + examples** — mirrors the Gemma4/Molmo2 integration pattern:
@@ -45,6 +61,7 @@ Only **3 core files + examples** — mirrors the Gemma4/Molmo2 integration patte
 | `starVLA/model/modules/vlm/MiniCPM_V.py` | `_MiniCPM_VL_Interface` — matches `_QWen3_VL_Interface` API |
 | `starVLA/model/framework/VLM4A/MiniCPMPI.py` | `MiniCPM_PI(Qwen_PI)` thin subclass |
 | `starVLA/model/framework/VLM4A/MiniCPMGR00T.py` | `MiniCPM_GR00T(Qwen_GR00T)` thin subclass |
+| `examples/MiniCPM/eval_libero_local.py` | In-process LIBERO evaluation for `MiniCPM_PI` checkpoints |
 | `starVLA/model/modules/vlm/__init__.py` | MiniCPM-V dispatcher branch |
 
 ## Notes
