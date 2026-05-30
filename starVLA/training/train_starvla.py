@@ -22,6 +22,15 @@ from typing import Tuple
 import numpy as np
 import torch
 import torch.distributed as dist
+
+# NPU support: import torch_npu and enable automatic CUDA→NPU mapping.
+# On GPU-only environments this is a no-op (ImportError is silently ignored).
+try:
+    import torch_npu
+    from torch_npu.contrib import transfer_to_npu
+except ImportError:
+    pass
+
 import wandb
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
