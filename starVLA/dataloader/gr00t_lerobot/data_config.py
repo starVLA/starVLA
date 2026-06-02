@@ -6,6 +6,7 @@
 from abc import ABC, abstractmethod
 
 from starVLA.dataloader.gr00t_lerobot.datasets import ModalityConfig
+from starVLA.dataloader.gr00t_lerobot.embodiment_tags import EmbodimentTag
 from starVLA.dataloader.gr00t_lerobot.transform.base import ComposedModalityTransform, ModalityTransform
 from starVLA.dataloader.gr00t_lerobot.transform.concat import ConcatTransform
 from starVLA.dataloader.gr00t_lerobot.transform.state_action import (
@@ -36,6 +37,7 @@ class BaseDataConfig(ABC):
 ###########################################################################################
 
 class OxeDroidDataConfig:
+    embodiment_tag = EmbodimentTag.OXE_DROID
     video_keys = [
         "video.exterior_image_1",
         "video.exterior_image_2",
@@ -136,6 +138,7 @@ class OxeDroidDataConfig:
 
 
 class OxeBridgeDataConfig:
+    embodiment_tag = EmbodimentTag.OXE_BRIDGE
     video_keys = [
         "video.image_0",
     ]
@@ -250,6 +253,7 @@ class OxeBridgeDataConfig:
 ###########################################################################################
 
 class OxeRT1DataConfig:
+    embodiment_tag = EmbodimentTag.OXE_RT1
     video_keys = [
         "video.image",
     ]
@@ -365,6 +369,7 @@ class OxeRT1DataConfig:
 
 
 class SingleFrankaRobotiqDeltaEefDataConfig:
+    embodiment_tag = EmbodimentTag.NEW_EMBODIMENT
     video_keys = [
         "video.base_view",
         "video.ego_view",
@@ -436,6 +441,7 @@ class SingleFrankaRobotiqDeltaEefDataConfig:
 ###########################################################################################
 
 class Libero4in1DataConfig:
+    embodiment_tag = EmbodimentTag.FRANKA
     video_keys = [
         "video.primary_image",
         "video.wrist_image",
@@ -515,6 +521,7 @@ class Libero4in1DataConfig:
 
 
 class SingleFrankaRobotiqDeltaJointsDataConfig:
+    embodiment_tag = EmbodimentTag.FRANKA
     video_keys = [
         "video.base_view",
         "video.ego_view",
@@ -583,6 +590,7 @@ class SingleFrankaRobotiqDeltaJointsDataConfig:
 ###########################################################################################
 
 class FourierGr1ArmsWaistDataConfig:
+    embodiment_tag = EmbodimentTag.GR1
     video_keys = ["video.ego_view"]
     state_keys = [
         "state.left_arm",
@@ -667,6 +675,7 @@ class FourierGr1ArmsWaistDataConfig:
 ###########################################################################################
 
 class SO101Config:
+    embodiment_tag = EmbodimentTag.NEW_EMBODIMENT
     #input
     video_keys = [
         "video.primary_image",
@@ -748,6 +757,7 @@ class SO101Config:
 
 
 class ArxX5DataConfig:
+    embodiment_tag = EmbodimentTag.NEW_EMBODIMENT
     video_keys = [
         "video.cam_high",
         "video.cam_left_wrist",
@@ -827,6 +837,7 @@ class ArxX5DataConfig:
 
 
 class AgilexDataConfig:
+    embodiment_tag = EmbodimentTag.NEW_EMBODIMENT
     video_keys = [
         "video.cam_high",
         "video.cam_left_wrist",
@@ -906,6 +917,7 @@ class AgilexDataConfig:
 
 
 class AgilexData50Config:
+    embodiment_tag = EmbodimentTag.NEW_EMBODIMENT
     video_keys = [
         "video.cam_high",
         "video.cam_left_wrist",
@@ -994,6 +1006,7 @@ class VLAArenaFrankaDataConfig:
     State         : EEF pos (3) + EEF axis-angle (3) + gripper qpos (1) = 7
     """
 
+    embodiment_tag = EmbodimentTag.FRANKA
     video_keys = [
         "video.primary_image",   # agentview camera
     ]

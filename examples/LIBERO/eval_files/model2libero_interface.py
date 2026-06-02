@@ -19,6 +19,7 @@ from typing import Optional, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 
 from deployment.model_server.tools.websocket_policy_client import WebsocketClientPolicy
 from examples.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
@@ -37,6 +38,7 @@ class ModelClient:
         adaptive_ensemble_alpha: float = 0.1,
         host: str = "0.0.0.0",
         port: int = 10095,
+        image_size: Sequence[int] = (224, 224),
     ) -> None:
         # Connect & receive handshake metadata (action_chunk_size, etc.)
         self.client = WebsocketClientPolicy(host, port)
@@ -44,6 +46,7 @@ class ModelClient:
         self.action_chunk_size = int(meta["action_chunk_size"])
         self._server_metadata = meta
 
+        self.image_size: tuple = tuple(image_size)
         self.policy_setup = policy_setup
         self.unnorm_key = unnorm_key
         print(
@@ -108,6 +111,21 @@ class ModelClient:
         task_description = example.get("lang", None)
         if task_description != self.task_description:
             self.reset(task_description)
+
+        # Resize images to self.image_size if needed.
+        if self.image_size and example.get("image"):
+            resized = []
+            target_hw = self.image_size  # (H, W)
+            for img in example["image"]:
+                arr = np.asarray(img)
+                if arr.shape[:2] != target_hw:
+                    arr = np.asarray(
+                        Image.fromarray(arr).resize(
+                            (target_hw[1], target_hw[0]), Image.BILINEAR
+                        )
+                    )
+                resized.append(arr)
+            example = {**example, "image": resized}
 
         # Refresh chunk if needed.
         if step % self.action_chunk_size == 0 or self.raw_actions is None:

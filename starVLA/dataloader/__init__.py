@@ -39,13 +39,20 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
         from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
         vla_dataset_cfg = cfg.datasets.vla_data
 
-        vla_dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+        vla_dataset = get_vla_dataset(
+            data_cfg=vla_dataset_cfg,
+            balance_dataset_weights=vla_dataset_cfg.get("balance_dataset_weights", False),
+            balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
+        )
         
         vla_train_dataloader = DataLoader(
             vla_dataset,
             batch_size=cfg.datasets.vla_data.per_device_batch_size,
             collate_fn=collate_fn,
-            num_workers=4,
+            num_workers=16,
+            pin_memory=True,
+            persistent_workers=True,
+            prefetch_factor=4,
             # shuffle=True
         )        
         if dist.get_rank() == 0: 

@@ -1,12 +1,24 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-your_ckpt=path_to_ABot_checkpoint
-base_port=9883
-export ABot_python=path_to_ABot_env_python
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+ABot_python="${ABot_python:-python}"
+your_ckpt="${your_ckpt:-/path/to/checkpoint.pt}"
+base_port="${base_port:-9883}"
+gpu_id="${gpu_id:-0}"
+USE_BF16="${USE_BF16:-1}"
 
-export DEBUG=1
+cd "${STARVLA_DIR}"
+export PYTHONPATH="${STARVLA_DIR}:${PYTHONPATH:-}"
 
-CUDA_VISIBLE_DEVICES=3 python deployment/model_server/server_policy.py \
-    --ckpt_path ${your_ckpt} \
-    --port ${base_port} \
-    --use_bf16
+CMD=(
+  "${ABot_python}" deployment/model_server/server_policy.py
+  --ckpt_path "${your_ckpt}"
+  --port "${base_port}"
+)
+
+if [[ "${USE_BF16}" == "1" ]]; then
+  CMD+=(--use_bf16)
+fi
+
+CUDA_VISIBLE_DEVICES="${gpu_id}" "${CMD[@]}"

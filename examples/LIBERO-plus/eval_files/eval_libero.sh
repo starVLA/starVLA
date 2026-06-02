@@ -1,28 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-###########################################################################################
-# === Please modify the following paths according to your environment ===
-export LIBERO_HOME=path_to_LIBERO-plus_home
-export LIBERO_CONFIG_PATH=${LIBERO_HOME}/libero
-export LIBERO_Python=path_to_LIBERO-plus_env_python
-export MUJOCO_GL=osmesa
-export PYTHONPATH=$PYTHONPATH:${LIBERO_HOME} # let eval_libero find the LIBERO tools
-export PYTHONPATH=$(pwd):${PYTHONPATH} # let LIBERO find the websocket tools from main repo
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+LIBERO_HOME="${LIBERO_HOME:-}"
+LIBERO_Python="${LIBERO_Python:-python}"
+MUJOCO_GL="${MUJOCO_GL:-osmesa}"
+PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-osmesa}"
+host="${host:-127.0.0.1}"
+your_ckpt="${your_ckpt:-/path/to/checkpoint.pt}"
+output_dir="${output_dir:-${STARVLA_DIR}/results/libero_plus_eval}"
+gpu_id="${gpu_id:-0}"
 
+if [[ -z "${LIBERO_HOME}" ]]; then
+  echo "LIBERO_HOME is required."
+  exit 1
+fi
 
-host="127.0.0.1"
+cd "${STARVLA_DIR}"
+export LIBERO_CONFIG_PATH="${LIBERO_HOME}/libero"
+export PYTHONPATH="${PYTHONPATH:-}:${LIBERO_HOME}:${STARVLA_DIR}"
 
-unnorm_key="franka"
-your_ckpt=path_to_ABot_checkpoint
-output_dir=path_to_output_dir
 folder_name=$(echo "$your_ckpt" | awk -F'/' '{print $(NF-2)"_"$(NF-1)"_"$NF}')
-# === End of environment variable configuration ===
-###########################################################################################
-
-# export DEBUG=true
-
 LOG_DIR="${output_dir}/logs/$(date +"%Y%m%d_%H%M%S")"
-mkdir -p ${LOG_DIR}
+mkdir -p "${LOG_DIR}"
 
 base_port=9883
 task_suite_name=libero_goal
@@ -30,7 +30,7 @@ num_trials_per_task=1
 video_out_path="${output_dir}/${task_suite_name}/${folder_name}"
 log_file="${LOG_DIR}/${task_suite_name}.log"
 
-CUDA_VISIBLE_DEVICES=2 ${LIBERO_Python} ./examples/LIBERO-plus/eval_files/eval_libero.py \
+CUDA_VISIBLE_DEVICES="${gpu_id}" "${LIBERO_Python}" ./examples/LIBERO-plus/eval_files/eval_libero.py \
     --args.pretrained-path ${your_ckpt} \
     --args.host "$host" \
     --args.port $base_port \
@@ -50,7 +50,7 @@ num_trials_per_task=1
 video_out_path="${output_dir}/${task_suite_name}/${folder_name}"
 log_file="${LOG_DIR}/${task_suite_name}.log"
 
-CUDA_VISIBLE_DEVICES=2 ${LIBERO_Python} ./examples/LIBERO-plus/eval_files/eval_libero.py \
+CUDA_VISIBLE_DEVICES="${gpu_id}" "${LIBERO_Python}" ./examples/LIBERO-plus/eval_files/eval_libero.py \
     --args.pretrained-path ${your_ckpt} \
     --args.host "$host" \
     --args.port $base_port \
@@ -68,7 +68,7 @@ num_trials_per_task=1
 video_out_path="${output_dir}/${task_suite_name}/${folder_name}"
 log_file="${LOG_DIR}/${task_suite_name}.log"
 
-CUDA_VISIBLE_DEVICES=2 ${LIBERO_Python} ./examples/LIBERO-plus/eval_files/eval_libero.py \
+CUDA_VISIBLE_DEVICES="${gpu_id}" "${LIBERO_Python}" ./examples/LIBERO-plus/eval_files/eval_libero.py \
     --args.pretrained-path ${your_ckpt} \
     --args.host "$host" \
     --args.port $base_port \
@@ -87,7 +87,7 @@ num_trials_per_task=1
 video_out_path="${output_dir}/${task_suite_name}/${folder_name}"
 log_file="${LOG_DIR}/${task_suite_name}.log"
 
-CUDA_VISIBLE_DEVICES=2 ${LIBERO_Python} ./examples/LIBERO-plus/eval_files/eval_libero.py \
+CUDA_VISIBLE_DEVICES="${gpu_id}" "${LIBERO_Python}" ./examples/LIBERO-plus/eval_files/eval_libero.py \
     --args.pretrained-path ${your_ckpt} \
     --args.host "$host" \
     --args.port $base_port \

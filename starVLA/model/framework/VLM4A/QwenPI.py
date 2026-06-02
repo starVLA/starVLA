@@ -166,11 +166,12 @@ class Qwen_PI(baseframework):
 
     def _encode_vl_hidden_states(
         self, batch_images: List, instructions: List[str]
-    ) -> List[torch.Tensor]:
-        """Run QwenVL and return the last-N layer-wise hidden states for the Action DiT."""
+    ) -> tuple:
+        """Run QwenVL and return (layer-wise hidden states, attention_mask) for the Action DiT."""
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
             images=batch_images, instructions=instructions
         )
+        attention_mask = qwen_inputs.get("attention_mask", None)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
@@ -180,7 +181,7 @@ class Qwen_PI(baseframework):
             )
             expected_layers = len(self.action_model.model.transformer_blocks)
             vl_embs_list = list(qwenvl_outputs.hidden_states[-expected_layers:])
-        return vl_embs_list
+        return vl_embs_list, attention_mask
 
     def forward(
         self,
@@ -204,7 +205,7 @@ class Qwen_PI(baseframework):
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
         # Step 1: encode through QwenVL
-        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
 
         # Step 4: Action Expert Forward and Loss
@@ -224,6 +225,10 @@ class Qwen_PI(baseframework):
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
             # Repeat features for each layer
             vl_embs_list_repeated = [h.repeat(repeated_diffusion_steps, 1, 1) for h in vl_embs_list]
+            if backbone_attention_mask is not None:
+                backbone_attention_mask = backbone_attention_mask.repeat(repeated_diffusion_steps, 1).to(
+                    dtype=torch.bool
+                )
 
             state_repeated = None
             if state is not None:
@@ -234,6 +239,7 @@ class Qwen_PI(baseframework):
                 vl_embs_list_repeated,
                 actions_target_repeated,
                 state_repeated,
+                encoder_attention_mask=backbone_attention_mask,
             )  # (B, chunk_len, action_dim)
 
         return {"action_loss": action_loss}
@@ -269,8 +275,10 @@ class Qwen_PI(baseframework):
             batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
         # Step 1: encode through QwenVL
-        vl_embs_list = self._encode_vl_hidden_states(batch_images, instructions)
+        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
 
         state = (
             torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
@@ -280,8 +288,75 @@ class Qwen_PI(baseframework):
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action(
-                vl_embs_list, state
+                vl_embs_list, state, encoder_attention_mask=backbone_attention_mask
             )  # (B, chunk_len, action_dim)
+
+        normalized_actions = pred_actions.detach().cpu().numpy()
+        return {"normalized_actions": normalized_actions}
+
+    @torch.inference_mode()
+    def predict_action_realtime(
+        self,
+        examples: Optional[List[dict]] = None,
+        prev_action_chunk_normalized: Optional[np.ndarray] = None,
+        inference_delay: int = 1,
+        **kwargs,
+    ) -> dict:
+        """RTC-aware inference: condition sampling on a known prefix.
+
+        Fixes a known prefix of the action chunk to the previous prediction
+        and resamples the rest, so chunks splice smoothly under execution
+        latency.  Mode / schedule kwargs are forwarded to the action head's
+        ``predict_action_realtime``.
+
+        Args:
+            examples: list of dict, same shape as ``predict_action``.
+            prev_action_chunk_normalized: (B, T, action_dim) *normalized*
+                continuous actions from the previous prediction.
+            inference_delay: number of leading timesteps to keep as prefix.
+            **kwargs: forwarded to ``self.action_model.predict_action_realtime``
+                (e.g. ``mode``, ``suffix_length``, ``prefix_attention_schedule``,
+                ``max_guidance_weight``).
+
+        Returns:
+            dict with key ``"normalized_actions"`` -> np.ndarray of shape
+            ``(B, T, action_dim)``.
+        """
+        if prev_action_chunk_normalized is None or inference_delay <= 0:
+            return self.predict_action(examples)
+
+        if type(examples) is not list:
+            examples = [examples]
+
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]
+        instructions = [example["lang"] for example in examples]
+        state = [example["state"] for example in examples] if "state" in examples[0] else None
+
+        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
+        if train_obs_image_size:
+            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+
+        vl_embs_list, _ = self._encode_vl_hidden_states(batch_images, instructions)
+        base_hidden = vl_embs_list[-1]
+
+        state_t = (
+            torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
+            if state is not None
+            else None
+        )
+
+        prev_chunk_t = torch.from_numpy(np.array(prev_action_chunk_normalized)).to(
+            base_hidden.device, dtype=torch.float32
+        )
+
+        with torch.autocast("cuda", dtype=torch.float32):
+            pred_actions = self.action_model.predict_action_realtime(
+                vl_embs_list,
+                state_t,
+                prev_action_chunk=prev_chunk_t,
+                inference_delay=inference_delay,
+                **kwargs,
+            )
 
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
