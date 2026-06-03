@@ -6,7 +6,7 @@
 Qwen-GR00T Framework
 Qwen-VL + Flow-matching head to directly predict continuous actions
 
-LangForceV5:
+LangForce:
 (1) Assert language span consistency between prior/post branches (token-level exact match)
 (2) Hard-token LLR + Shortcut gate
 (3) Optional detach of prior condition to avoid pushing backbone to vision-only shortcut
@@ -36,9 +36,10 @@ logger = initialize_overwatch(__name__)
 # HuggingFace Default / LLaMa-2 IGNORE_INDEX (for labels)
 IGNORE_INDEX = -100
 
-# ===== Qwen special tokens (you confirmed) =====
+# Fallback ids for Qwen3-VL. Runtime boundary checks resolve ids from
+# the active tokenizer because Qwen3 and Qwen3.5 use different ids.
 VISION_START_TOKEN_INDEX = 151652  # <|vision_start|>
-VISION_END_TOKEN_INDEX = 151654  # <|vision_end|>
+VISION_END_TOKEN_INDEX = 151653  # <|vision_end|>
 IMAGE_TOKEN_INDEX = 151655  # <|image_pad|>
 VIDEO_TOKEN_INDEX = 151656  # <|video_pad|>
 IM_START_TOKEN_INDEX = 151644  # <|im_start|>
@@ -77,7 +78,11 @@ class LangForceDefaultConfig:
             "base_vlm": "./playground/Pretrained_models/Qwen3-VL-4B-Instruct",
             "attn_implementation": "flash_attention_2",
             # Number of latent action query tokens injected
-            "num_latent_action_query": 32,
+            "num_latent_action_query": 64,
+            "action_query_init_mode": "mean+noise",
+            "action_query_noise_std": None,
+            "action_query_init_seed": 42,
+            "action_query_as_special_tokens": False,
         }
     )
 
@@ -148,7 +153,7 @@ class LangForce(baseframework):
       - Training-time assertion: extracted language spans in prior/post must match exactly (token-level).
         If mismatch => raise AssertionError with decoded spans.
       - LangForce utilizes Qwen3-VL and extends the vocabulary with specialized tokens that serve as Latent Action Queries.
-        Run the provided example script add_token.py in https://github.com/ZGC-EmbodyAI/LangForce to update the tokenizer with these additional tokens.
+        Missing ``<|action_i|>`` tokens are now added and initialized automatically at construction time.
     """
 
     def __init__(
@@ -159,6 +164,7 @@ class LangForce(baseframework):
         super().__init__()
         # Merge framework defaults with YAML config (YAML wins on conflicts)
         self.config = merge_framework_config(LangForceDefaultConfig, config)
+        self._validate_cot_prompt_for_langforce()
         self.qwen_vl_interface = get_vlm_model(config=self.config)
 
         # align cross_attention_dim to VLM hidden_size at runtime
@@ -166,9 +172,12 @@ class LangForce(baseframework):
             self.qwen_vl_interface.model.config.hidden_size
         )
 
-        self.num_latent_action_query = self.config.framework.qwenvl.get("num_latent_action_query", 32)
-        self.latent_action_query = "".join([f"<|action_{i}|>" for i in range(self.num_latent_action_query)])
+        self.num_latent_action_query = int(self.config.framework.qwenvl.get("num_latent_action_query", 64))
+        self.action_query_tokens = [f"<|action_{i}|>" for i in range(self.num_latent_action_query)]
+        self.latent_action_query = "".join(self.action_query_tokens)
         self.action_token_ids = None  # cached {'first','last'}
+        self.action_query_token_ids = None  # cached full contiguous action token ids
+        self._ensure_action_query_tokens()
 
         self.action_model: FlowmatchingActionHead = get_action_model(config=self.config)
 
@@ -202,12 +211,159 @@ class LangForce(baseframework):
         self.kl_gate_min = float(self.config.framework.get("kl_gate_min", 0.0))
         self.kl_gate_max = float(self.config.framework.get("kl_gate_max", 1.0))
 
-        # cache some special token ids from tokenizer lazily
+        # cache tokenizer-specific special token ids lazily. Do not hardcode ids:
+        # Qwen3 / Qwen3.5 tokenizers may assign different integer ids.
+        self._vision_start_id = None
+        self._vision_end_id = None
+        self._image_token_id = None
+        self._video_token_id = None
+        self._im_start_id = None
         self._im_end_id = None
 
         # EMA buffer for posterior language-span NLL
         self.register_buffer("post_nll_ema", torch.tensor(0.0, dtype=torch.float32))
         self.register_buffer("post_nll_ema_inited", torch.tensor(0, dtype=torch.uint8))
+
+    def _validate_cot_prompt_for_langforce(self) -> None:
+        expected = "{instruction}"
+        cli_hint = "--datasets.vla_data.CoT_prompt='\"{instruction}\"'"
+        vla_data_cfg = self.config.datasets.vla_data
+        cot_prompt = vla_data_cfg.get("CoT_prompt", None)
+        if cot_prompt != expected:
+            raise ValueError(
+                "LangForce KL/LLR requires datasets.vla_data.CoT_prompt to be exactly "
+                f"{expected!r} after config parsing, got {cot_prompt!r}. "
+                "Other templates add prefix/suffix tokens and break prior/post language-span alignment. "
+                f"For CLI overrides, use: {cli_hint}"
+            )
+
+    def _get_initializer_range(self) -> float:
+        cfg = getattr(self.qwen_vl_interface.model.config, "text_config", self.qwen_vl_interface.model.config)
+        std = getattr(cfg, "initializer_range", None)
+        if std is None:
+            std = getattr(self.qwen_vl_interface.model.config, "initializer_range", None)
+        return float(std) if std is not None else 0.02
+
+    @torch.no_grad()
+    def _init_added_token_embeddings(self, old_vocab_size: int, num_added: int) -> None:
+        if num_added <= 0:
+            return
+
+        init_mode = self.config.framework.qwenvl.get("action_query_init_mode", "mean+noise")
+        noise_std = self.config.framework.qwenvl.get("action_query_noise_std", None)
+        seed = int(self.config.framework.qwenvl.get("action_query_init_seed", 42))
+        if noise_std is None:
+            noise_std = self._get_initializer_range()
+        noise_std = float(noise_std)
+
+        in_emb = self.qwen_vl_interface.model.get_input_embeddings()
+        if in_emb is None or not hasattr(in_emb, "weight"):
+            raise RuntimeError("Qwen model has no input embedding weight to initialize LangForce action tokens.")
+
+        w_in = in_emb.weight
+        device = w_in.device
+        dtype = w_in.dtype
+        hidden = w_in.shape[1]
+
+        if init_mode == "hf_default":
+            logger.info("[LangForce] Keeping HF default initialization for newly added action tokens.")
+            return
+
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed)
+        old_rows = w_in[:old_vocab_size]
+
+        if init_mode == "mean+noise":
+            base = old_rows.mean(dim=0, keepdim=True).float().expand(num_added, hidden)
+        elif init_mode == "sample+noise":
+            idx = torch.randint(0, old_vocab_size, (num_added,), device=device, generator=generator)
+            base = old_rows.index_select(0, idx).float()
+        else:
+            raise ValueError(
+                f"Unknown action_query_init_mode={init_mode!r}; use mean+noise, sample+noise, or hf_default."
+            )
+
+        noise = torch.randn((num_added, hidden), device=device, dtype=torch.float32, generator=generator) * noise_std
+        new_rows = (base + noise).to(dtype)
+        start = old_vocab_size
+        end = old_vocab_size + num_added
+        w_in.data[start:end].copy_(new_rows)
+
+        out_emb = self.qwen_vl_interface.model.get_output_embeddings()
+        if out_emb is not None and hasattr(out_emb, "weight") and out_emb.weight is not None:
+            try:
+                tied = out_emb.weight.data_ptr() == w_in.data_ptr()
+            except Exception:
+                tied = False
+            if out_emb.weight.shape[0] == w_in.shape[0] and not tied:
+                out_emb.weight.data[start:end].copy_(new_rows.to(out_emb.weight.dtype))
+
+        logger.info(
+            f"[LangForce] Initialized action token embeddings rows [{start}, {end}) "
+            f"with mode={init_mode}, noise_std={noise_std}."
+        )
+
+    def _ensure_action_query_tokens(self) -> None:
+        tokenizer = self.qwen_vl_interface.processor.tokenizer
+        vocab = tokenizer.get_vocab()
+        missing = [token for token in self.action_query_tokens if token not in vocab]
+
+        input_emb = self.qwen_vl_interface.model.get_input_embeddings()
+        if input_emb is None or not hasattr(input_emb, "weight"):
+            raise RuntimeError("Qwen model has no input embedding weight for LangForce action tokens.")
+        model_vocab_size = int(input_emb.weight.shape[0])
+
+        old_tokenizer_size = len(tokenizer)
+        if missing:
+            as_special = bool(self.config.framework.qwenvl.get("action_query_as_special_tokens", False))
+            if as_special:
+                num_added = tokenizer.add_special_tokens({"additional_special_tokens": missing})
+            else:
+                num_added = tokenizer.add_tokens(missing, special_tokens=False)
+            logger.info(f"[LangForce] Added {num_added} action tokens to tokenizer: {missing[:3]}...")
+        else:
+            num_added = 0
+            logger.info(f"[LangForce] All {self.num_latent_action_query} action tokens already exist; keeping their embeddings.")
+
+        target_vocab_size = len(tokenizer)
+        init_start = target_vocab_size
+        if missing:
+            # Newly added token ids start at old_tokenizer_size. If the model had
+            # fewer rows than the tokenizer, also initialize that pre-existing gap.
+            init_start = min(model_vocab_size, old_tokenizer_size)
+        elif model_vocab_size < target_vocab_size:
+            # Tokenizer/model mismatch: action tokens exist in the tokenizer, but
+            # the model embedding matrix was not resized in the checkpoint.
+            init_start = model_vocab_size
+
+        if model_vocab_size < target_vocab_size:
+            self.qwen_vl_interface.model.resize_token_embeddings(target_vocab_size)
+
+        if init_start < target_vocab_size:
+            self._init_added_token_embeddings(
+                old_vocab_size=init_start,
+                num_added=target_vocab_size - init_start,
+            )
+
+        self.action_query_token_ids = [tokenizer.convert_tokens_to_ids(token) for token in self.action_query_tokens]
+        unk_token_id = tokenizer.unk_token_id
+        if unk_token_id is not None:
+            unknown_ids = [idx for idx, token_id in enumerate(self.action_query_token_ids) if token_id == unk_token_id]
+            if unknown_ids:
+                raise RuntimeError(f"LangForce action tokens were not added correctly; unknown token indices: {unknown_ids[:10]}")
+
+        encoded = tokenizer.encode(self.latent_action_query, add_special_tokens=False)
+        if encoded != self.action_query_token_ids:
+            tokens = tokenizer.convert_ids_to_tokens(encoded)
+            raise RuntimeError(
+                "LangForce action token block is not encoded as the expected contiguous token ids. "
+                f"Expected {self.action_query_token_ids[:8]}... got ids={encoded[:16]} tokens={tokens[:16]}."
+            )
+
+        self.action_token_ids = {
+            "first": self.action_query_token_ids[0],
+            "last": self.action_query_token_ids[-1],
+        }
 
     # ---------------------------------------------------------------------
     # Token id helpers
@@ -219,9 +375,27 @@ class LangForce(baseframework):
                 "last": tokenizer.convert_tokens_to_ids(f"<|action_{self.num_latent_action_query-1}|>"),
             }
 
-    def _ensure_im_end_id(self, tokenizer):
+    def _token_id_or_fallback(self, tokenizer, token: str, fallback: int) -> int:
+        token_id = tokenizer.convert_tokens_to_ids(token)
+        if token_id is None:
+            return int(fallback)
+        unk_id = getattr(tokenizer, "unk_token_id", None)
+        if unk_id is not None and int(token_id) == int(unk_id):
+            logger.warning(f"[LangForce] Token {token!r} resolved to unk_token_id; falling back to {fallback}.")
+            return int(fallback)
+        return int(token_id)
+
+    def _ensure_boundary_token_ids(self, tokenizer):
         if self._im_end_id is None:
-            self._im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+            self._vision_start_id = self._token_id_or_fallback(tokenizer, "<|vision_start|>", VISION_START_TOKEN_INDEX)
+            self._vision_end_id = self._token_id_or_fallback(tokenizer, "<|vision_end|>", VISION_END_TOKEN_INDEX)
+            self._image_token_id = self._token_id_or_fallback(tokenizer, "<|image_pad|>", IMAGE_TOKEN_INDEX)
+            self._video_token_id = self._token_id_or_fallback(tokenizer, "<|video_pad|>", VIDEO_TOKEN_INDEX)
+            self._im_start_id = self._token_id_or_fallback(tokenizer, "<|im_start|>", IM_START_TOKEN_INDEX)
+            self._im_end_id = self._token_id_or_fallback(tokenizer, "<|im_end|>", IM_END_TOKEN_INDEX)
+
+    def _ensure_im_end_id(self, tokenizer):
+        self._ensure_boundary_token_ids(tokenizer)
 
     def _find_last_pos(self, seq_1d: torch.Tensor, token_id: int) -> int:
         idx = (seq_1d == int(token_id)).nonzero(as_tuple=True)[0]
@@ -343,24 +517,46 @@ class LangForce(baseframework):
         posteriori_action_starts: torch.Tensor,  # [B]
     ) -> torch.Tensor:
         tokenizer = self.qwen_vl_interface.processor.tokenizer
-        self._ensure_im_end_id(tokenizer)
+        self._ensure_boundary_token_ids(tokenizer)
 
         pad_id = tokenizer.pad_token_id
         ignore_ids: Set[int] = set()
         if pad_id is not None:
             ignore_ids.add(int(pad_id))
-        ignore_ids.add(int(IMAGE_TOKEN_INDEX))
-        ignore_ids.add(int(VIDEO_TOKEN_INDEX))
-        ignore_ids.add(int(VISION_START_TOKEN_INDEX))
-        ignore_ids.add(int(VISION_END_TOKEN_INDEX))
-        ignore_ids.add(int(IM_START_TOKEN_INDEX))
-        ignore_ids.add(int(IM_END_TOKEN_INDEX))
+        ignore_ids.add(int(self._image_token_id))
+        ignore_ids.add(int(self._video_token_id))
+        ignore_ids.add(int(self._vision_start_id))
+        ignore_ids.add(int(self._vision_end_id))
+        ignore_ids.add(int(self._im_start_id))
+        ignore_ids.add(int(self._im_end_id))
 
         B = int(priori_input_ids.shape[0])
         K = self.num_latent_action_query
 
         llr_vals = []
         post_nll_means = []
+        skip_counts = {
+            "prior_start_oob": 0,
+            "prior_empty": 0,
+            "post_no_vision_end": 0,
+            "post_empty": 0,
+            "nll_none": 0,
+            "hard_token_empty": 0,
+            "empty_language": 0,
+        }
+
+        def _raise_or_continue(reason: str, b: int, ids_prior=None, ids_post=None) -> bool:
+            if self.training and self.assert_lang_span_match:
+                msg = f"\n[LangForceV5] Invalid language span: {reason}\nSample b={b}"
+                if ids_prior is not None:
+                    msg += f"\nPRIOR token ids (first 80): {ids_prior[:80].tolist()}"
+                    msg += f"\nPRIOR text (first 300 chars): {tokenizer.decode(ids_prior[:120].tolist())!r}"
+                if ids_post is not None:
+                    msg += f"\nPOST token ids (first 80): {ids_post[:80].tolist()}"
+                    msg += f"\nPOST text (first 300 chars): {tokenizer.decode(ids_post[:120].tolist())!r}"
+                msg += "\nThis would make kl_loss/LLR silently skip the sample. Check CoT_prompt and chat-template boundaries."
+                raise AssertionError(msg)
+            return True
 
         for b in range(B):
             ids_prior = priori_input_ids[b]
@@ -372,19 +568,59 @@ class LangForce(baseframework):
             # ===== prior language span: [action_end : im_end) =====
             lang_start_prior = a_start_prior + K
             if lang_start_prior >= ids_prior.shape[0]:
+                skip_counts["prior_start_oob"] += 1
+                _raise_or_continue(
+                    f"prior language span starts out of range: action_start={a_start_prior}, K={K}, seq_len={ids_prior.shape[0]}",
+                    b,
+                    ids_prior=ids_prior,
+                    ids_post=ids_post,
+                )
                 continue
             im_end = self._find_first_pos_after(ids_prior, self._im_end_id, lang_start_prior)
             lang_end_prior = im_end if im_end != -1 else int(ids_prior.shape[0])
-            if lang_end_prior <= lang_start_prior:
-                continue
 
             # ===== post language span: [last(vision_end)+1 : action_start) =====
-            v_end_post = self._find_last_pos(ids_post, VISION_END_TOKEN_INDEX)
+            v_end_post = self._find_last_pos(ids_post, self._vision_end_id)
             if v_end_post == -1:
+                skip_counts["post_no_vision_end"] += 1
+                _raise_or_continue(
+                    "posterior sequence has no <|vision_end|> token; cannot locate language span start",
+                    b,
+                    ids_prior=ids_prior,
+                    ids_post=ids_post,
+                )
                 continue
             lang_start_post = v_end_post + 1
             lang_end_post = a_start_post
-            if lang_end_post <= lang_start_post:
+
+            prior_empty = lang_end_prior <= lang_start_prior
+            post_empty = lang_end_post <= lang_start_post
+            if prior_empty and post_empty:
+                # Some datasets contain empty instructions. There is no language
+                # likelihood ratio to compute for those samples, so skip without
+                # treating it as a prompt/template bug.
+                skip_counts["empty_language"] += 1
+                # logger.warning(
+                #     "[LangForce] Empty instruction; skipping KL/LLR for this sample. "
+                # )
+                continue
+            if prior_empty:
+                skip_counts["prior_empty"] += 1
+                _raise_or_continue(
+                    f"empty prior language span while posterior is non-empty: start={lang_start_prior}, end={lang_end_prior}, im_end={im_end}, post_span=[{lang_start_post}:{lang_end_post}]",
+                    b,
+                    ids_prior=ids_prior,
+                    ids_post=ids_post,
+                )
+                continue
+            if post_empty:
+                skip_counts["post_empty"] += 1
+                _raise_or_continue(
+                    f"empty posterior language span while prior is non-empty: start={lang_start_post}, end={lang_end_post}, action_start={a_start_post}, vision_end={v_end_post}, prior_span=[{lang_start_prior}:{lang_end_prior}]",
+                    b,
+                    ids_prior=ids_prior,
+                    ids_post=ids_post,
+                )
                 continue
 
             # ===== (1) strict assertion: token-level equality =====
@@ -423,9 +659,16 @@ class LangForce(baseframework):
                 ignore_ids=ignore_ids,
             )
             if nll_prior is None or nll_post is None:
+                skip_counts["nll_none"] += 1
+                _raise_or_continue(
+                    f"language span produced no valid NLL tokens: prior_none={nll_prior is None}, post_none={nll_post is None}, prior_span=[{lang_start_prior}:{lang_end_prior}], post_span=[{lang_start_post}:{lang_end_post}]",
+                    b,
+                    ids_prior=ids_prior,
+                    ids_post=ids_post,
+                )
                 continue
 
-            # record post nll mean for gate
+            # record posterior NLL mean for shortcut gate
             post_nll_mean = nll_post.mean().detach()
             post_nll_means.append(post_nll_mean)
 
@@ -443,6 +686,7 @@ class LangForce(baseframework):
                 else:
                     k = min(self.hard_token_k, int(nll_post.numel()))
                     if k <= 0:
+                        skip_counts["hard_token_empty"] += 1
                         continue
                     idx = torch.topk(nll_post.detach(), k=k, largest=True).indices
                     llr = (nll_post[idx] - nll_prior[idx]).mean()
@@ -452,6 +696,23 @@ class LangForce(baseframework):
             llr_vals.append(llr)
 
         if len(llr_vals) == 0:
+            structural_skip_count = sum(
+                skip_counts[key]
+                for key in (
+                    "prior_start_oob",
+                    "prior_empty",
+                    "post_no_vision_end",
+                    "post_empty",
+                    "nll_none",
+                    "hard_token_empty",
+                )
+            )
+            if self.training and self.assert_lang_span_match and structural_skip_count > 0:
+                raise AssertionError(
+                    "\n[LangForceV5] No valid language span was found for any non-empty sample in the batch; "
+                    "kl_loss/LLR would be exactly 0 because of malformed spans. "
+                    f"skip_counts={skip_counts}"
+                )
             return torch.tensor(0.0, device=priori_logits.device, dtype=torch.float32)
 
         llr_vals_t = torch.stack(llr_vals).float()  # [M]
