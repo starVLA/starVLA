@@ -164,15 +164,32 @@ class VLATrainer(TrainerUtils):
         )
 
     def _init_wandb(self):
-        """Initialize Weights & Biases."""
+        """Initialize Weights & Biases (best-effort; must not block training)."""
+        self._wandb_enabled = False
+        if os.environ.get("WANDB_MODE") == "disabled" or os.environ.get("WANDB_DISABLED", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            self.accelerator.wait_for_everyone()
+            return
         if self.accelerator.is_main_process:
-            wandb.init(
-                name=self.config.run_id,
-                dir=os.path.join(self.config.output_dir, "wandb"),
-                project=self.config.wandb_project,
-                entity=self.config.wandb_entity,
-                group="vla-train",
-            )
+            try:
+                wandb.init(
+                    name=self.config.run_id,
+                    dir=os.path.join(self.config.output_dir, "wandb"),
+                    project=self.config.wandb_project,
+                    entity=self.config.wandb_entity,
+                    group="vla-train",
+                )
+                self._wandb_enabled = True
+            except Exception as exc:
+                logger.warning(f"W&B init failed; continuing without W&B: {exc}")
+                self._wandb_enabled = False
+        # Rendezvous after rank-0 W&B init. Otherwise a slow or failing init on
+        # rank 0 lets the other ranks reach the first collective alone and
+        # eventually hit an NCCL watchdog timeout.
+        self.accelerator.wait_for_everyone()
 
     def _save_initial_configs(self):
         """Save full config and training script at the very start of training."""
@@ -279,7 +296,12 @@ class VLATrainer(TrainerUtils):
                 group_name = group.get("name", str(i))
                 metrics[f"learning_rate/{group_name}"] = last_lrs[i] if i < len(last_lrs) else last_lrs[-1]
             metrics["epoch"] = round(self.completed_steps / len(self.vla_train_dataloader), 2)
-            wandb.log(metrics, step=self.completed_steps)
+            if getattr(self, "_wandb_enabled", False):
+                try:
+                    wandb.log(metrics, step=self.completed_steps)
+                except Exception as exc:
+                    self._wandb_enabled = False
+                    logger.warning(f"W&B log failed; disabling W&B: {exc}")
             logger.info(f"Step {self.completed_steps}, Loss: {metrics})")
 
     def _create_data_iterators(self):
@@ -419,8 +441,11 @@ class VLATrainer(TrainerUtils):
                 raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
-        if self.accelerator.is_main_process:
-            wandb.finish()
+        if self.accelerator.is_main_process and getattr(self, "_wandb_enabled", False):
+            try:
+                wandb.finish()
+            except Exception:
+                pass
 
         self.accelerator.wait_for_everyone()
 
