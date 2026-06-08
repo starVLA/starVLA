@@ -268,7 +268,13 @@ class VLAMTrainer(TrainerUtils):
             step_metrics = self._train_step(batch_vla, batch_vlm)
             t_end_model = time.perf_counter()
 
-            if self.accelerator.sync_gradients:
+            # When the model is a DeepSpeed engine, gradient-accumulation
+            # boundaries are decided by the engine (not by
+            # `accelerator.sync_gradients`), so `_train_step` reports whether an
+            # optimizer step actually happened. Fall back to `sync_gradients`
+            # for the non-DeepSpeed path.
+            optimizer_stepped = step_metrics.pop("_optimizer_step", self.accelerator.sync_gradients)
+            if optimizer_stepped:
                 progress_bar.update(1)
                 self.completed_steps += 1
 
@@ -280,14 +286,15 @@ class VLAMTrainer(TrainerUtils):
                     }
                 )
 
-            if self.completed_steps % self.config.trainer.eval_interval == 0:
+            if optimizer_stepped and self.completed_steps % self.config.trainer.eval_interval == 0:
                 step_metrics = self.eval_action_model(step_metrics)
 
             step_metrics["timing/data"] = t_end_data - t_start_data
             step_metrics["timing/model"] = t_end_model - t_start_model
-            self._log_metrics(step_metrics)
+            if optimizer_stepped:
+                self._log_metrics(step_metrics)
 
-            if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
+            if optimizer_stepped and self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
                 self._save_checkpoint()
                 dist.barrier()
 
@@ -325,6 +332,39 @@ class VLAMTrainer(TrainerUtils):
     def _train_step(self, batch_vla, batch_vlm):
         """Execute single training step."""
         log_dict = {}
+        # DeepSpeed (ZeRO stage 2/3) is incompatible with Accelerate's
+        # `accumulate()` context manager: `accumulate()` relies on `no_sync()`,
+        # which DeepSpeed forbids under gradient partitioning and raises
+        # "no_sync context manager is incompatible with gradient partitioning
+        # logic of ZeRO stage 2". When the prepared model is a DeepSpeed engine,
+        # drive gradient accumulation through the engine directly: `backward()`
+        # accumulates and `step()` only updates on the engine's own boundary.
+        if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                output_dict = self.model.forward(batch_vla)
+                action_loss = output_dict["action_loss"]
+            self.model.backward(action_loss)
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
+                vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
+            self.model.backward(vlm_loss)
+
+            optimizer_stepped = bool(self.model.is_gradient_accumulation_boundary())
+            self.model.step()
+            if optimizer_stepped:
+                self.lr_scheduler.step()
+
+            log_dict.update(
+                {
+                    "action_dit_loss": action_loss.item(),
+                    "vlm_loss": vlm_loss.item(),
+                    "_optimizer_step": optimizer_stepped,
+                }
+            )
+            return log_dict
+
         with self.accelerator.accumulate(self.model):
             self.optimizer.zero_grad()
 
@@ -353,6 +393,7 @@ class VLAMTrainer(TrainerUtils):
                 {
                     "action_dit_loss": action_loss.item(),
                     "vlm_loss": vlm_loss.item(),
+                    "_optimizer_step": self.accelerator.sync_gradients,
                 }
             )
 
