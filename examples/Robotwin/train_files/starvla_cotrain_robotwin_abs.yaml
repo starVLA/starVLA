@@ -12,6 +12,20 @@ framework:
     base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct
     attn_implementation: flash_attention_2
     vl_hidden_dim: 2048
+  vlm:
+    lora:
+      enabled: false
+      r: 16
+      alpha: 32
+      dropout: 0.05
+      bias: none
+      target_modules: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+      adapter_path: null
+      adapter_name: default
+      is_trainable: true
+      save_adapter_only: false
+      module_path: qwen_vl_interface.model
+      adapter_dir_name: vlm_lora_adapter
   dino:
     dino_backbone: dinov2_vits14
 

@@ -27,6 +27,7 @@ numpy==1.26.4
 wandb
 rich
 diffusers
+peft
 timm
 tyro
 websockets

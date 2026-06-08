@@ -75,7 +75,12 @@ cp $0 ${output_dir}/
 
   # --datasets.vla_data.include_state ${include_state} \
 
-srun --jobid $SLURM_JOBID bash -c 'accelerate launch \
+srun --jobid $SLURM_JOBID bash -c '
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
+accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --main_process_ip $MASTER_ADDR \
   --main_process_port $MASTER_PORT \
@@ -100,5 +105,5 @@ srun --jobid $SLURM_JOBID bash -c 'accelerate launch \
   --run_id ${run_id} \
   --wandb_project StarVLA_Robocasa \
   --wandb_entity jinhuiye \
-  --trainer.is_resume True '
-
+  --trainer.is_resume True \
+  "${EXTRA_ARGS[@]}" '

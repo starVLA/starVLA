@@ -32,6 +32,9 @@ mkdir -p ${output_dir}
 # keep a copy of the launch script next to the checkpoints
 cp "$0" "${output_dir}/"
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
 
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
@@ -50,5 +53,6 @@ accelerate launch \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
   --wandb_project starVLA_DOMINO \
-  --wandb_entity your_wandb_entity
+  --wandb_entity your_wandb_entity \
+  "${EXTRA_ARGS[@]}"
   # --is_debug True

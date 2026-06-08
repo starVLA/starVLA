@@ -34,6 +34,10 @@ cp "$0" "${output_dir}/"
 # Disable WandB for the walk-through; remove this line and `wandb login` for real runs.
 export WANDB_MODE=${WANDB_MODE:-disabled}
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes "${NUM_GPUS}" \
@@ -46,4 +50,5 @@ accelerate launch \
   --trainer.eval_interval "${EVAL_EVERY}" \
   --run_root_dir "${run_root_dir}" \
   --run_id "${run_id}" \
-  --wandb_project starVLA_robochallenge_table30v2
+  --wandb_project starVLA_robochallenge_table30v2 \
+  "${EXTRA_ARGS[@]}"

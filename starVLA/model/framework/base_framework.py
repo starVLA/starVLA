@@ -16,6 +16,13 @@ import torch
 from transformers import PretrainedConfig, PreTrainedModel
 
 from starVLA.model.framework.share_tools import dict_to_namespace, read_mode_config
+from starVLA.model.modules.vlm.lora_utils import (
+    apply_lora_to_vlm_backbone,
+    get_lora_settings,
+    inject_lora_adapter_path,
+    is_lora_enabled,
+    resolve_vlm_lora_adapter_dir,
+)
 from starVLA.model.tools import FRAMEWORK_REGISTRY, FrameworkTools, auto_get_trainable_modules
 from starVLA.training.trainer_utils import initialize_overwatch
 
@@ -235,10 +242,27 @@ class baseframework(PreTrainedModel):
         config = dict_to_namespace(model_config)
         model_config = config
         model_config.trainer.pretrained_checkpoint = None
-        
+
+        adapter_dir = cls._resolve_lora_adapter_dir(pretrained_checkpoint)
+        lora_was_enabled = is_lora_enabled(model_config)
+        if lora_was_enabled and adapter_dir is not None:
+            try:
+                inject_lora_adapter_path(model_config, adapter_dir, is_trainable=False)
+            except Exception as exc:
+                logger.warning(f"Failed to inject LoRA adapter_path into config: {exc}")
+
         FrameworkModel = build_framework(cfg=model_config)
         # set for action un-norm
         FrameworkModel.norm_stats = norm_stats
+
+        # PEFT LoRA changes state_dict key structure, so wrap before loading.
+        if lora_was_enabled:
+            FrameworkModel, _ = apply_lora_to_vlm_backbone(
+                FrameworkModel,
+                model_config,
+                logger=logger,
+            )
+
         # Load from Checkpoint (Custom --> should load both *projector* and *llm* weights)
         if pretrained_checkpoint.suffix == ".safetensors":
             from safetensors.torch import load_file
@@ -249,8 +273,9 @@ class baseframework(PreTrainedModel):
         # logger.info(f"Loading model weights from `{pretrained_checkpoint}`")
         model_keys = set(FrameworkModel.state_dict().keys())
         checkpoint_keys = set(model_state_dict.keys())
+        use_strict = not lora_was_enabled
         try:
-            FrameworkModel.load_state_dict(model_state_dict, strict=True)
+            missing_keys, unexpected_keys = FrameworkModel.load_state_dict(model_state_dict, strict=use_strict)
         except RuntimeError as e:
             # must keep all keys matched
             common_keys = model_keys.intersection(checkpoint_keys)
@@ -263,7 +288,35 @@ class baseframework(PreTrainedModel):
 
             raise e
 
+        if not use_strict:
+            unexpected_keys = list(unexpected_keys) if unexpected_keys else []
+            missing_keys = list(missing_keys) if missing_keys else []
+            if unexpected_keys:
+                raise RuntimeError(
+                    f"Unexpected keys when loading LoRA checkpoint (likely a model/ckpt mismatch): {unexpected_keys[:10]}..."
+                )
+            if missing_keys:
+                logger.warning(
+                    f"{len(missing_keys)} keys missing from LoRA checkpoint (using model defaults): "
+                    f"{missing_keys[:10]}..."
+                )
+            logger.info(
+                f"LoRA checkpoint loaded ({len(model_state_dict)} tensors); "
+                f"adapter_dir={'found' if adapter_dir is not None else 'absent'}."
+            )
+
         # **ensure model is on GPU**
         FrameworkModel = FrameworkModel
         return FrameworkModel
 
+    @staticmethod
+    def _resolve_lora_adapter_dir(pretrained_checkpoint: Path) -> "Path | None":
+        try:
+            model_config, _ = read_mode_config(pretrained_checkpoint)
+            settings = get_lora_settings(dict_to_namespace(model_config))
+            return resolve_vlm_lora_adapter_dir(
+                pretrained_checkpoint,
+                adapter_dir_name=settings.adapter_dir_name,
+            )
+        except Exception:
+            return resolve_vlm_lora_adapter_dir(pretrained_checkpoint)

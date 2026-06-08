@@ -16,7 +16,6 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Tuple
 
 # Third-Party Libraries
 import numpy as np
@@ -38,14 +37,25 @@ from accelerate.utils import set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoProcessor, get_scheduler
+from transformers import AutoProcessor
 
 # Local Modules
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.model.framework.share_tools import apply_config_compat
+from starVLA.model.modules.vlm.lora_utils import (
+    apply_lora_to_vlm_backbone,
+    get_lora_settings,
+    inject_lora_adapter_path,
+    resolve_vlm_lora_adapter_dir,
+    save_vlm_lora_adapter,
+)
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 deepspeed_plugin = DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
@@ -56,6 +66,23 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Initialize logger
 logger = get_logger(__name__)
+
+
+def _strip_lora_module_from_freeze_modules(freeze_modules, module_path):
+    """Keep LoRA adapter params trainable when the base VLM module is frozen."""
+    if not isinstance(freeze_modules, str) or not freeze_modules.strip():
+        return freeze_modules
+
+    top_level_module = module_path.split(".", 1)[0]
+    keep_patterns = []
+    for pattern in freeze_modules.split(","):
+        pattern = pattern.strip()
+        if not pattern:
+            continue
+        if pattern == top_level_module or pattern.startswith(f"{top_level_module}."):
+            continue
+        keep_patterns.append(pattern)
+    return ",".join(keep_patterns)
 
 
 def load_fast_tokenizer():
@@ -84,35 +111,6 @@ def prepare_data(cfg, accelerator, output_dir) -> DataLoader:
     return vla_train_dataloader
 
 
-def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler._LRScheduler]:
-    """Set optimizer and scheduler."""
-    param_groups = build_param_lr_groups(model=model, cfg=cfg)
-    optimizer = torch.optim.AdamW(
-        param_groups,
-        lr=cfg.trainer.learning_rate.base,
-        betas=tuple(cfg.trainer.optimizer.betas),
-        weight_decay=cfg.trainer.optimizer.weight_decay,
-        eps=cfg.trainer.optimizer.eps,
-        fused=True,
-    )
-
-    if dist.is_initialized() and dist.get_rank() == 0:
-        for group in optimizer.param_groups:
-            logger.info(f"LR Group {group['name']}: lr={group['lr']}, num_params={len(group['params'])}")
-
-    # Strip keys unknown to transformers' get_scheduler before passing kwargs.
-    sched_kwargs = {k: v for k, v in cfg.trainer.scheduler_specific_kwargs.items()}
-    lr_scheduler = get_scheduler(
-        name=cfg.trainer.lr_scheduler_type,
-        optimizer=optimizer,
-        num_warmup_steps=cfg.trainer.num_warmup_steps,
-        num_training_steps=cfg.trainer.max_train_steps,
-        scheduler_specific_kwargs=sched_kwargs,
-    )
-
-    return optimizer, lr_scheduler
-
-
 class VLATrainer(TrainerUtils):
     def __init__(self, cfg, model, vla_train_dataloader, optimizer, lr_scheduler, accelerator):
         self.config = cfg
@@ -121,6 +119,8 @@ class VLATrainer(TrainerUtils):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.accelerator = accelerator
+        self.lora_settings = get_lora_settings(cfg)
+        self._deferred_lora_checkpoint_load = None
 
         self.completed_steps = 0
         self.total_batch_size = self._calculate_total_batch_size()
@@ -136,7 +136,6 @@ class VLATrainer(TrainerUtils):
         self._save_initial_configs()
 
         self._init_checkpointing()
-        self._adjust_lr_scheduler_for_resume()
 
         freeze_modules = (
             self.config.trainer.freeze_modules
@@ -144,6 +143,32 @@ class VLATrainer(TrainerUtils):
             else None
         )
         self.model = self.freeze_backbones(self.model, freeze_modules=freeze_modules)
+
+        # LoRA is injected after checkpoint loading/freezing and before
+        # accelerator.prepare so PEFT adapter params are visible to optimizer setup.
+        self.model, self.lora_settings = apply_lora_to_vlm_backbone(
+            self.model,
+            self.config,
+            logger=logger,
+        )
+        self._load_deferred_lora_checkpoint()
+        if self.lora_settings.enabled:
+            optimizer_freeze_modules = _strip_lora_module_from_freeze_modules(
+                self.config.trainer.get("freeze_modules", ""),
+                self.lora_settings.module_path,
+            )
+            if optimizer_freeze_modules != self.config.trainer.get("freeze_modules", ""):
+                logger.info(
+                    "Ignoring VLM backbone freeze pattern while rebuilding the LoRA optimizer; "
+                    "PEFT keeps the base VLM weights frozen and exposes adapter parameters."
+                )
+                self.config.trainer.freeze_modules = optimizer_freeze_modules
+
+        if self.lora_settings.enabled or self.optimizer is None or self.lr_scheduler is None:
+            self.optimizer, self.lr_scheduler = setup_optimizer_and_scheduler(model=self.model, cfg=self.config)
+
+        self._adjust_lr_scheduler_for_resume()
+
         self.print_trainable_parameters(self.model)
 
         self.model, self.optimizer, self.vla_train_dataloader = self.setup_distributed_training(
@@ -208,7 +233,15 @@ class VLATrainer(TrainerUtils):
             resume_from_checkpoint, self.completed_steps = self._get_latest_checkpoint(self.checkpoint_dir)
             if resume_from_checkpoint:
                 self.resume_from_checkpoint = resume_from_checkpoint
-                self.model = self.load_pretrained_backbones(self.model, self.resume_from_checkpoint, reload_modules=None)
+                if not self._defer_lora_checkpoint_load_if_needed(
+                    self.resume_from_checkpoint,
+                    reload_modules=None,
+                ):
+                    self.model = self.load_pretrained_backbones(
+                        self.model,
+                        self.resume_from_checkpoint,
+                        reload_modules=None,
+                    )
                 logger.info(
                     f"Resuming training from checkpoint: {self.resume_from_checkpoint}, steps: {self.completed_steps}"
                 )
@@ -219,13 +252,59 @@ class VLATrainer(TrainerUtils):
 
         if pretrained_checkpoint:
             reload_modules = getattr(self.config.trainer, "reload_modules", None)
-            self.model = self.load_pretrained_backbones(self.model, pretrained_checkpoint, reload_modules=reload_modules)
+            if not self._defer_lora_checkpoint_load_if_needed(pretrained_checkpoint, reload_modules=reload_modules):
+                self.model = self.load_pretrained_backbones(
+                    self.model,
+                    pretrained_checkpoint,
+                    reload_modules=reload_modules,
+                )
             self.completed_steps = 0
             self.resume_from_checkpoint = pretrained_checkpoint
             logger.info(f"Loaded pretrained checkpoint: {pretrained_checkpoint}, steps: {self.completed_steps}")
         else:
             logger.info("No pretrained checkpoint provided. Starting training from scratch.")
             self.completed_steps = 0
+
+    def _defer_lora_checkpoint_load_if_needed(self, checkpoint_path, reload_modules):
+        """Delay LoRA checkpoint loading until PEFT has wrapped the VLM model."""
+
+        settings = get_lora_settings(self.config)
+        if not settings.enabled:
+            return False
+
+        adapter_dir = resolve_vlm_lora_adapter_dir(checkpoint_path, adapter_dir_name=settings.adapter_dir_name)
+        if adapter_dir is None or settings.adapter_path:
+            return False
+
+        inject_lora_adapter_path(self.config, adapter_dir, is_trainable=True)
+        adapter_only_checkpoint = Path(checkpoint_path).is_dir() and Path(checkpoint_path).resolve() == adapter_dir.resolve()
+        self._deferred_lora_checkpoint_load = (
+            None if adapter_only_checkpoint else checkpoint_path,
+            reload_modules,
+        )
+        logger.info(
+            "Detected sibling VLM LoRA adapter at "
+            f"{adapter_dir}; deferring checkpoint load until after PEFT wrapping."
+        )
+        return True
+
+    def _load_deferred_lora_checkpoint(self):
+        if self._deferred_lora_checkpoint_load is None:
+            return
+
+        checkpoint_path, reload_modules = self._deferred_lora_checkpoint_load
+        if checkpoint_path is None:
+            self._deferred_lora_checkpoint_load = None
+            logger.info("Loaded deferred adapter-only LoRA checkpoint after PEFT wrapping.")
+            return
+
+        self.model = self.load_pretrained_backbones(
+            self.model,
+            checkpoint_path,
+            reload_modules=reload_modules,
+        )
+        self._deferred_lora_checkpoint_load = None
+        logger.info(f"Loaded deferred LoRA checkpoint after PEFT wrapping: {checkpoint_path}")
 
     def _adjust_lr_scheduler_for_resume(self):
         """Adjust LR scheduler state after resuming from non-zero steps."""
@@ -248,15 +327,19 @@ class VLATrainer(TrainerUtils):
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
 
-            state_dict = self.accelerator.get_state_dict(self.model)
-            if save_format == "safetensors":
-                from safetensors.torch import save_file
+            if self._should_save_full_checkpoint():
+                state_dict = self.accelerator.get_state_dict(self.model)
+                if save_format == "safetensors":
+                    from safetensors.torch import save_file
 
-                save_file(state_dict, checkpoint_path + "_model.safetensors")
-            elif save_format == "pt":
-                torch.save(state_dict, checkpoint_path + "_pytorch_model.pt")
+                    save_file(state_dict, checkpoint_path + "_model.safetensors")
+                elif save_format == "pt":
+                    torch.save(state_dict, checkpoint_path + "_pytorch_model.pt")
+                else:
+                    raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
             else:
-                raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
+                logger.info("Skipping full model checkpoint because LoRA save_adapter_only=true.")
+            self._save_lora_adapter(f"{checkpoint_path}_{self.lora_settings.adapter_dir_name}")
 
             summary_data = {"steps": self.completed_steps}
             with open(os.path.join(self.config.output_dir, "summary.jsonl"), "a") as f:
@@ -270,6 +353,21 @@ class VLATrainer(TrainerUtils):
                 logger.info("✅ Configuration files saved")
 
         self.accelerator.wait_for_everyone()
+
+    def _should_save_full_checkpoint(self) -> bool:
+        return not (self.lora_settings.enabled and self.lora_settings.save_adapter_only)
+
+    def _save_lora_adapter(self, adapter_dir):
+        if not self.lora_settings.enabled:
+            return
+        unwrapped_model = self.accelerator.unwrap_model(self.model)
+        save_vlm_lora_adapter(
+            unwrapped_model,
+            adapter_dir,
+            adapter_name=self.lora_settings.adapter_name,
+            module_path=self.lora_settings.module_path,
+        )
+        logger.info(f"LoRA adapter saved at {adapter_dir}")
 
     def _log_metrics(self, metrics):
         """Record training metrics."""
@@ -408,15 +506,19 @@ class VLATrainer(TrainerUtils):
             save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)
-            state_dict = self.accelerator.get_state_dict(self.model)
-            if save_format == "safetensors":
-                from safetensors.torch import save_file
+            if self._should_save_full_checkpoint():
+                state_dict = self.accelerator.get_state_dict(self.model)
+                if save_format == "safetensors":
+                    from safetensors.torch import save_file
 
-                save_file(state_dict, os.path.join(final_checkpoint, "model.safetensors"))
-            elif save_format == "pt":
-                torch.save(state_dict, os.path.join(final_checkpoint, "pytorch_model.pt"))
+                    save_file(state_dict, os.path.join(final_checkpoint, "model.safetensors"))
+                elif save_format == "pt":
+                    torch.save(state_dict, os.path.join(final_checkpoint, "pytorch_model.pt"))
+                else:
+                    raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
             else:
-                raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
+                logger.info("Skipping full final model save because LoRA save_adapter_only=true.")
+            self._save_lora_adapter(os.path.join(final_checkpoint, self.lora_settings.adapter_dir_name))
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
         if self.accelerator.is_main_process:

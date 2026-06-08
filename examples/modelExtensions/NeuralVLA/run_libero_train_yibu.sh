@@ -1,4 +1,6 @@
 
+#!/usr/bin/env bash
+
 # export HF_HOME=/mnt/petrelfs/share/yejinhui/Models/huggingface_cache
 
 # export NCCL_SOCKET_IFNAME=bond0
@@ -29,6 +31,11 @@ framework_name=NeuroVLA
 dataset_py=lerobot_datasets
 data_mix=libero_goal
 action_chunk=4
+
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes 4 \
@@ -48,6 +55,6 @@ accelerate launch \
   --run_id ${run_id} \
   --wandb_project spikeVLA-MLP \
   --wandb_entity weiyuguo \
+  "${EXTRA_ARGS[@]}"
   # --is_debug True
-
 
