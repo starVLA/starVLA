@@ -66,7 +66,7 @@ python examples/Robocasa_tabletop/eval_files/simulation_env.py\
    --args.pretrained_path ${your_ckpt}
 ```
 
-⚠️ **Note on the state input:** `--args.no_send_state` is required for the **Qwen3VL-OFT** checkpoint, which takes only language + image as input — sending the proprioceptive state makes the eval prompt diverge from the training format and drops the success rate to ~0 (see issue #355). For the **Qwen3VL-GR00T** checkpoint, keep the default (state enabled): its action head consumes the state input.
+⚠️ **Note on the state input:** use `--args.no_send_state` for the **Qwen3VL-OFT** checkpoint, which takes only language + image as input — when a `state` key is present, QwenOFT appends discretized state tokens to the instruction, deviating from the training-time prompt format (see issue #355 for measurements). For the **Qwen3VL-GR00T** checkpoint, keep the default (state enabled): its action head consumes the state input.
 
 If your checkpoint's `dataset_statistics.json` contains multiple keys, select the embodiment with `--args.unnorm_key <key>` (e.g. `gr1`). With a single key (both released checkpoints), it is auto-selected.
 
