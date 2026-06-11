@@ -61,18 +61,22 @@ python examples/Robocasa_tabletop/eval_files/simulation_env.py\
    --args.n_envs 1 \
    --args.max_episode_steps 720 \
    --args.n_action_steps 12 \
+   --args.no_send_state \
    --args.video_out_path ${video_out_path} \
    --args.pretrained_path ${your_ckpt}
 ```
 
+⚠️ **Note on the state input:** `--args.no_send_state` is required for the **Qwen3VL-OFT** checkpoint, which takes only language + image as input — sending the proprioceptive state makes the eval prompt diverge from the training format and drops the success rate to ~0 (see issue #355). For the **Qwen3VL-GR00T** checkpoint, keep the default (state enabled): its action head consumes the state input.
+
+If your checkpoint's `dataset_statistics.json` contains multiple keys, select the embodiment with `--args.unnorm_key <key>` (e.g. `gr1`). With a single key (both released checkpoints), it is auto-selected.
 
 ### Optional: Batch Evaluation
 
 If you have more GPU, you can use the batch evaluation script:
 ```bash
-bash examples/Robocasa_tabletop/batch_eval_args.sh
+bash examples/Robocasa_tabletop/eval_files/batch_eval_args.sh
 ```
-⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `batch_eval_args.sh`  
+⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `batch_eval_args.sh`. The fifth argument is forwarded to `simulation_env.py` and defaults to `--args.no_send_state` (matching the default Qwen3VL-OFT checkpoint); pass `""` when evaluating the Qwen3VL-GR00T checkpoint.
 
 ---
 ## 📊 Experimental Results

@@ -254,7 +254,9 @@ def run_evaluation(
 class Args:
     host: str = "127.0.0.1"
     port: int = 5678
-    resize_size = [224, 224]
+    resize_size: tuple = (224, 224)
+    unnorm_key: Optional[str] = None  # dataset_statistics.json key; auto-picked when the ckpt has a single key
+    send_state: bool = True  # --args.no_send_state for ckpts trained without state (e.g. Qwen3-VL-OFT-Robocasa)
 
     #################################################################################################################
     # LIBERO environment-specific parameters
@@ -288,10 +290,12 @@ def eval_gr1_unified(args: Args) -> None:
 
     model = PolicyWarper(
         policy_ckpt_path=args.pretrained_path,  # to get unnormalization stats
+        unnorm_key=args.unnorm_key,
         host=args.host,
         port=args.port,
         image_size=args.resize_size,
         n_action_steps=args.n_action_steps,
+        send_state=args.send_state,
     )
     run_evaluation(
         env_name=args.env_name,
