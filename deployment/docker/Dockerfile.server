@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+# Serving image for the starVLA websocket policy server.
+#
+# Build (from the repository root):
+#   docker build -f deployment/docker/Dockerfile.server -t starvla-policy-server .
+# Behind a slow PyPI route, point pip at a mirror:
+#   docker build -f deployment/docker/Dockerfile.server \
+#     --build-arg PIP_INDEX_URL=https://your-mirror/simple \
+#     -t starvla-policy-server .
+FROM python:3.10-slim
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+# Tolerate slow links; pip honors these directly.
+ENV PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=8
+
+# libGL/glib are required by OpenCV; gcc builds the few pure-C sdists in
+# requirements.txt (e.g. accumulation-tree, via tdigest). Everything CUDA ships
+# inside the torch wheels, so no CUDA toolkit is needed.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace/starVLA
+
+# torch in its own layer: it dominates download size and almost never changes,
+# so build retries and requirement bumps reuse the cached layer. The pin must
+# match what requirements.txt resolves to (torchvision==0.21.0 -> torch==2.6.0).
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} torch==2.6.0 torchvision==0.21.0
+
+# Remaining dependencies, so source edits do not invalidate this layer.
+# flash-attn is intentionally absent: the VLM interfaces run inference with
+# sdpa, so the serving image stays free of any CUDA build toolchain.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
+
+COPY . .
+RUN pip install --no-cache-dir --no-deps -e .
+
+ENV PYTHONPATH=/workspace/starVLA
+EXPOSE 5678
+
+# Run with --gpus all and mount:
+#   /models                                        checkpoint snapshot (config.yaml,
+#                                                  dataset_statistics.json, checkpoints/*.pt)
+#   /workspace/starVLA/playground/Pretrained_models base VLM referenced by the
+#                                                  checkpoint's framework.qwenvl.base_vlm
+ENTRYPOINT ["python", "deployment/model_server/server_policy.py"]
+CMD ["--help"]

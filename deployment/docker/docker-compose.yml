@@ -1,0 +1,31 @@
+# Example wiring for the starVLA policy server.
+#
+#   export MODEL_DIR=/abs/path/to/Qwen3-VL-OFT-Robocasa
+#   export PRETRAINED_DIR=/abs/path/to/Pretrained_models
+#   docker compose -f deployment/docker/docker-compose.yml up
+services:
+  policy-server:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.server
+    image: starvla-policy-server:latest
+    ports:
+      - "5678:5678"
+    volumes:
+      - ${MODEL_DIR:?Set MODEL_DIR to the checkpoint snapshot directory}:/models:ro
+      - ${PRETRAINED_DIR:?Set PRETRAINED_DIR to your Pretrained_models directory}:/workspace/starVLA/playground/Pretrained_models:ro
+    command:
+      - "--ckpt_path"
+      - "/models/${CKPT_FILE:-checkpoints/steps_90000_pytorch_model.pt}"
+      - "--port"
+      - "5678"
+      - "--use_bf16"
+      - "--idle_timeout"
+      - "-1"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
