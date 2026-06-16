@@ -146,17 +146,11 @@ class LayerwiseDiscreteDiffusionActionHead(nn.Module):
         else:
             sa_embs = torch.cat([future, action_emb], dim=1)
 
-        temb = self.model.timestep_encoder(torch.zeros(B, device=device, dtype=torch.long))
-        for layer_idx, layer in enumerate(self.model.transformer_blocks):
-            sa_embs = layer(
-                hidden_states=sa_embs,
-                encoder_hidden_states=vl_embs_list[layer_idx],
-                temb=temb,
-            )
-
-        shift, scale = self.model.proj_out_1(F.silu(temb)).chunk(2, dim=1)
-        sa_embs = self.model.norm_out(sa_embs) * (1 + scale[:, None]) + shift[:, None]
-        logits = self.model.proj_out_2(sa_embs)
+        logits = self.model(
+            hidden_states=sa_embs,
+            encoder_hidden_states=vl_embs_list,
+            timestep=torch.zeros(B, device=device, dtype=torch.long),
+        )
 
         n_prefix = (1 + future.shape[1]) if state_features is not None else future.shape[1]
         action_logits = logits[:, n_prefix:, :]
