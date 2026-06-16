@@ -17,6 +17,7 @@ from torch.utils.data import Dataset
 import transformers
 from omegaconf import OmegaConf
 from transformers.image_utils import load_image
+from starVLA.dataloader.dataloader_options import build_dataloader_kwargs
 from starVLA.dataloader.qwenvl_llavajson.qwen_data_config import data_list
 from starVLA.dataloader.qwenvl_llavajson.rope2d import get_rope_index_25, get_rope_index_2, get_rope_index_3
 
@@ -445,8 +446,7 @@ class LazySupervisedDataset(Dataset):
     def _get_packed_item(self, sources) -> Dict[str, torch.Tensor]:
 
         if isinstance(sources, dict):
-            if isinstance(source, dict):
-                sources = [sources]
+            sources = [sources]
             assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
             return self._get_item(sources)
 
@@ -715,7 +715,7 @@ def make_vlm_dataloader(cfg):
         train_dataset,
         batch_size=int(cfg.datasets.vlm_data.per_device_batch_size),
         collate_fn=data_collator,
-        num_workers=4,
+        **build_dataloader_kwargs(data_args),
     )
 
     return {

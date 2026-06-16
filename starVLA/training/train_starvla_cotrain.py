@@ -3,11 +3,12 @@
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
 """
-StarVLA’s trainer is built directly on native PyTorch + Accelerate + DeepSpeed, keeping the loop explicit and easy to hack.
+StarVLA's trainer is built directly on native PyTorch + Accelerate + DeepSpeed,
+keeping the loop explicit and easy to hack.
 Conventions:
 1. Store runtime state in dicts where possible (simplifies data info, procesing info, config, etc).
 2. Use multiple dataloaders to adapt heterogeneous data types / task mixtures.
-3. Put each training strategy in its own `trainer_*.py` file (avoid large if‑else chains).
+3. Put each training strategy in its own `trainer_*.py` file (avoid large if-else chains).
 """
 
 # Standard Library
@@ -29,14 +30,19 @@ from accelerate.utils import set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoProcessor, get_scheduler
+from transformers import AutoProcessor
 
 # Local Modules
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
+from starVLA.training.trainer_utils.throughput import build_step_performance_metrics, count_batches_samples
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 deepspeed_plugin = DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
@@ -307,6 +313,14 @@ class VLAMTrainer(TrainerUtils):
 
             step_metrics["timing/data"] = t_end_data - t_start_data
             step_metrics["timing/model"] = t_end_model - t_start_model
+            sample_count = count_batches_samples(batch_vla, batch_vlm) * self.accelerator.num_processes
+            step_metrics.update(
+                build_step_performance_metrics(
+                    data_time=t_end_data - t_start_data,
+                    model_time=t_end_model - t_start_model,
+                    sample_count=sample_count,
+                )
+            )
             self._log_metrics(step_metrics)
 
             if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
@@ -318,7 +332,7 @@ class VLAMTrainer(TrainerUtils):
 
         self._finalize_training()
 
-    def eval_action_model(self, step_metrics: dict = None) -> float:
+    def eval_action_model(self, step_metrics: dict | None = None) -> float:
         """Evaluate action prediction with current model."""
         if self.accelerator.is_main_process:
             examples, _ = self._get_next_batch()

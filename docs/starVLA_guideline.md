@@ -179,12 +179,35 @@ datasets:
   vlm_data:                       # VLM co-training data (improves generalization)
     dataset_py: vlm_datasets
     per_device_batch_size: 4
+    num_workers: 4
+    pin_memory: false
+    persistent_workers: false
+    prefetch_factor: 2
+    drop_last: false
+    timeout: 0
 
   vla_data:                       # Robot action data
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
     data_mix: libero_all          # all 4 suites; use "libero_goal" for single suite
     per_device_batch_size: 16
+    num_workers: 4
+    pin_memory: false
+    persistent_workers: false
+    prefetch_factor: 2
+    drop_last: false
+    timeout: 0
+```
+
+Each dataset section accepts the same PyTorch DataLoader throughput options:
+`num_workers`, `pin_memory`, `persistent_workers`, `prefetch_factor`,
+`drop_last`, and `timeout`. The defaults above match the historical hard-coded
+loader behavior, and old configs that omit these fields continue to work.
+When `num_workers: 0`, `prefetch_factor` is ignored and
+`persistent_workers: true` is invalid. Command-line overrides work as usual:
+
+```bash
+--datasets.vla_data.num_workers 8 --datasets.vla_data.pin_memory true
 ```
 
 The `data_mix` field selects which datasets to combine. These mixtures are defined in [`examples/LIBERO/train_files/data_registry/data_config.py`](../examples/LIBERO/train_files/data_registry/data_config.py):
