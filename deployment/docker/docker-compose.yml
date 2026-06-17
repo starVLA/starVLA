@@ -1,4 +1,5 @@
-# Example wiring for the starVLA policy server.
+# Example wiring for the starVLA policy server, plus optional train and
+# robocasa eval-client profiles.
 #
 #   export MODEL_DIR=/abs/path/to/Qwen3-VL-OFT-Robocasa
 #   export PRETRAINED_DIR=/abs/path/to/Pretrained_models
@@ -22,6 +23,70 @@ services:
       - "--use_bf16"
       - "--idle_timeout"
       - "-1"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  robocasa-eval:
+    profiles: ["eval"]
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.robocasa
+    image: starvla-robocasa-eval:latest
+    depends_on:
+      - policy-server
+    volumes:
+      - ${MODEL_DIR:?Set MODEL_DIR to the checkpoint snapshot directory}:/models:ro
+      - ${ROBOCASA_ASSETS_DIR:-./robocasa_assets}:/workspace/robocasa-gr1-tabletop-tasks/robocasa/models/assets
+      - ${EVAL_OUT_DIR:-./eval_out}:/workspace/eval_out
+    command:
+      - "python"
+      - "examples/Robocasa_tabletop/eval_files/simulation_env.py"
+      - "--args.host"
+      - "policy-server"
+      - "--args.port"
+      - "5678"
+      - "--args.env_name"
+      - "${ROBOCASA_ENV_NAME:-gr1_unified/PnPCanToDrawerClose_GR1ArmsAndWaistFourierHands_Env}"
+      - "--args.n_episodes"
+      - "${ROBOCASA_N_EPISODES:-50}"
+      - "--args.n_envs"
+      - "${ROBOCASA_N_ENVS:-1}"
+      - "--args.max_episode_steps"
+      - "${ROBOCASA_MAX_EPISODE_STEPS:-720}"
+      - "--args.n_action_steps"
+      - "${ROBOCASA_N_ACTION_STEPS:-12}"
+      - "--args.video_out_path"
+      - "/workspace/eval_out"
+      - "--args.pretrained_path"
+      - "/models/${CKPT_FILE:-checkpoints/steps_90000_pytorch_model.pt}"
+      - "--args.unnorm_key"
+      - "${UNNORM_KEY:-gr1}"
+      - "--args.no_send_state"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  train:
+    profiles: ["train"]
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.train
+    image: starvla-train:latest
+    working_dir: /workspace/starVLA
+    volumes:
+      - ${PLAYGROUND_DIR:-../../playground}:/workspace/starVLA/playground
+      - ${RESULTS_DIR:-../../results}:/workspace/starVLA/results
+    shm_size: ${TRAIN_SHM_SIZE:-16g}
+    command: ${TRAIN_COMMAND:-bash}
     deploy:
       resources:
         reservations:
