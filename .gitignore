@@ -1,3 +1,5 @@
+core.*
+
 debug/
 ckpts/
 third_party/

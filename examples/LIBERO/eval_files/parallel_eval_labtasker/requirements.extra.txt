@@ -1,0 +1,3 @@
+labtasker[plugins]
+pandas
+python-dotenv
