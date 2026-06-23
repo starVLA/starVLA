@@ -1,0 +1,54 @@
+experiment:
+  name: var_stage1_robocasa_gr1_pure_ae_e64
+  output_dir: playground/Checkpoints/var_stage1_robocasa_gr1_pure_ae_e64
+  seed: 42
+
+data:
+  starvla_config_yaml: examples/Robocasa_tabletop/train_files/starvla_cotrain_robocasa_gr1.yaml
+  data_root_dir: playground/Datasets/RoboCasa-GR1/PhysicalAI-Robotics-GR00T-Teleop-Sim/LeRobot
+  data_mix: fourier_gr1_unified_local_1000
+  video_backend: torchvision_av
+  expected_action_horizon: 16
+  expected_action_dim: 29
+  action_mode: abs
+  window_mode: full
+  balance_dataset_weights: false
+  balance_trajectory_weights: false
+  load_all_data_for_training: true
+  delete_pause_frame: false
+
+model:
+  type: var_action_tokenizer
+  seq_len: auto
+  action_dim: auto
+  embed_dim: 64
+  codebook_size: 512
+  scales: [1, 2, 4, 8, 16]
+  use_dilated: true
+  commitment_cost: 0.25
+  normalize_codebook_for_lookup: true
+  decoder_head_type: plain
+  quantization_mode: none
+  use_time_embedding: true
+  use_action_type_embedding: false
+  input_embedding_scale: 1.0
+
+loss:
+  recon_weight: 1.0
+  vel_weight: 0.5
+  jerk_weight: 0.0
+  vq_weight: 0.0
+  vq_warmup_epochs: 0
+
+train:
+  epochs: 30
+  batch_size: 256
+  num_workers: 8
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  grad_clip: 1.0
+  shuffle: true
+  max_batches_per_epoch: 0
+  min_codebook_usage_ratio_for_balanced: 0.0
+  save_every_epochs: 10
+  device: cuda

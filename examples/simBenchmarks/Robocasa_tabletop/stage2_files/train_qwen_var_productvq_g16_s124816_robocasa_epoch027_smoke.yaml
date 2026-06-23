@@ -1,0 +1,70 @@
+run_id: qwen_var_productvq_g16_s124816_robocasa_epoch027_smoke
+run_root_dir: playground/Checkpoints
+seed: 42
+wandb_entity: smap
+wandb_project: starVLA_RoboCasa
+is_debug: false
+version_id: "0.24"
+
+framework:
+  name: QwenVARScaleParallel
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct-VARAction
+    attn_implementation: flash_attention_2
+  stage1_tokenizer:
+    artifact: playground/Checkpoints/var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun/epoch_027.ckpt
+    stage1_config: examples/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun.yaml
+    freeze: true
+    token_cache: playground/Checkpoints/var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun/stage2_token_cache_epoch027.pt
+  action_token_text:
+    prefix: "<var_action_"
+    suffix: ">"
+  parallel_head:
+    num_cross_attention_layers: 2
+    num_attention_heads: 8
+    mlp_ratio: 4.0
+    dropout: 0.0
+    code_condition_dropout: 0.0
+    label_smoothing: 0.02
+    classifier: per_factor
+
+datasets:
+  vla_data:
+    dataset_py: var_stage2_token_dataset
+    data_mix: fourier_gr1_unified_local_1000
+    per_device_batch_size: 2
+    num_workers: 2
+    shuffle: true
+    mode: train
+    window_mode: full
+    skip_bad_samples: true
+    max_read_retries: 16
+
+trainer:
+  pretrained_checkpoint: null
+  is_resume: false
+  max_train_steps: 20
+  num_warmup_steps: 20
+  save_interval: 1000000
+  eval_interval: 1000000
+  learning_rate:
+    base: 2.5e-05
+    qwen_vl_interface: 1.0e-05
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06
+  freeze_modules: null
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 1
+  metric_ema_beta: 0.98
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: true
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
