@@ -392,8 +392,6 @@ class VLAMTrainer(TrainerUtils):
             return log_dict
 
         with self.accelerator.accumulate(self.model):
-            self.optimizer.zero_grad()
-
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 output_dict = self.model.forward(batch_vla)
                 action_loss = output_dict["action_loss"]
@@ -406,22 +404,28 @@ class VLAMTrainer(TrainerUtils):
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 
-            if self.config.trainer.gradient_clipping is not None:
+            gradients_synced = self.accelerator.sync_gradients
+            # Clip/log only after the full accumulated gradient is ready. Also
+            # keep zero_grad after step; placing it before backward clears the
+            # earlier microbatches on the sync step.
+            if gradients_synced and self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            # Only step the LR scheduler when gradients are actually synced.
-            # See train_starvla.py for full explanation.
-            if self.accelerator.sync_gradients:
+            if gradients_synced:
                 self.lr_scheduler.step()
+            self.optimizer.zero_grad()
 
-            log_dict.update(
-                {
-                    "action_dit_loss": action_loss.item(),
-                    "vlm_loss": vlm_loss.item(),
-                    "_optimizer_step": self.accelerator.sync_gradients,
-                }
-            )
+            if gradients_synced:
+                log_dict.update(
+                    {
+                        "action_dit_loss": action_loss.item(),
+                        "vlm_loss": vlm_loss.item(),
+                        "_optimizer_step": True,
+                    }
+                )
+            else:
+                log_dict["_optimizer_step"] = False
 
         return log_dict
 
