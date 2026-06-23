@@ -454,9 +454,9 @@ class VLATrainer(TrainerUtils):
 
 
 def main(cfg) -> None:
-    logger.info("VLA Training :: Warming Up")
-
     cfg = wrap_config(cfg)
+    accelerator = build_accelerator(cfg)
+    logger.info("VLA Training :: Warming Up")
     logger.info("✅ Configuration wrapped for access tracking")
 
     output_dir = setup_directories(cfg=cfg)
