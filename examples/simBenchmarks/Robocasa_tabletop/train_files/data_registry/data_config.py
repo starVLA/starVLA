@@ -52,7 +52,44 @@ ROBOT_TYPE_TO_EMBODIMENT_TAG = {
     # an empty dict for backward compat (it is honored as legacy override).
 }
 
+LOCAL_GR1_UNIFIED_1000_DATASETS = [
+    "gr1_unified.PnPBottleToCabinetClose",
+    "gr1_unified.PnPCanToDrawerClose",
+    "gr1_unified.PnPCupToDrawerClose",
+    "gr1_unified.PnPMilkToMicrowaveClose",
+    "gr1_unified.PnPPotatoToMicrowaveClose",
+    "gr1_unified.PnPWineToCabinetClose",
+    "gr1_unified.PosttrainPnPNovelFromCuttingboardToBasketSplitA",
+    "gr1_unified.PosttrainPnPNovelFromCuttingboardToCardboardboxSplitA",
+    "gr1_unified.PosttrainPnPNovelFromCuttingboardToPanSplitA",
+    "gr1_unified.PosttrainPnPNovelFromCuttingboardToPotSplitA",
+    "gr1_unified.PosttrainPnPNovelFromCuttingboardToTieredbasketSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlacematToBasketSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlacematToBowlSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlacematToPlateSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlacematToTieredshelfSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlateToBowlSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlateToCardboardboxSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlateToPanSplitA",
+    "gr1_unified.PosttrainPnPNovelFromPlateToPlateSplitA",
+    "gr1_unified.PosttrainPnPNovelFromTrayToCardboardboxSplitA",
+    "gr1_unified.PosttrainPnPNovelFromTrayToPlateSplitA",
+    "gr1_unified.PosttrainPnPNovelFromTrayToPotSplitA",
+    "gr1_unified.PosttrainPnPNovelFromTrayToTieredbasketSplitA",
+    "gr1_unified.PosttrainPnPNovelFromTrayToTieredshelfSplitA",
+]
+
 DATASET_NAMED_MIXTURES = {
+    # Matches the locally downloaded RoboCasa-GR1 LeRobot folder names under:
+    # /home/zhangfeihong/playground/Data/RoboCasa-GR1/PhysicalAI-Robotics-GR00T-Teleop-Sim/LeRobot
+    "fourier_gr1_unified_local_1000": [
+        (dataset_name, 1.0, "fourier_gr1_arms_waist")
+        for dataset_name in LOCAL_GR1_UNIFIED_1000_DATASETS
+    ],
+    "fourier_gr1_pnpcup_local_smoke": [
+        ("gr1_unified.PnPCupToDrawerClose", 1.0, "fourier_gr1_arms_waist"),
+    ],
+
     "fourier_gr1_unified_1000": [
         ("gr1_unified.PnPBottleToCabinetClose_GR1ArmsAndWaistFourierHands_1000", 1.0, "fourier_gr1_arms_waist"),
         ("gr1_unified.PnPCanToDrawerClose_GR1ArmsAndWaistFourierHands_1000", 1.0, "fourier_gr1_arms_waist"),
