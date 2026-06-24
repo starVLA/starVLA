@@ -68,7 +68,8 @@ def prepare_data(cfg, accelerator, output_dir) -> DataLoader:
     vlm_train_dataloader = build_dataloader(cfg=cfg, dataset_py=cfg.datasets.vlm_data.dataset_py)
 
     accelerator.dataloader_config.dispatch_batches = False
-    dist.barrier()
+    if dist.is_initialized():
+        dist.barrier()
     return vlm_train_dataloader
 
 
@@ -197,7 +198,8 @@ class VLAMTrainer(TrainerUtils):
 
     def _log_metrics(self, metrics):
         """Record training metrics."""
-        if self.completed_steps % self.config.trainer.logging_frequency == 0 and dist.get_rank() == 0:
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        if self.completed_steps % self.config.trainer.logging_frequency == 0 and rank == 0:
             last_lrs = self.lr_scheduler.get_last_lr()
             for i, group in enumerate(self.optimizer.param_groups):
                 group_name = group.get("name", str(i))
@@ -248,7 +250,8 @@ class VLAMTrainer(TrainerUtils):
 
             if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
                 self._save_checkpoint()
-                dist.barrier()
+                if dist.is_initialized():
+                    dist.barrier()
 
             if self.completed_steps >= self.config.trainer.max_train_steps:
                 break
@@ -339,8 +342,9 @@ def main(cfg) -> None:
     trainer.train()
 
     logger.info("... and that's all, folks!")
-    dist.barrier()
-    dist.destroy_process_group()
+    if dist.is_initialized():
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
