@@ -24,7 +24,7 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 > **💡 Tip:** Files under any `**/bar/` directory are git-ignored, so you can place your custom scripts there (e.g., `examples/LIBERO/train_files/bar/my_train.sh`) without polluting the repo.
 
-
+**[2026/05/30]** 🔥 StarVLA now supports [VLA training with **Qwen-series backbones** on **Ascend NPU**](https://github.com/starVLA/starVLA/pull/336). See the [related discussion](https://github.com/starVLA/starVLA/issues/341) for details and feedback.
 
 **[2026/04/09]** 🚀 unified **multi-benchmark co-training** example (combining LIBERO, SimplerEnv, RoboTwin, VLA-Arena, etc.) is coming soon. Stay tuned!
 
@@ -271,7 +271,7 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on reporting bug
 
 **TwinBrainVLA**: [*TwinBrainVLA: Unleashing the Potential of Generalist VLMs for Embodied Tasks via Asymmetric Mixture-of-Transformers*](https://github.com/ZGC-EmbodyAI/TwinBrainVLA)
 
-**LangForce**: [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
+**LangForce** (ICML 2026): [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
 
 Examples:
 ```bash
@@ -375,7 +375,10 @@ StarVLA is released under the MIT License, which permits commercial use, modific
   title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
   author={Community, StarVLA},
   journal={arXiv preprint arXiv:2604.05014},
-  year={2026}
+  year={2026},
+  eprint={2604.05014},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
 }
 ```
 

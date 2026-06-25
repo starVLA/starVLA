@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Optional
 
 import torch
@@ -209,10 +210,17 @@ class DiT(ModelMixin, ConfigMixin):
         final_dropout: bool = True,
         positional_embeddings: Optional[str] = "sinusoidal",
         interleave_self_attention=False,
+        use_canonical_forward: bool = True,  # False restores the legacy all-cross-attention forward (old checkpoints)
         cross_attention_dim: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
+        if not use_canonical_forward:
+            logging.getLogger(__name__).warning(
+                "use_canonical_forward=False: running the legacy all-cross-attention DiT forward. "
+                "Old checkpoints may have degraded performance due to state-conditioning issues. "
+                "Please retrain with the updated forward path when possible."
+            )
         self.attention_head_dim = attention_head_dim
         self.inner_dim = self.config.num_attention_heads * self.config.attention_head_dim
         self.gradient_checkpointing = False
@@ -264,23 +272,29 @@ class DiT(ModelMixin, ConfigMixin):
     def forward(
         self,
         hidden_states: torch.Tensor,  # Shape: (B, T, D)
-        encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D)
+        encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D) or list of layer-wise tensors
         timestep: Optional[torch.LongTensor] = None,
         return_all_hidden_states: bool = False,
         encoder_attention_mask=None,
+        return_pre_output: bool = False,
     ):
         # Encode timesteps
         temb = self.timestep_encoder(timestep)
 
         # Process through transformer blocks - single pass through the blocks
         hidden_states = hidden_states.contiguous()
-        encoder_hidden_states = encoder_hidden_states.contiguous()
+        is_layerwise_encoder = isinstance(encoder_hidden_states, (list, tuple))
+        encoder_hidden_states = (
+            [state.contiguous() for state in encoder_hidden_states]
+            if is_layerwise_encoder
+            else encoder_hidden_states.contiguous()
+        )
 
         all_hidden_states = [hidden_states]
 
         # Process through transformer blocks
         for idx, block in enumerate(self.transformer_blocks):
-            if idx % 2 == 1 and self.config.interleave_self_attention:
+            if idx % 2 == 1 and self.config.interleave_self_attention and self.config.use_canonical_forward:
                 hidden_states = block(
                     hidden_states,
                     attention_mask=None,
@@ -289,14 +303,23 @@ class DiT(ModelMixin, ConfigMixin):
                     temb=temb,
                 )
             else:
+                if is_layerwise_encoder:
+                    block_encoder_hidden_states = encoder_hidden_states[idx]
+                else:
+                    block_encoder_hidden_states = encoder_hidden_states
                 hidden_states = block(
                     hidden_states,
                     attention_mask=None,
-                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_hidden_states=block_encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     temb=temb,
                 )
             all_hidden_states.append(hidden_states)
+
+        if return_pre_output:
+            if return_all_hidden_states:
+                return hidden_states, all_hidden_states
+            return hidden_states
 
         # Output processing
         conditioning = temb

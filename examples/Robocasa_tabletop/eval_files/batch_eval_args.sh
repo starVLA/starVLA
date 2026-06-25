@@ -29,6 +29,10 @@ CKPT_PATH=${1:-$CKPT_DEFAULT}
 N_ENVS=${2:-$N_ENVS_DEFAULT}
 MAX_EPISODE_STEPS=${3:-$MAX_EPISODE_STEPS_DEFAULT}
 N_ACTION_STEPS=${4:-$N_ACTION_STEPS_DEFAULT}
+# Extra flags forwarded to simulation_env.py. The default matches CKPT_DEFAULT
+# (Qwen3-VL-OFT-Robocasa, trained without state input). Pass "" for checkpoints
+# that consume state (e.g. Qwen3-VL-GR00T-Robocasa-gr1).
+EXTRA_EVAL_ARGS=${5-"--args.no_send_state"}
 
 
 echo "=== Evaluation Configuration ==="
@@ -36,6 +40,7 @@ echo "Checkpoint Path      : ${CKPT_PATH}"
 echo "Number of Envs       : ${N_ENVS}"
 echo "Max Episode Steps    : ${MAX_EPISODE_STEPS}"
 echo "Action Chunk Length  : ${N_ACTION_STEPS}"
+echo "Extra Eval Args      : ${EXTRA_EVAL_ARGS}"
 echo "================================"
 
 # ============================================================
@@ -70,6 +75,7 @@ EvalEnv() {
         --args.n_action_steps "${N_ACTION_STEPS}" \
         --args.video_out_path "${VIDEO_OUT_PATH}" \
         --args.pretrained_path "${CKPT_PATH}" \
+        ${EXTRA_EVAL_ARGS} \
         > "${LOG_DIR}/eval_env_${ENV_NAME//\//_}_gpu${GPU_ID}.log" 2>&1
 }
 

@@ -169,7 +169,7 @@ StarVLA supports four framework variants — just change `framework.name`:
 |-----------|------|-------------|
 | StarVLA-OFT | `QwenOFT` | MLP action head, simple & fast |
 | StarVLA-FAST | `QwenFAST` | Discrete action tokens, autoregressive |
-| StarVLA-π | `QwenPI` | Flow-matching diffusion action head |
+| StarVLA-π | `QwenPI_v3` | Flow-matching diffusion action head |
 | StarVLA-GR00T | `QwenGR00T` | Dual-system: VLM (System 2) + Flow-matching (System 1) |
 
 ### Datasets
@@ -229,7 +229,7 @@ The training script [`examples/LIBERO/train_files/run_libero_train.sh`](../examp
 ```bash
 ###########################################################################################
 # === Modify these for your environment ===
-Framework_name=QwenOFT              # QwenOFT | QwenFAST | QwenPI | QwenGR00T
+Framework_name=QwenOFT              # QwenOFT | QwenFAST | QwenPI_v3 | QwenGR00T
 freeze_module_list=''               # e.g. 'qwen_vl' to freeze VLM backbone
 base_vlm=playground/Pretrained_models/Qwen3-VL-4B-Instruct
 config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
@@ -352,7 +352,7 @@ bash examples/LIBERO/eval_files/eval_libero.sh
 
 ## Next Steps
 
-- **Try a different framework:** Change `Framework_name` in the training script to `QwenGR00T`, `QwenPI`, or `QwenFAST`
+- **Try a different framework:** Change `Framework_name` in the training script to `QwenGR00T`, `QwenPI_v3`, or `QwenFAST`
 - **Explore other benchmarks:** Check out [SimplerEnv](../examples/SimplerEnv/), [RoboTwin](../examples/Robotwin/), [Calvin](../examples/calvin/), or [Behavior-1K](../examples/Behavior/)
 - **World-Model-for-Action:** Use video-generation models (Cosmos, Wan) as action backbones — see [WM4A](WM4A.md)
 - **Co-train with VLM data:** Learn how multi-objective training works in [CoTrainVLM](../examples/CoTrainVLM/)

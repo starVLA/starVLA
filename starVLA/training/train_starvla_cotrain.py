@@ -163,15 +163,32 @@ class VLAMTrainer(TrainerUtils):
         )
 
     def _init_wandb(self):
-        """Initialize Weights & Biases."""
+        """Initialize Weights & Biases (best-effort; must not block training)."""
+        self._wandb_enabled = False
+        if os.environ.get("WANDB_MODE") == "disabled" or os.environ.get("WANDB_DISABLED", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            self.accelerator.wait_for_everyone()
+            return
         if self.accelerator.is_main_process:
-            wandb.init(
-                name=self.config.run_id,
-                dir=os.path.join(self.config.output_dir, "wandb"),
-                project=self.config.wandb_project,
-                entity=self.config.wandb_entity,
-                group="vla-train",
-            )
+            try:
+                wandb.init(
+                    name=self.config.run_id,
+                    dir=os.path.join(self.config.output_dir, "wandb"),
+                    project=self.config.wandb_project,
+                    entity=self.config.wandb_entity,
+                    group="vla-train",
+                )
+                self._wandb_enabled = True
+            except Exception as exc:
+                logger.warning(f"W&B init failed; continuing without W&B: {exc}")
+                self._wandb_enabled = False
+        # Rendezvous after rank-0 W&B init. Otherwise a slow or failing init on
+        # rank 0 lets the other ranks reach the first collective alone and
+        # eventually hit an NCCL watchdog timeout.
+        self.accelerator.wait_for_everyone()
 
     def _init_checkpointing(self):
         """Initialize checkpoint directory and resolve warm-start/full-resume intent."""
@@ -334,7 +351,12 @@ class VLAMTrainer(TrainerUtils):
                 group_name = group.get("name", str(i))
                 metrics[f"learning_rate/{group_name}"] = last_lrs[i] if i < len(last_lrs) else last_lrs[-1]
             metrics["epoch"] = round(self.completed_steps / len(self.vla_train_dataloader), 2)
-            wandb.log(metrics, step=self.completed_steps)
+            if getattr(self, "_wandb_enabled", False):
+                try:
+                    wandb.log(metrics, step=self.completed_steps)
+                except Exception as exc:
+                    self._wandb_enabled = False
+                    logger.warning(f"W&B log failed; disabling W&B: {exc}")
             logger.info(f"Step {self.completed_steps}, Loss: {metrics})")
 
     def _create_data_iterators(self):
@@ -367,7 +389,13 @@ class VLAMTrainer(TrainerUtils):
             step_metrics = self._train_step(batch_vla, batch_vlm)
             t_end_model = time.perf_counter()
 
-            if self.accelerator.sync_gradients:
+            # When the model is a DeepSpeed engine, gradient-accumulation
+            # boundaries are decided by the engine (not by
+            # `accelerator.sync_gradients`), so `_train_step` reports whether an
+            # optimizer step actually happened. Fall back to `sync_gradients`
+            # for the non-DeepSpeed path.
+            optimizer_stepped = step_metrics.pop("_optimizer_step", self.accelerator.sync_gradients)
+            if optimizer_stepped:
                 progress_bar.update(1)
                 self.completed_steps += 1
 
@@ -379,14 +407,15 @@ class VLAMTrainer(TrainerUtils):
                     }
                 )
 
-            if self.completed_steps % self.config.trainer.eval_interval == 0:
+            if optimizer_stepped and self.completed_steps % self.config.trainer.eval_interval == 0:
                 step_metrics = self.eval_action_model(step_metrics, examples=batch_vla)
 
             step_metrics["timing/data"] = t_end_data - t_start_data
             step_metrics["timing/model"] = t_end_model - t_start_model
-            self._log_metrics(step_metrics)
+            if optimizer_stepped:
+                self._log_metrics(step_metrics)
 
-            if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
+            if optimizer_stepped and self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
                 self._save_checkpoint()
                 self.accelerator.wait_for_everyone()
 
@@ -426,6 +455,39 @@ class VLAMTrainer(TrainerUtils):
     def _train_step(self, batch_vla, batch_vlm):
         """Execute single training step."""
         log_dict = {}
+        # DeepSpeed (ZeRO stage 2/3) is incompatible with Accelerate's
+        # `accumulate()` context manager: `accumulate()` relies on `no_sync()`,
+        # which DeepSpeed forbids under gradient partitioning and raises
+        # "no_sync context manager is incompatible with gradient partitioning
+        # logic of ZeRO stage 2". When the prepared model is a DeepSpeed engine,
+        # drive gradient accumulation through the engine directly: `backward()`
+        # accumulates and `step()` only updates on the engine's own boundary.
+        if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                output_dict = self.model.forward(batch_vla)
+                action_loss = output_dict["action_loss"]
+            self.model.backward(action_loss)
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
+                vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
+            self.model.backward(vlm_loss)
+
+            optimizer_stepped = bool(self.model.is_gradient_accumulation_boundary())
+            self.model.step()
+            if optimizer_stepped:
+                self.lr_scheduler.step()
+
+            log_dict.update(
+                {
+                    "action_dit_loss": action_loss.item(),
+                    "vlm_loss": vlm_loss.item(),
+                    "_optimizer_step": optimizer_stepped,
+                }
+            )
+            return log_dict
+
         with self.accelerator.accumulate(self.model):
             self.optimizer.zero_grad()
 
@@ -454,6 +516,7 @@ class VLAMTrainer(TrainerUtils):
                 {
                     "action_dit_loss": action_loss.item(),
                     "vlm_loss": vlm_loss.item(),
+                    "_optimizer_step": self.accelerator.sync_gradients,
                 }
             )
 
@@ -476,8 +539,11 @@ class VLAMTrainer(TrainerUtils):
                 raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
 
-        if self.accelerator.is_main_process:
-            wandb.finish()
+        if self.accelerator.is_main_process and getattr(self, "_wandb_enabled", False):
+            try:
+                wandb.finish()
+            except Exception:
+                pass
 
         self.accelerator.wait_for_everyone()
 
