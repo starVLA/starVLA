@@ -44,17 +44,23 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             balance_dataset_weights=vla_dataset_cfg.get("balance_dataset_weights", False),
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
         )
-        
+
+        num_workers = int(vla_dataset_cfg.get("num_workers", 4))
+        dataloader_kwargs = {
+            "batch_size": cfg.datasets.vla_data.per_device_batch_size,
+            "collate_fn": collate_fn,
+            "num_workers": num_workers,
+            "pin_memory": bool(vla_dataset_cfg.get("pin_memory", True)),
+            # shuffle=True
+        }
+        if num_workers > 0:
+            dataloader_kwargs["persistent_workers"] = bool(vla_dataset_cfg.get("persistent_workers", True))
+            dataloader_kwargs["prefetch_factor"] = int(vla_dataset_cfg.get("prefetch_factor", 2))
+
         vla_train_dataloader = DataLoader(
             vla_dataset,
-            batch_size=cfg.datasets.vla_data.per_device_batch_size,
-            collate_fn=collate_fn,
-            num_workers=16,
-            pin_memory=True,
-            persistent_workers=True,
-            prefetch_factor=4,
-            # shuffle=True
-        )        
+            **dataloader_kwargs,
+        )
         if dist.get_rank() == 0: 
             
             output_dir = Path(cfg.output_dir)
