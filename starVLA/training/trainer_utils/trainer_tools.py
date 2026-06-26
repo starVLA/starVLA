@@ -5,9 +5,12 @@ Utility classes defining a Metrics container and multiple Trackers to enable mod
 endpoints (e.g., JSONL local logs, Weights & Biases).
 """
 
-from typing import Tuple
-import re
 import json
+import os
+import re
+import shutil
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -16,6 +19,14 @@ from transformers import get_scheduler
 from accelerate.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _is_distributed_ready():
+    return dist.is_available() and dist.is_initialized()
+
+
+def _is_main_process():
+    return (not _is_distributed_ready()) or dist.get_rank() == 0
 
 
 # === Define Tracker Interface ===
@@ -68,7 +79,7 @@ def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, to
         fused=fused_available,
     )
 
-    if dist.is_initialized() and dist.get_rank() == 0:
+    if _is_distributed_ready() and dist.get_rank() == 0:
         for group in optimizer.param_groups:
             logger.info(f"LR Group {group['name']}: lr={group['lr']}, num_params={len(group['params'])}")
 
@@ -153,7 +164,7 @@ def only_main_process(func):
     """
 
     def wrapper(*args, **kwargs):
-        if dist.is_initialized() and dist.get_rank() != 0:
+        if _is_distributed_ready() and dist.get_rank() != 0:
             return None  # non-main process does not execute
         return func(*args, **kwargs)
 
@@ -184,6 +195,17 @@ import torch.distributed as dist
 
 
 class TrainerUtils:
+    @staticmethod
+    def _cfg_bool(value, default=False):
+        """Read bool-like OmegaConf / CLI values without treating "false" as truthy."""
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+        return bool(value)
+
     @staticmethod
     def freeze_backbones(model, freeze_modules=""):
         """
@@ -225,7 +247,7 @@ class TrainerUtils:
                     continue
 
         # accelerator.wait_for_everyone()  # synchronize when distributed training
-        if dist.get_rank == 0:
+        if _is_main_process():
             print(f"🔒 Frozen modules with re pattern: {frozen}")
         return model
 
@@ -235,7 +257,7 @@ class TrainerUtils:
         print the total number of parameters and trainable parameters of the model
         :param model: PyTorch model instance
         """
-        if dist.get_rank() != 0:
+        if not _is_main_process():
             return
         print("📊 model parameter statistics:")
         num_params = sum(p.numel() for p in model.parameters())
@@ -257,7 +279,7 @@ class TrainerUtils:
         """
         if not checkpoint_path:
             return []
-        if dist.get_rank() == 0:
+        if _is_main_process():
             print(f"📦 loading checkpoint: {checkpoint_path}")
         try:
             if _is_safetensors_path(checkpoint_path):
@@ -283,7 +305,7 @@ class TrainerUtils:
                     sub_state_dict = {k[len(prefix) :]: v for k, v in checkpoint.items() if k.startswith(prefix)}
                     if sub_state_dict:
                         module.load_state_dict(sub_state_dict, strict=True)
-                        if dist.get_rank() == 0:
+                        if _is_main_process():
                             print(f"✅ parameters loaded to module '{path}'")
                         loaded_modules.append(path)
                     else:
@@ -293,7 +315,7 @@ class TrainerUtils:
         else:  # full load
             try:
                 model.load_state_dict(checkpoint, strict=False)
-                if dist.get_rank() == 0:
+                if _is_main_process():
                     print("✅ loaded <full_model> model parameters")
                 loaded_modules = ["<full_model>"]
             except Exception as e:
@@ -499,8 +521,8 @@ class TrainerUtils:
             print("No valid JSON part found")
             return None
 
-    def _get_latest_checkpoint(self, checkpoint_dir):
-        """Find the latest checkpoint in the directory based on step number."""
+    def _get_latest_model_checkpoint(self, checkpoint_dir):
+        """Find the latest model-only checkpoint in the directory by step number."""
         if not os.path.exists(checkpoint_dir):
             self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
             return None, 0
@@ -534,7 +556,196 @@ class TrainerUtils:
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
         return latest_checkpoint_path, completed_steps
 
-import os
+    def _get_latest_checkpoint(self, checkpoint_dir):
+        """Backward-compatible alias for the latest model-only checkpoint."""
+        return self._get_latest_model_checkpoint(checkpoint_dir)
+
+    def _get_latest_training_state(self, checkpoint_dir):
+        """Find the latest full training-state checkpoint directory by step number."""
+        if not os.path.exists(checkpoint_dir):
+            self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
+            return None, 0
+
+        checkpoints = [
+            f for f in os.listdir(checkpoint_dir)
+            if re.match(r"steps_(\d+)_state$", f)
+            and os.path.isdir(os.path.join(checkpoint_dir, f))
+        ]
+
+        if not checkpoints:
+            self.accelerator.print(f"No training-state checkpoints found in {checkpoint_dir}")
+            return None, 0
+
+        try:
+            checkpoints_with_steps = [
+                (ckpt, int(re.search(r"steps_(\d+)_state$", ckpt).group(1)))
+                for ckpt in checkpoints
+            ]
+        except AttributeError as e:
+            self.accelerator.print(f"Error parsing training-state checkpoint names: {e}")
+            return None, 0
+
+        checkpoints_with_steps.sort(key=lambda x: x[1])
+        latest_checkpoint, completed_steps = checkpoints_with_steps[-1]
+        latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+        self.accelerator.print(f"Latest training-state checkpoint found: {latest_checkpoint_path}")
+        return latest_checkpoint_path, completed_steps
+
+    def _resolve_training_state_checkpoint(self, checkpoint_dir, resume_from_checkpoint):
+        """Resolve a full training-state checkpoint request.
+
+        `resume_from_checkpoint` accepts:
+        - None / "" / False: no full resume.
+        - "latest" / True: latest `steps_<N>_state` directory in checkpoint_dir.
+        - explicit path to a `steps_<N>_state` directory.
+
+        Model-only `.pt` / `.safetensors` checkpoints are intentionally rejected
+        here so warm-start and full resume cannot be confused.
+        """
+        if not resume_from_checkpoint:
+            return None, 0
+
+        if isinstance(resume_from_checkpoint, str) and resume_from_checkpoint.strip().lower() in {
+            "",
+            "0",
+            "false",
+            "none",
+            "null",
+        }:
+            return None, 0
+
+        if resume_from_checkpoint is True or str(resume_from_checkpoint).lower() == "latest":
+            return self._get_latest_training_state(checkpoint_dir)
+
+        resume_path = os.fspath(resume_from_checkpoint)
+        if os.path.isfile(resume_path):
+            raise ValueError(
+                "resume_from_checkpoint expects a full training-state directory. "
+                "For model-only .pt/.safetensors files, use trainer.pretrained_checkpoint instead."
+            )
+
+        if not os.path.isdir(resume_path):
+            raise FileNotFoundError(f"Training-state checkpoint directory not found: {resume_path}")
+
+        state = self._load_trainer_state(resume_path, required=False)
+        completed_steps = state.get("completed_steps")
+        if completed_steps is None:
+            match = re.search(r"steps_(\d+)_state$", os.path.basename(os.path.normpath(resume_path)))
+            completed_steps = int(match.group(1)) if match else 0
+
+        return resume_path, int(completed_steps)
+
+    def _save_trainer_state(self, state_dir, completed_steps, extra=None):
+        """Save trainer-owned metadata next to Accelerator/DeepSpeed state."""
+        os.makedirs(state_dir, exist_ok=True)
+        trainer_state = {
+            "completed_steps": int(completed_steps),
+            "checkpoint_type": "training_state",
+            "version": 1,
+        }
+        if extra:
+            trainer_state.update(extra)
+
+        state_path = os.path.join(state_dir, "trainer_state.json")
+        with open(state_path, "w") as f:
+            json.dump(trainer_state, f, indent=2)
+        return state_path
+
+    def _prepare_training_state_dir(self, state_dir):
+        """Create a clean temporary directory for atomic training-state saves."""
+        tmp_state_dir = state_dir + ".tmp"
+        if self.accelerator.is_main_process:
+            if os.path.exists(tmp_state_dir):
+                shutil.rmtree(tmp_state_dir)
+        self.accelerator.wait_for_everyone()
+        return tmp_state_dir
+
+    def _finalize_training_state_dir(self, tmp_state_dir, state_dir):
+        """Publish a fully written temporary training-state directory."""
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_main_process:
+            if os.path.exists(state_dir):
+                shutil.rmtree(state_dir)
+            os.replace(tmp_state_dir, state_dir)
+        self.accelerator.wait_for_everyone()
+
+    def _load_trainer_state(self, state_dir, required=True):
+        """Load trainer-owned metadata from a full training-state checkpoint."""
+        state_path = os.path.join(state_dir, "trainer_state.json")
+        if not os.path.exists(state_path):
+            if required:
+                raise FileNotFoundError(f"Missing trainer state metadata: {state_path}")
+            return {}
+
+        with open(state_path, "r") as f:
+            return json.load(f)
+
+    def _set_dataloader_resume_state(self, trainer_state):
+        """Store dataloader cursor metadata until iterators are created."""
+        self._dataloader_resume_state = trainer_state.get("dataloader_cursors", {}) if trainer_state else {}
+
+    def _get_dataloader_cursors(self):
+        """Return a JSON-serializable snapshot of tracked dataloader cursors."""
+        return getattr(self, "_dataloader_cursors", {})
+
+    def _create_tracked_iterator(self, tag, dataloader):
+        """Create an iterator restored to the saved epoch/batch cursor for `tag`."""
+        resume_state = getattr(self, "_dataloader_resume_state", {}).get(tag, {})
+        epoch = int(resume_state.get("epoch", 0))
+        batches_seen = int(resume_state.get("batches_seen_in_epoch", 0))
+
+        if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
+            dataloader.sampler.set_epoch(epoch)
+
+        if not hasattr(self, "_dataloader_cursors"):
+            self._dataloader_cursors = {}
+        self._dataloader_cursors[tag] = {
+            "epoch": epoch,
+            "batches_seen_in_epoch": batches_seen,
+        }
+
+        if batches_seen <= 0:
+            return iter(dataloader)
+
+        try:
+            from accelerate.data_loader import skip_first_batches
+
+            return iter(skip_first_batches(dataloader, batches_seen))
+        except Exception as exc:
+            logger.warning(
+                f"Falling back to manual dataloader skip for `{tag}` after skip_first_batches failed: {exc}"
+            )
+            iterator = iter(dataloader)
+            for _ in range(batches_seen):
+                next(iterator)
+            return iterator
+
+    def _next_tracked_batch(self, tag, dataloader, iterator_attr):
+        """Read the next training batch and update the saved dataloader cursor."""
+        if not hasattr(self, "_dataloader_cursors"):
+            self._dataloader_cursors = {}
+        if tag not in self._dataloader_cursors:
+            self._dataloader_cursors[tag] = {"epoch": 0, "batches_seen_in_epoch": 0}
+
+        iterator = getattr(self, iterator_attr)
+        try:
+            batch = next(iterator)
+        except StopIteration:
+            cursor = self._dataloader_cursors[tag]
+            cursor["epoch"] = int(cursor.get("epoch", 0)) + 1
+            cursor["batches_seen_in_epoch"] = 0
+
+            if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
+                dataloader.sampler.set_epoch(cursor["epoch"])
+
+            iterator = iter(dataloader)
+            setattr(self, iterator_attr, iterator)
+            batch = next(iterator)
+
+        self._dataloader_cursors[tag]["batches_seen_in_epoch"] = (
+            int(self._dataloader_cursors[tag].get("batches_seen_in_epoch", 0)) + 1
+        )
+        return batch
 
 
 def is_main_process():

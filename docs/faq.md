@@ -70,13 +70,42 @@ trainer:
 <details>
 <summary><b>Q: Can I resume training from a checkpoint?</b></summary>
 
-A: Yes, somehow can. Specify the latest checkpoint path in `config.yaml`, e.g.:
+A: There are now two different modes.
+
+**Warm start / fine-tuning from model weights** loads only model parameters. This
+is useful for continued fine-tuning, partial module reloads, and released
+model-zoo checkpoints:
 ```yaml
 trainer:
   pretrained_checkpoint: path_to_steps_10000.pt
   reload_modules: "action_model"
 ```
-Empty `reload_modules` means full load all model. However, starVLA does not save  `optimizer state`. It requires a lot of  memory/disk and bring limited benefit.
+Empty `reload_modules` means loading the whole model state dict.
+
+**Full training-state resume** restores the Accelerate/DeepSpeed state, including
+the model, optimizer, scheduler, and RNG state saved by Accelerate. Enable state
+checkpoint saving during training:
+```yaml
+trainer:
+  save_training_state: true
+```
+Then resume with either the latest state checkpoint in the current run:
+```bash
+--trainer.resume_from_checkpoint latest
+```
+or an explicit state directory:
+```bash
+--trainer.resume_from_checkpoint path/to/checkpoints/steps_10000_state
+```
+
+Model-only `.pt` / `.safetensors` files should continue to use
+`trainer.pretrained_checkpoint`; `trainer.resume_from_checkpoint` expects a full
+`steps_<N>_state` directory.
+
+StarVLA also stores the native trainer's dataloader cursor in
+`trainer_state.json` and skips already-consumed training batches when resuming.
+For the closest-to-continuous behavior, resume with the same code, config,
+dataset ordering, distributed world size, and Accelerate/DeepSpeed config.
 </details>
 
 <details>
