@@ -68,6 +68,10 @@ class PolicyWarper:
 
     @staticmethod
     def _select_instruction(instructions, batch_index: int):
+        if isinstance(instructions, np.ndarray):
+            instructions = instructions.tolist()
+        if isinstance(instructions, tuple):
+            instructions = list(instructions)
         if not isinstance(instructions, list):
             return instructions
         if len(instructions) == 0:
@@ -79,6 +83,26 @@ class PolicyWarper:
         raise IndexError(
             f"instructions has length {len(instructions)}, but batch index {batch_index} was requested"
         )
+
+    @staticmethod
+    def _normalize_task_descriptions(task_descriptions):
+        if isinstance(task_descriptions, np.ndarray):
+            task_descriptions = task_descriptions.tolist()
+        if isinstance(task_descriptions, tuple):
+            task_descriptions = list(task_descriptions)
+        if not isinstance(task_descriptions, list):
+            return task_descriptions
+
+        normalized = []
+        for item in task_descriptions:
+            if isinstance(item, np.ndarray):
+                item = item.tolist()
+            if isinstance(item, tuple):
+                item = list(item)
+            if isinstance(item, list) and len(item) == 1:
+                item = item[0]
+            normalized.append(item)
+        return normalized
 
     def reset(self, task_description: str or tuple) -> None:
 
@@ -101,7 +125,9 @@ class PolicyWarper:
         :return: (raw_actions, processed_actions)
         """
 
-        task_description = observations["annotation.human.coarse_action"][0]  # tuple
+        task_description = self._normalize_task_descriptions(
+            observations["annotation.human.coarse_action"]
+        )
         ego_view = observations["video.ego_view"]  # (N, 1, H, W, 3)
         images = ego_view
 
