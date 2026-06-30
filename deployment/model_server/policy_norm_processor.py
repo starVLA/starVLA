@@ -218,23 +218,19 @@ def _build_dataset_metadata(
     state_combined = stats_for_key.get("state", {})
 
     action_stats, action_meta = _split_combined(action_combined, action_keys, action_key_dims)
-    state_stats, state_meta = _split_combined(state_combined, state_keys, state_key_dims)
 
-    # Pydantic accepts dict input with field validators
+    statistics: Dict[str, Any] = {"action": action_stats}
+    modalities: Dict[str, Any] = {"video": {}, "action": action_meta}
+    if state_combined:
+        state_stats, state_meta = _split_combined(state_combined, state_keys, state_key_dims)
+        statistics["state"] = state_stats
+        modalities["state"] = state_meta
+
     return DatasetMetadata.model_validate(
         {
-            "statistics": {
-                "state": state_stats,
-                "action": action_stats,
-            },
-            "modalities": {
-                "video": {},
-                "state": state_meta,
-                "action": action_meta,
-            },
-            "embodiment_tag": embodiment_tag.value
-            if hasattr(embodiment_tag, "value")
-            else embodiment_tag,
+            "statistics": statistics,
+            "modalities": modalities,
+            "embodiment_tag": embodiment_tag.value if hasattr(embodiment_tag, "value") else embodiment_tag,
         }
     )
 

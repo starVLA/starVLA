@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1
+# Simulator/eval-client image for robocasa-gr1-tabletop-tasks.
+#
+# Build (from the repository root):
+#   docker build -f deployment/docker/Dockerfile.robocasa -t starvla-robocasa-eval .
+#
+# Simulation assets are large and intentionally not baked into the image; mount
+# them or download them once into a host directory/volume.
+FROM python:3.10-slim
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG ROBOSUITE_REF=v1.5.1
+ARG ROBOCASA_REPO=https://github.com/robocasa/robocasa-gr1-tabletop-tasks.git
+
+ENV PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=8
+
+# EGL/GL runtime for headless MuJoCo rendering; git for source installs; gcc and
+# Python headers for small C/C++ sdists in the robocasa dependency tree.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        libegl1 \
+        libgl1 \
+        libglib2.0-0 \
+        libopengl0 \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+WORKDIR /workspace
+
+# robocasa-gr1-tabletop needs robosuite/examples for WholeBodyMinkIK, which is
+# missing from the PyPI wheel. Keep this source install pinned.
+RUN git clone --depth 1 --branch ${ROBOSUITE_REF} https://github.com/ARISE-Initiative/robosuite.git \
+    && python -m pip install --no-cache-dir -i ${PIP_INDEX_URL} -e robosuite \
+    && python -m pip install --no-cache-dir -i ${PIP_INDEX_URL} mink==0.0.5 robosuite_models
+
+RUN git clone --depth 1 ${ROBOCASA_REPO} robocasa-gr1-tabletop-tasks \
+    && python -m pip install --no-cache-dir -i ${PIP_INDEX_URL} -e robocasa-gr1-tabletop-tasks
+
+# Client-side deps for starVLA's eval scripts. The policy model itself runs in
+# the policy-server container; this image drives simulation and websocket calls.
+RUN python -m pip install --no-cache-dir -i ${PIP_INDEX_URL} \
+        av \
+        matplotlib \
+        mediapy \
+        msgpack \
+        opencv-python \
+        pydantic \
+        tyro \
+        typing_extensions \
+        websocket-client \
+        websockets
+
+COPY . /workspace/starVLA
+WORKDIR /workspace/starVLA
+
+ENV PYTHONPATH=/workspace/starVLA
+ENV MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
+# EGL rendering inside containers needs graphics capabilities, not just compute.
+ENV NVIDIA_DRIVER_CAPABILITIES=all
+
+CMD ["/bin/bash"]

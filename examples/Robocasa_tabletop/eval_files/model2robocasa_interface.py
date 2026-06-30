@@ -25,12 +25,17 @@ class PolicyWarper:
         host="0.0.0.0",
         port=10095,
         n_action_steps=2,
+        send_state: bool = True,
     ) -> None:
 
         # build client to connect server policy
         self.client = WebsocketClientPolicy(host, port)
         self.policy_setup = policy_setup
         self.unnorm_key = unnorm_key
+        # Checkpoints trained without proprioceptive state (e.g. Qwen3-VL-OFT-Robocasa)
+        # must not receive a `state` key: QwenOFT appends discretized state tokens to
+        # the instruction whenever `state` is present, corrupting the prompt format.
+        self.send_state = send_state
 
         print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key} ***")
         self.use_ddim = use_ddim
@@ -99,18 +104,21 @@ class PolicyWarper:
         task_description = observations["annotation.human.coarse_action"][0]  # tuple
         ego_view = observations["video.ego_view"]  # (N, 1, H, W, 3)
         images = ego_view
-        state = {}
-        state["left_arm"] = observations["state.left_arm"]
-        state["right_arm"] = observations["state.right_arm"]  # (N, 1, 7)
-        state["left_hand"] = observations["state.left_hand"]  # (N, 1, 6)
-        state["right_hand"] = observations["state.right_hand"]  # (N, 1, 6)
-        state["waist"] = observations["state.waist"]  # (N, 1, 3)
 
-        state = self.normalize_state(state)
-        input_state = []
-        for key in state.keys():
-            input_state.append(state[key])
-        input_state = np.concatenate(input_state, axis=-1)
+        input_state = None
+        if self.send_state:
+            state = {}
+            state["left_arm"] = observations["state.left_arm"]
+            state["right_arm"] = observations["state.right_arm"]  # (N, 1, 7)
+            state["left_hand"] = observations["state.left_hand"]  # (N, 1, 6)
+            state["right_hand"] = observations["state.right_hand"]  # (N, 1, 6)
+            state["waist"] = observations["state.waist"]  # (N, 1, 3)
+
+            state = self.normalize_state(state)
+            input_state = []
+            for key in state.keys():
+                input_state.append(state[key])
+            input_state = np.concatenate(input_state, axis=-1)
 
         if task_description is not None:
             if task_description != self.task_description:
@@ -119,7 +127,8 @@ class PolicyWarper:
         # image: Image.Image = Image.fromarray(image)
 
         images = [[self._resize_image(img) for img in sample] for sample in images]  # (B, N_view, H, W, 3)
-        input_state = [input_s for input_s in input_state]  # B, state_dim*(sin, cos)
+        if input_state is not None:
+            input_state = [input_s for input_s in input_state]  # B, state_dim*(sin, cos)
 
         # prepare vla input
         examples = []
@@ -129,8 +138,9 @@ class PolicyWarper:
             example = {
                 "image": images[b],  # A list of multi-view images for a single sample
                 "lang": self._select_instruction(instructions, b),
-                "state": input_state[b],  # N_history, 58 #Hack BUG
             }
+            if input_state is not None:
+                example["state"] = input_state[b]  # N_history, 58 #Hack BUG
             examples.append(example)
 
         vla_input = {

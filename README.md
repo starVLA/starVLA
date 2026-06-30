@@ -375,7 +375,10 @@ StarVLA is released under the MIT License, which permits commercial use, modific
   title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
   author={Community, StarVLA},
   journal={arXiv preprint arXiv:2604.05014},
-  year={2026}
+  year={2026},
+  eprint={2604.05014},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
 }
 ```
 
