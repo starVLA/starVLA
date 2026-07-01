@@ -67,7 +67,7 @@ StarVLA uses a unified WebSocket layer to decouple complex training and evaluati
 Conventions:
 1. `policy_server.py` exposes only the core inference call: `framework.predict_action()`  
 2. Disallow ad‑hoc test‑time and simulator‑specific  on‑the‑fly parameter injection (e.g., extra un‑normalization flags, stats, execution heuristics) to preserve a stable, reproducible evaluation pipeline.
-3. Provide per‑environment policy clients (e.g., `examples/SimplerEnv/model2simpler_interface.py`) that handle connection, request packing, retries, and action post‑processing for vairous benchmarks.
+3. Provide per‑environment policy clients (e.g., `examples/simBenchmarks/SimplerEnv/model2simpler_interface.py`) that handle connection, request packing, retries, and action post‑processing for vairous benchmarks.
 
 </details>
 

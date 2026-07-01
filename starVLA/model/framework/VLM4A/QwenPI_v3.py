@@ -423,7 +423,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml",
+        default="examples/simBenchmarks/SimplerEnv/train_files/starvla_cotrain_oxe.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()
@@ -433,7 +433,7 @@ if __name__ == "__main__":
         debugpy.listen(("0.0.0.0", 10092))
         print("🔍 Rank 0 waiting for debugger attach on port 10092...")
         debugpy.wait_for_client()
-    args.config_yaml = "examples/LIBERO/train_files/starvla_cotrain_libero.yaml"
+    args.config_yaml = "examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml"
     cfg = OmegaConf.load(args.config_yaml)
     # try get model
     cfg.framework.qwenvl.base_vlm = "./playground/Pretrained_models/Qwen3-VL-4B-Instruct"

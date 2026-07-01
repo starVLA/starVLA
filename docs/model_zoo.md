@@ -24,4 +24,4 @@ We release a series of modified models and finetuning checkpoints to facilitate 
 
 | Model | Description | Avg. Length | Link |
 | --- | --- | --- | --- |
-| **QWen2.5VL-GR00T-Calvin_D_D** | Training on [Calvin_D_D](https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/calvin) | 3.786 | [🤗 Hugging Face](https://huggingface.co/Simplicissimus-S/StarVLA-QwenGR00T_Qwen2.5-VL-3B-Instruct-Action_calvin_D_D) |
+| **QWen2.5VL-GR00T-Calvin_D_D** | Training on [Calvin_D_D](https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/simBenchmarks/calvin) | 3.786 | [🤗 Hugging Face](https://huggingface.co/Simplicissimus-S/StarVLA-QwenGR00T_Qwen2.5-VL-3B-Instruct-Action_calvin_D_D) |

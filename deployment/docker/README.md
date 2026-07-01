@@ -72,7 +72,7 @@ docker run --gpus all -it --shm-size 16g \
   -v /abs/path/to/playground:/workspace/starVLA/playground \
   -v /abs/path/to/results:/workspace/starVLA/results \
   starvla-train \
-  bash examples/Robocasa_tabletop/train_files/run_robocasa.sh
+  bash examples/simBenchmarks/Robocasa_tabletop/train_files/run_robocasa.sh
 ```
 
 The default `FLASH_ATTN_WHEEL` build arg matches the torch pin used here

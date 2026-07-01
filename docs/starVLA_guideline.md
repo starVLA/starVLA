@@ -75,7 +75,7 @@ StarVLA uses **LeRobot-format** datasets. We provide a one-command script to dow
 ```bash
 # Set DEST to where you want to store the raw data (can be a shared disk)
 export DEST=/path/to/your/data/directory
-bash examples/LIBERO/data_preparation.sh
+bash examples/simBenchmarks/LIBERO/data_preparation.sh
 ```
 
 This script will:
@@ -96,7 +96,7 @@ huggingface-cli download IPEC-COMMUNITY/libero_10_no_noops_1.0.0_lerobot      --
 
 # Copy modality.json to each subset
 for d in playground/Datasets/LEROBOT_LIBERO_DATA/*/; do
-  cp examples/LIBERO/train_files/modality.json "$d/meta/"
+  cp examples/simBenchmarks/LIBERO/train_files/modality.json "$d/meta/"
 done
 ```
 </details>
@@ -123,7 +123,7 @@ To make sure the data can be loaded correctly:
 
 ```bash
 python starVLA/dataloader/lerobot_datasets.py \
-  --config_yaml examples/LIBERO/train_files/starvla_cotrain_libero.yaml
+  --config_yaml examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml
 ```
 
 ---
@@ -146,7 +146,7 @@ See [Model Zoo](model_zoo.md) for all available base models and finetuned checkp
 
 ## 4. Understanding the Training Config
 
-The config YAML at [`examples/LIBERO/train_files/starvla_cotrain_libero.yaml`](../examples/LIBERO/train_files/starvla_cotrain_libero.yaml) defines the entire training setup. Here are the key sections:
+The config YAML at [`examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml`](../examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml) defines the entire training setup. Here are the key sections:
 
 ### Framework
 
@@ -187,7 +187,7 @@ datasets:
     per_device_batch_size: 16
 ```
 
-The `data_mix` field selects which datasets to combine. These mixtures are defined in [`examples/LIBERO/train_files/data_registry/data_config.py`](../examples/LIBERO/train_files/data_registry/data_config.py):
+The `data_mix` field selects which datasets to combine. These mixtures are defined in [`examples/simBenchmarks/LIBERO/train_files/data_registry/data_config.py`](../examples/simBenchmarks/LIBERO/train_files/data_registry/data_config.py):
 
 ```python
 DATASET_NAMED_MIXTURES = {
@@ -224,7 +224,7 @@ trainer:
 
 ## 5. Understanding the Training Script
 
-The training script [`examples/LIBERO/train_files/run_libero_train.sh`](../examples/LIBERO/train_files/run_libero_train.sh) wraps around `accelerate launch`. Key variables to customize:
+The training script [`examples/simBenchmarks/LIBERO/train_files/run_libero_train.sh`](../examples/simBenchmarks/LIBERO/train_files/run_libero_train.sh) wraps around `accelerate launch`. Key variables to customize:
 
 ```bash
 ###########################################################################################
@@ -232,7 +232,7 @@ The training script [`examples/LIBERO/train_files/run_libero_train.sh`](../examp
 Framework_name=QwenOFT              # QwenOFT | QwenFAST | QwenPI_v3 | QwenGR00T
 freeze_module_list=''               # e.g. 'qwen_vl' to freeze VLM backbone
 base_vlm=playground/Pretrained_models/Qwen3-VL-4B-Instruct
-config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
+config_yaml=./examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml
 libero_data_root=playground/Datasets/LEROBOT_LIBERO_DATA
 data_mix=libero_all                 # or libero_goal for single suite
 run_root_dir=./results/Checkpoints
@@ -260,7 +260,7 @@ accelerate launch \
 
 ```bash
 # From the repository root
-bash examples/LIBERO/train_files/run_libero_train.sh
+bash examples/simBenchmarks/LIBERO/train_files/run_libero_train.sh
 ```
 
 ### What to expect
@@ -300,7 +300,7 @@ pip install tyro matplotlib mediapy websockets msgpack numpy==1.24.4
 Or use the provided script:
 
 ```bash
-bash examples/LIBERO/eval_files/install_libero.sh
+bash examples/simBenchmarks/LIBERO/eval_files/install_libero.sh
 ```
 
 ### Step 1: Download a checkpoint
@@ -314,7 +314,7 @@ huggingface-cli download StarVLA/Qwen3-VL-OFT-LIBERO-4in1 \
 
 ### Step 2: Start the policy server (Terminal 1 — starVLA env)
 
-Edit the checkpoint path in [`examples/LIBERO/eval_files/run_policy_server.sh`](../examples/LIBERO/eval_files/run_policy_server.sh):
+Edit the checkpoint path in [`examples/simBenchmarks/LIBERO/eval_files/run_policy_server.sh`](../examples/simBenchmarks/LIBERO/eval_files/run_policy_server.sh):
 
 ```bash
 CKPT=playground/Pretrained_models/StarVLA/Qwen3-VL-OFT-LIBERO-4in1/checkpoints/steps_50000_pytorch_model.pt
@@ -324,20 +324,20 @@ Then launch:
 
 ```bash
 conda activate starVLA
-bash examples/LIBERO/eval_files/run_policy_server.sh
+bash examples/simBenchmarks/LIBERO/eval_files/run_policy_server.sh
 ```
 
 Wait until you see `server listening on 0.0.0.0:6694`.
 
 ### Step 3: Run evaluation (Terminal 2 — LIBERO env)
 
-Edit the paths in [`examples/LIBERO/eval_files/eval_libero.sh`](../examples/LIBERO/eval_files/eval_libero.sh), then:
+Edit the paths in [`examples/simBenchmarks/LIBERO/eval_files/eval_libero.sh`](../examples/simBenchmarks/LIBERO/eval_files/eval_libero.sh), then:
 
 ```bash
 conda activate libero
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
-bash examples/LIBERO/eval_files/eval_libero.sh
+bash examples/simBenchmarks/LIBERO/eval_files/eval_libero.sh
 ```
 
 ### What to expect
@@ -353,8 +353,8 @@ bash examples/LIBERO/eval_files/eval_libero.sh
 ## Next Steps
 
 - **Try a different framework:** Change `Framework_name` in the training script to `QwenGR00T`, `QwenPI_v3`, or `QwenFAST`
-- **Explore other benchmarks:** Check out [SimplerEnv](../examples/SimplerEnv/), [RoboTwin](../examples/Robotwin/), [Calvin](../examples/calvin/), or [Behavior-1K](../examples/Behavior/)
+- **Explore other benchmarks:** Check out [SimplerEnv](../examples/simBenchmarks/SimplerEnv/), [RoboTwin](../examples/simBenchmarks/Robotwin/), [Calvin](../examples/simBenchmarks/calvin/), or [Behavior-1K](../examples/simBenchmarks/Behavior/)
 - **World-Model-for-Action:** Use video-generation models (Cosmos, Wan) as action backbones — see [WM4A](WM4A.md)
-- **Co-train with VLM data:** Learn how multi-objective training works in [CoTrainVLM](../examples/CoTrainVLM/)
-- **Deploy on real robots:** See the [Franka example](../examples/Franka/) for real-world deployment
+- **Co-train with VLM data:** Learn how multi-objective training works in [CoTrainVLM](../examples/modelExtensions/CoTrainVLM/)
+- **Deploy on real robots:** See the [Franka example](../examples/realRobots/Franka/) for real-world deployment
 - **RL post-training:** Check [StarVLA × RLinf](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/starvla.html)

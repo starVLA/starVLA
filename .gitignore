@@ -205,7 +205,7 @@ test_image.jpg
 
 scripts/run_scripts/sum2cluter.sh
 
-examples/SimplerEnv/eval_scripts
+examples/simBenchmarks/SimplerEnv/eval_scripts
 
 starVLA/config/frameworks/*
 starVLA/model/modules/sam_model/*
@@ -214,8 +214,8 @@ playground/*
 qwen_talk.md
 assets/R1Pro.py
 examples/SPVLA
-examples/SimplerEnv/eval_files/eval_scripts
-examples/Robotwin/train_files/submit_robotwin_training.sh
+examples/simBenchmarks/SimplerEnv/eval_files/eval_scripts
+examples/simBenchmarks/Robotwin/train_files/submit_robotwin_training.sh
 starVLA/dataloader/gr00t_lerobot/datasets_temp.py
 MUJOCO_LOG.TXT
 examples/MultiRobot/*
@@ -253,13 +253,13 @@ logs/*
 bar
 **/.nf*
 code
-examples/RoboChallenge_table30v2/*
-examples/LIBERO/eval_files/auto_eval_scripts/run_all_libero_untested.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/schedule_widowx_eval.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/schedule_widowx_eval.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
-examples/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/schedule_widowx_eval.sh
+examples/realRobots/RoboChallenge_table30v2/*
+examples/simBenchmarks/LIBERO/eval_files/auto_eval_scripts/run_all_libero_untested.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/schedule_widowx_eval.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/schedule_widowx_eval.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/summarize_widowx_all.sh
+examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results/schedule_widowx_eval.sh
 starVLA/model/framework/VLM4A/QwenGR00T_v2.py

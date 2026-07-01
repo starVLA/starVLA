@@ -22,7 +22,7 @@ Please replace the following files with the provided examples:
 
 - **LIBERO evaluation script (sim env returns historical states)**
   - Target path:  
-    `examples/LIBERO/eval_files/eval_libero.py`
+    `examples/simBenchmarks/LIBERO/eval_files/eval_libero.py`
 
 > After replacement, your pipeline will support reading **historical states** required by NeuroVLA.
 
@@ -95,7 +95,7 @@ File Paths Summary
 
 Purpose	Path
 Dataset state history config	starVLA/dataloader/gr00t_lerobot/data_config.py
-LIBERO eval returns historical states	examples/LIBERO/eval_files/eval_libero.py
+LIBERO eval returns historical states	examples/simBenchmarks/LIBERO/eval_files/eval_libero.py
 
 
 ⸻

@@ -9,15 +9,15 @@
 /starVLA/config/         @JinhuiYE
 
 # Benchmarks & examples
-/examples/LIBERO/        @JinhuiYE
-/examples/LIBERO-plus/   @missTL
-/examples/SimplerEnv/    @JinhuiYE
-/examples/Robotwin/      @Axi404
-/examples/Robocasa_tabletop/ @JinhuiYE
-/examples/calvin/        @Zhijie-Song
-/examples/VLA-Arena/     @propellanesjc
-/examples/Behavior/      @JinhuiYE
-/examples/Franka/        @yx-chen-ust
+/examples/simBenchmarks/LIBERO/        @JinhuiYE
+/examples/simBenchmarks/LIBERO-plus/   @missTL
+/examples/simBenchmarks/SimplerEnv/    @JinhuiYE
+/examples/simBenchmarks/Robotwin/      @Axi404
+/examples/simBenchmarks/Robocasa_tabletop/ @JinhuiYE
+/examples/simBenchmarks/calvin/        @Zhijie-Song
+/examples/simBenchmarks/VLA-Arena/     @propellanesjc
+/examples/simBenchmarks/Behavior/      @JinhuiYE
+/examples/realRobots/Franka/        @yx-chen-ust
 
 # Deployment
 /deployment/             @JinhuiYE

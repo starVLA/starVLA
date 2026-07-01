@@ -1,7 +1,7 @@
 """Tests for the Robocasa_tabletop eval client (PolicyWarper).
 
 Covers the state-input toggle and request plumbing from
-``examples/Robocasa_tabletop/eval_files/model2robocasa_interface.py``:
+``examples/simBenchmarks/Robocasa_tabletop/eval_files/model2robocasa_interface.py``:
 
 - ``send_state=False`` must omit the ``state`` key from the request so that
   prompt-augmenting frameworks (e.g. QwenOFT) see the same prompt format as
@@ -18,7 +18,7 @@ from unittest import mock
 
 import numpy as np
 
-from examples.Robocasa_tabletop.eval_files import model2robocasa_interface as m2r
+from examples.simBenchmarks.Robocasa_tabletop.eval_files import model2robocasa_interface as m2r
 
 
 def _fake_observations(batch_size: int = 1, image_hw: tuple = (256, 256)) -> dict:

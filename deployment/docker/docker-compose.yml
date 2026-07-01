@@ -45,7 +45,7 @@ services:
       - ${EVAL_OUT_DIR:-./eval_out}:/workspace/eval_out
     command:
       - "python"
-      - "examples/Robocasa_tabletop/eval_files/simulation_env.py"
+      - "examples/simBenchmarks/Robocasa_tabletop/eval_files/simulation_env.py"
       - "--args.host"
       - "policy-server"
       - "--args.port"
