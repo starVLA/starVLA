@@ -481,7 +481,7 @@ if __name__ == "__main__":
     print(f"Unnormalized Action: {normalized_actions}")
 
     # # # Advance: try forward model with dataloader
-    # # # can be fake sample， but here get from dataloader for simpler
+    # # # can be fake sample, but here get from dataloader for simpler
     # from starVLA.dataloader.lerobot_datasets import get_vla_dataset, collate_fn
 
     # vla_dataset_cfg = cfg.datasets.vla_data

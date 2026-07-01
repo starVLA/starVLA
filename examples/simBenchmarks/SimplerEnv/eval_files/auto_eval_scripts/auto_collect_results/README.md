@@ -1,111 +1,109 @@
-# `auto_collect_results/` — 自动批量评测与结果收集
+# `auto_collect_results/` — Automated Batch Evaluation & Result Collection
 
-这一目录提供一组**面向训练产物（`steps_*_pytorch_model.pt`）的批处理脚本**，
-负责：
+This directory provides a set of **batch scripts targeting training artifacts (`steps_*_pytorch_model.pt`)** that:
 
-1. 在 SLURM 集群上批量发起 SimplerEnv 评测任务；
-2. 完成后扫描日志、聚合 success rate、产出 CSV + 折线图；
-3. 维护 ckpt 目录（清理 `.pt`）。
+1. Submit SimplerEnv evaluation jobs in bulk on a SLURM cluster;
+2. Scan logs, aggregate success rates, and produce CSV + line charts after completion;
+3. Maintain the checkpoint directory (clean up `.pt` files).
 
-文件作用一览：
+File overview:
 
-| 文件 | 作用 | 输入 | 输出 |
+| File | Purpose | Input | Output |
 | --- | --- | --- | --- |
-| `schedule_widowx_eval.sh` | 批量调度 **WidowX / BridgeData v2**（4 任务）评测 | `<ROOT_BASE>/<DIR_GLOB>/checkpoints/steps_*_pytorch_model.pt` | 每个 ckpt 4 个 `*.log.run1`（由 `star_bridge.sh` 写入） |
-| `schedule_google_eval.sh` | 给定一个 ckpt，串行 srun 起 **Google Robot** 全部 8 个子评测 | 单一 `MODEL_PATH` | `client_logs/steps_<step>/*.log` |
-| `summarize_widowx_one.sh` | 解析**一个**实验目录下的 widowx 日志，调用 Python 出图 | 实验目录路径 | `success_summary/raw_success.txt` `success_summary.csv` `success_plot.png` |
-| `summarize_widowx_all.sh` | 在所有匹配的实验目录上循环调用 `summarize_widowx_one.sh` | `ROOT_BASE` 下的目录 glob | 各目录的 `success_summary/` |
-| `plot_widowx_results.py` | 实际绘图：按 step×task 聚合 success rate → CSV + PNG | `raw_success.txt` | `csv` + `png` |
-| `rm_pt.sh` | 用 glob 批量清理 `.pt` 文件（含 dry-run 开关） | `ROOT_DIR` + `DIR_GLOB` + `FILE_GLOB` | 删除文件 |
+| `schedule_widowx_eval.sh` | Batch-schedule **WidowX / BridgeData v2** (4 tasks) evaluation | `<ROOT_BASE>/<DIR_GLOB>/checkpoints/steps_*_pytorch_model.pt` | 4 `*.log.run1` files per ckpt (written by `star_bridge.sh`) |
+| `schedule_google_eval.sh` | Given one ckpt, serially srun all **8 Google Robot** sub-evaluations | Single `MODEL_PATH` | `client_logs/steps_<step>/*.log` |
+| `summarize_widowx_one.sh` | Parse WidowX logs for **one** experiment dir, call Python to plot | Experiment dir path | `success_summary/raw_success.txt`, `success_summary.csv`, `success_plot.png` |
+| `summarize_widowx_all.sh` | Loop `summarize_widowx_one.sh` over all matching experiment dirs | Dir glob under `ROOT_BASE` | `success_summary/` per dir |
+| `plot_widowx_results.py` | Actual plotting: aggregate success rate by step×task → CSV + PNG | `raw_success.txt` | `csv` + `png` |
+| `rm_pt.sh` | Bulk-delete `.pt` files by glob (with dry-run toggle) | `ROOT_DIR` + `DIR_GLOB` + `FILE_GLOB` | Deleted files |
 
-> 命名说明：原文件中的 `windox` 是 `widowx`（BridgeData v2 的 WidowX 机械臂）的拼写错误，本次重命名一并修正。
+> **Naming note:** The `windox` typo in some legacy files refers to `widowx` (the WidowX arm from BridgeData v2). This has been corrected in the current naming.
 
 ---
 
-## 典型工作流
+## Typical Workflow
 
-### A. 评测 WidowX (Bridge)
+### A. Evaluate WidowX (Bridge)
 
 ```
-[训练产出 steps_*_pytorch_model.pt]
+[Training artifact: steps_*_pytorch_model.pt]
         │
         ▼
-schedule_widowx_eval.sh           # 调度 srun，缺日志的 ckpt 才会跑
+schedule_widowx_eval.sh           # Schedules srun; only runs ckpts with missing logs
         │
         ▼
-star_bridge.sh   (每个 ckpt 4 个 task × N seed)
+star_bridge.sh   (each ckpt: 4 tasks × N seeds)
         │
         ▼
 steps_<step>_pytorch_model_infer_<TASK>-v0.log.run1
         │
         ▼
-summarize_widowx_all.sh           # 也可单目录用 summarize_widowx_one.sh
+summarize_widowx_all.sh           # Or use summarize_widowx_one.sh for a single dir
         │
         ▼
 success_summary/{raw_success.txt, success_summary.csv, success_plot.png}
 ```
 
-### B. 评测 Google Robot
+### B. Evaluate Google Robot
 
-`schedule_google_eval.sh` 是面向**单个 ckpt** 的脚本（修改顶部的
-`MODEL_DIR` / `step` 后直接执行），会并行 srun 起 8 个 `star_*.sh`
-（drawer / move_near / pick_coke_can / put_in_drawer 各 variant + visual_matching）。
+`schedule_google_eval.sh` is a **single-ckpt** script (edit `MODEL_DIR` / `step` at the top,
+then run directly). It launches 8 parallel `srun` calls for `star_*.sh`
+(drawer / move_near / pick_coke_can / put_in_drawer — both variant and visual_matching).
 
 ---
 
-## 怎么评测 `0427_oxe_bridge_rt_1_QwenPI_v3`
+## Evaluating `0427_oxe_bridge_rt_1_QwenPI_v3`
 
-`schedule_widowx_eval.sh` 已经把目标实验目录抽成参数，**默认值就是
-`0427_oxe_bridge_rt_1_QwenPI_v3`**，所以直接：
+`schedule_widowx_eval.sh` exposes the target experiment dir as a parameter whose
+**default is already `0427_oxe_bridge_rt_1_QwenPI_v3`**, so simply run:
 
 ```bash
 cd examples/simBenchmarks/SimplerEnv/eval_files/auto_eval_scripts/auto_collect_results
 
-# 方式 1：用默认 DIR_GLOB
+# Option 1: use the default DIR_GLOB
 bash schedule_widowx_eval.sh
 
-# 方式 2：显式传目录名 / glob
+# Option 2: pass dir name / glob explicitly
 bash schedule_widowx_eval.sh '0427_oxe_bridge_rt_1_QwenPI_v3'
 bash schedule_widowx_eval.sh '0427_oxe_bridge*'
 
-# 方式 3：env var 形式
+# Option 3: env-var form
 DIR_GLOB='0427_oxe_bridge_rt_1_QwenPI_v3' \
 SLURM_PARTITION=si SLURM_GRES=gpu:4 \
 bash schedule_widowx_eval.sh
 ```
 
-跑完之后聚合结果：
+After the runs finish, aggregate results:
 
 ```bash
-# 单实验目录
+# Single experiment directory
 bash summarize_widowx_one.sh \
   /mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints/0427_oxe_bridge_rt_1_QwenPI_v3
 
-# 或者改 summarize_widowx_all.sh 顶部的 DIR_GLOB 后批量跑
+# Or edit DIR_GLOB at the top of summarize_widowx_all.sh and batch-run
 DIR_GLOB='0427_oxe_bridge_rt_1_QwenPI_v3' bash summarize_widowx_all.sh
 ```
 
-聚合结果会落在
-`<ckpt_dir>/success_summary/{raw_success.txt, success_summary.csv, success_plot.png}`。
+Results land in `<ckpt_dir>/success_summary/{raw_success.txt, success_summary.csv, success_plot.png}`.
 
 ---
 
-## 可调环境变量
+## Configurable Environment Variables
 
-`schedule_widowx_eval.sh`：
+`schedule_widowx_eval.sh`:
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `ROOT_BASE` | `/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints` | 实验根目录 |
-| `DIR_GLOB` | `0427_oxe_bridge_rt_1_QwenPI_v3` | 实验子目录的 glob（也可作为第一个位置参数） |
-| `SLURM_PARTITION` | `si` | srun 的分区 |
-| `SLURM_GRES` | `gpu:4` | srun 的资源 |
-| `SCRIPT_PATH` | `.../auto_eval_scripts/star_bridge.sh` | bridge 评测入口 |
+| `ROOT_BASE` | `/mnt/petrelfs/yejinhui/Projects/starVLA/results/Checkpoints` | Root experiment directory |
+| `DIR_GLOB` | `0427_oxe_bridge_rt_1_QwenPI_v3` | Glob for experiment subdirectories (also accepted as the first positional arg) |
+| `SLURM_PARTITION` | `si` | srun partition |
+| `SLURM_GRES` | `gpu:4` | srun resources |
+| `SCRIPT_PATH` | `.../auto_eval_scripts/star_bridge.sh` | Bridge evaluation entry script |
 
-`summarize_widowx_all.sh` / `summarize_widowx_one.sh`：
+`summarize_widowx_all.sh` / `summarize_widowx_one.sh`:
 
-| 变量 | 默认值 | 说明 |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `ROOT_BASE` | `/mnt/.../results/Checkpoints` | 实验根目录 |
-| `DIR_GLOB` | `0427_oxe_bridge_rt_1_QwenPI_v3` | 要扫描的实验 glob |
-| `RM_LOGS` | `false` | 没解析到 success 的日志是否删除 |
+| `ROOT_BASE` | `/mnt/.../results/Checkpoints` | Root experiment directory |
+| `DIR_GLOB` | `0427_oxe_bridge_rt_1_QwenPI_v3` | Glob for experiments to scan |
+| `RM_LOGS` | `false` | Whether to delete logs where no success was parsed |

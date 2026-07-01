@@ -355,7 +355,7 @@ class CrossAttention(nn.Module):
         return output
 
 
-def preprocess_images(image_list, target_size, mode="crop"):  #  [B，[PLT]]
+def preprocess_images(image_list, target_size, mode="crop"):  #  [B, [PLT]]
     batch_images = []
     shapes = set()
     to_tensor = TF.ToTensor()

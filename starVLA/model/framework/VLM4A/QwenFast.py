@@ -195,7 +195,7 @@ class Qwenvl_Fast(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
-        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
 
         # train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)

@@ -15,8 +15,8 @@ QUESTION = (
 
 def process_annotations(data_path: str, dataset_name: str, max_frames: int = 8):
     data = json.load(open(data_path, "r"))
-    print(f"\n{dataset_name} 数据总量: {len(data)}")
-    print(f"{dataset_name} 数据示例:", data[0])
+    print(f"\n{dataset_name} total samples: {len(data)}")
+    print(f"{dataset_name} sample:", data[0])
 
     qwen_anno = []
     for item in data:
@@ -49,20 +49,20 @@ def process_annotations(data_path: str, dataset_name: str, max_frames: int = 8):
         }
         qwen_anno.append(new_item)
 
-    print(f"{dataset_name} 处理后的数据示例:", qwen_anno[0])
+    print(f"{dataset_name} processed sample:", qwen_anno[0])
 
     output_path = "/".join(data_path.split("/")[:-1]) + "/annotations.json"
     with open(output_path, "w") as f:
         json.dump(qwen_anno, f)
 
-    print(f"{dataset_name} 数据处理完成，保存至: {output_path}")
+    print(f"{dataset_name} processing complete, saved to: {output_path}")
     return qwen_anno
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path", type=str, required=True, help="annotations.json 的路径")
-    parser.add_argument("--dataset", type=str, required=True, choices=["R2R", "RxR"], help="数据集名称")
+    parser.add_argument("--data_path", type=str, required=True, help="path to annotations.json")
+    parser.add_argument("--dataset", type=str, required=True, choices=["R2R", "RxR"], help="dataset name")
     parser.add_argument("--max_frames", type=int, default=8)
     args = parser.parse_args()
 

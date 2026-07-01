@@ -1,61 +1,61 @@
-
 # Auto Eval Scripts for LIBERO
 
-这里包含了内部使用的批量评测脚本，用于快速评测所有 LIBERO task suite。
-全自动评测与使用的平台有绑定，可能需要根据自己的环境做适配。
-原理参考 `examples/simBenchmarks/LIBERO/README.md`。
+These scripts are used internally for batch evaluation across all LIBERO task suites.
+The fully automated evaluation is tied to a specific compute platform and may require
+adaptation to your own environment.
+See `examples/simBenchmarks/LIBERO/README.md` for the underlying principles.
 
-## 脚本说明
+## Script Overview
 
-| 脚本 | 用途 |
+| Script | Purpose |
 |------|------|
-| `auto_eval_libero.sh` | **主入口**。定义 ckpt 目录/列表、GPU 列表、task suite，自动分配 GPU 并行评测 |
-| `eval_libero_parall.sh` | 单次评测脚本。启动 policy server → 运行 eval → 关闭 server |
-| `see_sr_auto.sh` | 扫描评测日志，汇总 success rate |
-| `rm_video.sh` | 清理评测录像 |
+| `auto_eval_libero.sh` | **Main entry point**. Define checkpoint dir/list, GPU list, and task suites; automatically assigns GPUs for parallel evaluation |
+| `eval_libero_parall.sh` | Single evaluation script. Starts policy server → runs eval → shuts down server |
+| `see_sr_auto.sh` | Scans evaluation logs and aggregates success rates |
+| `rm_video.sh` | Cleans up evaluation recordings |
 
-## 快速使用
+## Quick Start
 
-### 1. 修改 `auto_eval_libero.sh` 顶部的配置
+### 1. Edit the config block at the top of `auto_eval_libero.sh`
 
 ```bash
-# 评测哪些 checkpoint（自动扫描目录下所有 .pt）
+# Which checkpoints to evaluate (auto-scans all .pt files under this dir)
 CKPT_DIR="results/Checkpoints/0405_libero4in1_CosmoPredict2GR00T/checkpoints"
 
-# 或手动指定列表（非空时覆盖 CKPT_DIR）
+# Or specify a manual list (overrides CKPT_DIR when non-empty)
 CKPT_LIST=(
     # "results/Checkpoints/.../steps_30000_pytorch_model.pt"
 )
 
-# 评测哪些 task suite
+# Which task suites to evaluate
 TASK_SUITES=(libero_10 libero_goal libero_object libero_spatial)
 
-# 可用 GPU（round-robin 分配）
+# Available GPUs (assigned round-robin)
 GPU_LIST=(0 1 2 3 4 5 6 7)
 ```
 
-### 2. 运行
+### 2. Run
 
 ```bash
 bash examples/simBenchmarks/LIBERO/eval_files/auto_eval_scripts/auto_eval_libero.sh
 ```
 
-脚本会将 `ckpts × task_suites` 的任务轮流分配到 GPU 上，每填满一轮 GPU 后等待该批次完成再启动下一轮。
+The script round-robins `ckpts × task_suites` jobs across GPUs; it waits for the
+current batch to finish before launching the next one.
 
-### 3. 查看结果
+### 3. View Results
 
 ```bash
-# 默认扫描 0405 实验
+# Default: scans the 0405 experiment
 bash examples/simBenchmarks/LIBERO/eval_files/auto_eval_scripts/see_sr_auto.sh
 
-# 或指定其他实验目录
+# Or specify a different experiment directory
 bash examples/simBenchmarks/LIBERO/eval_files/auto_eval_scripts/see_sr_auto.sh results/Checkpoints/YOUR_EXP
 ```
 
-## 调度逻辑
+## Scheduling Logic
 
-- `eval_libero_parall.sh` 接受 4 个参数：`ckpt_path`、`task_suite_name`、`gpu_id`、`port`
-- `auto_eval_libero.sh` 按 `job_index % num_gpus` round-robin 分配 GPU
-- 每轮最多同时跑 `num_gpus` 个任务，等一轮全部完成后再启动下一轮
-- 每个任务使用独立端口 `BASE_PORT + job_index`，避免冲突
-
+- `eval_libero_parall.sh` accepts 4 arguments: `ckpt_path`, `task_suite_name`, `gpu_id`, `port`
+- `auto_eval_libero.sh` assigns GPUs round-robin via `job_index % num_gpus`
+- At most `num_gpus` jobs run concurrently; the script waits for one full round to complete before starting the next
+- Each job uses an independent port `BASE_PORT + job_index` to avoid conflicts

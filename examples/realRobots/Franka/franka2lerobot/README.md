@@ -175,7 +175,7 @@ OUT_PATH/
 └── <ROOT_PATH>_lerobot/
 ```
 
-example：
+example:
 
 ```text
 ROOT_PATH=/data/pick_and_place_franka_data

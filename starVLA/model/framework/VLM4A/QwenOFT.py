@@ -16,7 +16,7 @@ Key Points:
 
 Note: How to add special tokens to Qwen2.5:
   download our model checkpoint with special tokens added: https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action
-  or /starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md （adpat a little code)
+  or /starVLA/model/modules/vlm/tools/add_qwen_special_tokens/README.md (adapt a little code)
 
 """
 
@@ -159,9 +159,9 @@ class Qwenvl_OFT(baseframework):
             dict:
                 action_loss (torch.Tensor): Scalar diffusion noise prediction loss.
         """
-        batch_images = [example["image"] for example in examples]  #  [B，[PLT]]
+        batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-        actions = [example["action"] for example in examples]  # label [B， len, 7]
+        actions = [example["action"] for example in examples]  # label [B, len, 7]
         state = (
             [example["state"] for example in examples] if "state" in examples[0] else None
         )  # List[ndarray (1, state_dim)] or None
@@ -229,7 +229,7 @@ class Qwenvl_OFT(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
-        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         state = (
             [example["state"] for example in examples] if "state" in examples[0] else None

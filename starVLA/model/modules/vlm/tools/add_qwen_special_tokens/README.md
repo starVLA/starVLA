@@ -2,7 +2,7 @@
 
 Quickly add new special tokens to Qwen/Qwen2.5-VL-3B-Instruct (or compatible models) and save them to a locally loadable directory.
 
-## 运行
+## Usage
 
 ```bash
 

@@ -1,47 +1,47 @@
-# VLM 模块设计 (`starVLA/model/modules/vlm/`)
+# VLM Module (`starVLA/model/modules/vlm/`)
 
-## 定位
+## Overview
 
-VLM 模块封装各种 **Vision-Language Model** 后端（Qwen2.5-VL、Qwen3-VL、Qwen3.5-VL、Florence-2），
-为上层 `framework/VLM4A/` 中的 VLA 框架提供统一接口。
+The VLM module wraps various **Vision-Language Model** backends (Qwen2.5-VL, Qwen3-VL, Qwen3.5-VL, Florence-2),
+providing a unified interface to the VLA frameworks in `framework/VLM4A/`.
 
-## 接口规范
+## Interface Contract
 
-每个 VLM wrapper 都继承 `nn.Module`，实现以下方法：
+Every VLM wrapper inherits `nn.Module` and implements:
 
-| 方法 | 签名 | 用途 |
+| Method | Signature | Purpose |
 |------|------|------|
-| `__init__` | `(config)` | 加载预训练模型 + processor |
-| `forward` | `(**kwargs) -> CausalLMOutputWithPast` | 前向传播（训练/推理） |
-| `generate` | `(**kwargs)` | 自回归生成 |
-| `build_qwenvl_inputs` | `(images, instructions, solutions=None)` | 构建模型输入 |
+| `__init__` | `(config)` | Load pretrained model + processor |
+| `forward` | `(**kwargs) -> CausalLMOutputWithPast` | Forward pass (train / inference) |
+| `generate` | `(**kwargs)` | Autoregressive generation |
+| `build_qwenvl_inputs` | `(images, instructions, solutions=None)` | Build model inputs |
 
-## 工厂函数
+## Factory Function
 
 ```python
 from starVLA.model.modules.vlm import get_vlm_model
-vlm = get_vlm_model(config)  # 根据 config.framework.qwenvl.base_vlm 路由
+vlm = get_vlm_model(config)  # Dispatches on config.framework.qwenvl.base_vlm
 ```
 
-## 现有实现
+## Existing Implementations
 
-| 文件 | 类名 | 支持的模型 |
+| File | Class | Supported Models |
 |------|------|-----------|
-| `QWen2_5.py` | `_QWen_VL_Interface` | Qwen2.5-VL 系列 |
-| `QWen3.py` | `_QWen3_VL_Interface` | Qwen3-VL 系列 |
-| `QWen3_5.py` | `_QWen3_5_VL_Interface` | Qwen3.5-VL 系列 |
-| `Florence2.py` | `_Florence_Interface` | Florence-2 系列 |
-| `Gemma4.py` | `_Gemma4_VL_Interface` | Gemma-4 (E2B 等) |
+| `QWen2_5.py` | `_QWen_VL_Interface` | Qwen2.5-VL series |
+| `QWen3.py` | `_QWen3_VL_Interface` | Qwen3-VL series |
+| `QWen3_5.py` | `_QWen3_5_VL_Interface` | Qwen3.5-VL series |
+| `Florence2.py` | `_Florence_Interface` | Florence-2 series |
+| `Gemma4.py` | `_Gemma4_VL_Interface` | Gemma-4 (E2B, etc.) |
 | `Molmo2.py` | `_Molmo2_VL_Interface` | AllenAI Molmo2 (4B / 8B / O-7B / VideoPoint-4B) |
 | `MiniCPM_V.py` | `_MiniCPM_VL_Interface` | OpenBMB MiniCPM-V 4.6 |
 
-## 与 World Model 的关系
+## Relationship with World Model
 
-Cosmos-Reason2 已迁移至 `starVLA/model/modules/world_model/`。
-如果 `config.framework.qwenvl.base_vlm` 包含 `cosmos-reason2`，
-`get_vlm_model()` 会自动委托给 `get_world_model()`，保持向后兼容。
+Cosmos-Reason2 has been migrated to `starVLA/model/modules/world_model/`.
+If `config.framework.qwenvl.base_vlm` contains `cosmos-reason2`,
+`get_vlm_model()` automatically delegates to `get_world_model()` for backward compatibility.
 
-## 数据流
+## Data Flow
 
 ```
 Framework.__init__()

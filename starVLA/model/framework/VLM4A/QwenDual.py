@@ -229,10 +229,10 @@ class Qwen_Dual(baseframework):
         return {"normalized_actions": normalized_actions}
 
     def align_model_input(self, examples: List[dict]):
-        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B，[PLT]]
+        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         wrist_views = (
             [to_pil_preserve(example["wrist_views"]) for example in examples] if "wrist_views" in examples[0] else None
-        )  #  [B，[PLT]]
+        )  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
