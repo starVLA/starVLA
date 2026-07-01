@@ -24,22 +24,7 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 > **💡 Tip:** Files under any `**/bar/` directory are git-ignored, so you can place your custom scripts there (e.g., `examples/simBenchmarks/LIBERO/train_files/bar/my_train.sh`) without polluting the repo.
 
-**[2026/06/22]** 🆕 **StarVLA Contributors Group:** To make contributor communication more direct and to discuss updates before each release, we are creating a StarVLA Contributors Group for people who have submitted effective PRs to StarVLA.
-
-This group is mainly for:
-- discussing PRs, issues, roadmap, benchmarks, model adaptation, and engineering implementation;
-- helping contributors know each other better;
-- making it easier for us to contact contributors for future releases, the contributor list, and community activities.
-
-If you have contributed to StarVLA and would like to join the group, please scan the QR code in [Issue #393](https://github.com/starVLA/starVLA/issues/393). If the QR code is unavailable or expires, you can also contact us through the social links, X, WeChat, or email listed on [jhuiye.com](https://jhuiye.com/).
-
-When joining the group, please use the following remark / group nickname format so that we can identify your contribution record:
-
-```text
-GitHub username - PR #id1 - #id2 - #id3
-```
-
-Welcome everyone to help maintain StarVLA's open-source infrastructure together.
+**[2026/06/22]** 🔥 We are creating a [StarVLA Contributors Group](https://github.com/starVLA/starVLA/issues/393) to make contributor communication easier and discuss contributor list before each release. Welcome everyone to help maintain StarVLA's open-source infrastructure together.
 
 **[2026/05/30]** 🔥 StarVLA now supports [VLA training with **Qwen-series backbones** on **Ascend NPU**](https://github.com/starVLA/starVLA/pull/336). See the [related discussion](https://github.com/starVLA/starVLA/issues/341) for details and feedback.
 
