@@ -132,8 +132,8 @@ def build_param_lr_groups(model, cfg):
         try:
             for attr in module_name.split("."):
                 module = getattr(module, attr)
-            # filter out frozen parameters
-            params = [p for p in module.parameters() if id(p) not in frozen_params]
+            # Filter out explicitly frozen params and PEFT-frozen base weights.
+            params = [p for p in module.parameters() if p.requires_grad and id(p) not in frozen_params]
             if params:  # only add param group if there are trainable parameters
                 param_groups.append({"params": params, "lr": lr, "name": module_name})
                 used_params.update(id(p) for p in params)
@@ -141,7 +141,9 @@ def build_param_lr_groups(model, cfg):
             ReferenceError(f"⚠️ module path `{module_name}` not found in vla")
 
     # assign base learning rate to the remaining unused parameters (exclude frozen ones)
-    other_params = [p for p in model.parameters() if id(p) not in used_params and id(p) not in frozen_params]
+    other_params = [
+        p for p in model.parameters() if p.requires_grad and id(p) not in used_params and id(p) not in frozen_params
+    ]
     if other_params:
         param_groups.append({"params": other_params, "lr": base_lr, "name": "base"})
 
@@ -509,30 +511,30 @@ class TrainerUtils:
             self.accelerator.print(f"No checkpoint directory found at {checkpoint_dir}")
             return None, 0
 
-        # Find all checkpoints matching the naming convention, supports .pt and .safetensors
-        checkpoints = [
-            f for f in os.listdir(checkpoint_dir) 
-            if re.match(r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", f)
-            and os.path.isfile(os.path.join(checkpoint_dir, f))  # ensure it is a file
-        ]
+        # Find all checkpoints matching the naming convention. Prefer full
+        # checkpoint files over same-step adapter-only LoRA directories.
+        checkpoint_pattern = r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$"
+        adapter_pattern = r"steps_(\d+)_(?:vlm_lora_adapter|qwen_lora_adapter)$"
+        checkpoints_with_steps = []
+        for entry in os.listdir(checkpoint_dir):
+            entry_path = os.path.join(checkpoint_dir, entry)
+            checkpoint_match = re.match(checkpoint_pattern, entry)
+            if checkpoint_match and os.path.isfile(entry_path):
+                checkpoints_with_steps.append((entry, int(checkpoint_match.group(1)), 1))
+                continue
 
-        if not checkpoints:
+            adapter_match = re.match(adapter_pattern, entry)
+            if adapter_match and os.path.isdir(entry_path):
+                checkpoints_with_steps.append((entry, int(adapter_match.group(1)), 0))
+
+        if not checkpoints_with_steps:
             self.accelerator.print(f"No checkpoints found in {checkpoint_dir}")
             return None, 0
 
-        # Extract step numbers and sort
-        try:
-            checkpoints_with_steps = [
-                (ckpt, int(re.search(r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", ckpt).group(1)))
-                for ckpt in checkpoints
-            ]
-        except AttributeError as e:
-            self.accelerator.print(f"Error parsing checkpoint filenames: {e}")
-            return None, 0
-
-        # Sort by step number and get the latest checkpoint
-        checkpoints_with_steps.sort(key=lambda x: x[1])
-        latest_checkpoint, completed_steps = checkpoints_with_steps[-1]
+        # Sort by step number, then prefer full checkpoint files over
+        # adapter-only directories when both exist for the same step.
+        checkpoints_with_steps.sort(key=lambda x: (x[1], x[2]))
+        latest_checkpoint, completed_steps, _ = checkpoints_with_steps[-1]
 
         latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")

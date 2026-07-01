@@ -72,6 +72,10 @@ echo "[gemma4-vla] GRAD_ACCUM=${GRAD_ACCUM}  effective BS = ${PER_DEVICE_BS}Ã—8Ã
 echo "[gemma4-vla] ENABLE_GRAD_CKPT=${ENABLE_GRAD_CKPT}  ZERO_STAGE=${ZERO_STAGE}"
 echo "[gemma4-vla] RUN_ID=${RUN_ID}"
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 accelerate launch \
   --config_file "${ACCEL_CONFIG}" \
   --num_processes 8 \
@@ -92,4 +96,5 @@ accelerate launch \
   --trainer.logging_frequency 100 \
   --trainer.eval_interval 5000 \
   --run_root_dir "${RUN_ROOT_DIR}" \
-  --run_id "${RUN_ID}"
+  --run_id "${RUN_ID}" \
+  "${EXTRA_ARGS[@]}"

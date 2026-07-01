@@ -48,6 +48,10 @@ mkdir -p ${output_dir}
 # Archive this script for reproducibility
 cp $0 ${output_dir}/
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 # ---------------------------------------------------------------------------
 # Single-node launch (8 GPUs via accelerate + DeepSpeed ZeRO-2)
 # ---------------------------------------------------------------------------
@@ -71,7 +75,8 @@ accelerate launch \
   --run_root_dir ${run_root_dir} \
   --run_id ${run_id} \
   --wandb_project starVLA_VLA_Arena \
-  --wandb_entity your_wandb_entity
+  --wandb_entity your_wandb_entity \
+  "${EXTRA_ARGS[@]}"
   # --is_debug True
 
 

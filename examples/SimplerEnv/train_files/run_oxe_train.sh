@@ -1,5 +1,7 @@
 
 
+#!/usr/bin/env bash
+
 export NCCL_SOCKET_IFNAME=bond0
 export NCCL_IB_HCA=mlx5_2,mlx5_3
 
@@ -29,6 +31,9 @@ mkdir -p ${output_dir}
 # mv this script to the output dir
 cp $0 ${output_dir}/
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
 
 
 accelerate launch \
@@ -50,6 +55,7 @@ accelerate launch \
   --run_id ${run_id} \
   --wandb_project starVLA_simplerEnv \
   --wandb_entity jinhuiye \
+  "${EXTRA_ARGS[@]}"
   # --is_debug True
 
 

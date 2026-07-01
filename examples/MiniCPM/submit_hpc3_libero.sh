@@ -61,6 +61,10 @@ echo "[minicpm-vla] DATA_MIX=${DATA_MIX}  STEPS=${MAX_STEPS}  PER_DEVICE_BS=${PE
 echo "[minicpm-vla] effective BS = ${PER_DEVICE_BS}×8×1 (GA=1 from ds_config.yaml)"
 echo "[minicpm-vla] FREEZE_MODULES='${FREEZE_MODULES}'  RUN_ID=${RUN_ID}"
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 accelerate launch \
   --config_file "${ACCEL_CONFIG}" \
   --num_processes 8 \
@@ -81,4 +85,5 @@ accelerate launch \
   --trainer.logging_frequency 100 \
   --trainer.eval_interval 5000 \
   --run_root_dir "${RUN_ROOT_DIR}" \
-  --run_id "${RUN_ID}"
+  --run_id "${RUN_ID}" \
+  "${EXTRA_ARGS[@]}"

@@ -53,6 +53,10 @@ srun --jobid "$SLURM_JOBID" bash -c '
   set -e
   echo "Host=$(hostname)  SLURM_PROCID=$SLURM_PROCID"
 
+  EXTRA_ARGS=()
+  source examples/common/vlm_lora_args.sh
+  append_vlm_lora_args
+
   accelerate launch \
     --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
     --main_process_ip '"$MASTER_ADDR"' \
@@ -76,5 +80,6 @@ srun --jobid "$SLURM_JOBID" bash -c '
     --run_root_dir '"$run_root_dir"' \
     --run_id '"$run_id"' \
     --wandb_project starVLA_Robotwin \
-    --wandb_entity axi-the-cat
+    --wandb_entity axi-the-cat \
+    "${EXTRA_ARGS[@]}"
 '

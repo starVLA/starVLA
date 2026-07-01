@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # export CUDA_VISIBLE_DEVICES=0
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
@@ -32,6 +34,10 @@ mkdir -p ${output_dir}
 # mv this script to the output dir
 cp $0 ${output_dir}/
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes 8 \
@@ -52,6 +58,7 @@ accelerate launch \
   --run_id ${run_id} \
   --wandb_project starVLA_Calvin \
   --wandb_entity your_wandb_entity \
+  "${EXTRA_ARGS[@]}"
   # --is_debug True
 
 

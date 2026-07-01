@@ -9,7 +9,7 @@ set -euo pipefail
 # WandB — set your own key, or run `wandb login` before launching,
 # or uncomment the line below to disable WandB entirely:
 #   export WANDB_MODE=disabled
-export WANDB_API_KEY=<your_wandb_api_key>
+export WANDB_API_KEY="${WANDB_API_KEY:-}"
 
 # NCCL networking — uncomment and edit to match your InfiniBand / RoCE setup:
 #   export NCCL_SOCKET_IFNAME=<your_network_interface>   # e.g. eth0, bond0
@@ -46,6 +46,10 @@ output_dir=${run_root_dir}/${run_id}
 mkdir -p "${output_dir}"
 cp "$0" "${output_dir}/"
 
+EXTRA_ARGS=()
+source examples/common/vlm_lora_args.sh
+append_vlm_lora_args
+
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --num_processes "${NUM_GPUS}" \
@@ -58,4 +62,5 @@ accelerate launch \
   --trainer.eval_interval "${EVAL_EVERY}" \
   --run_root_dir "${run_root_dir}" \
   --run_id "${run_id}" \
-  --wandb_project starVLA_robocasa365
+  --wandb_project starVLA_robocasa365 \
+  "${EXTRA_ARGS[@]}"
