@@ -227,6 +227,16 @@ class M1Inference:
         if self.current_step % action_chunk_size == 0:
             if self.current_step % 100 == 0:
                 print("Step:", self.current_step)
+            # === TRAIN/TEST CONSISTENCY: keep the observation below aligned with training ===
+            # Embodied policies degrade SILENTLY (no error) when the eval-time observation
+            # differs from what the model saw during TRAINING. Verify these match the
+            # training config used for this checkpoint:
+            #   - state       : whether proprioceptive state is included (and its dim/order/normalization)
+            #   - image size  : resize / crop resolution (e.g. 224x224)
+            #   - image count : how many camera views are fed
+            #   - image order : the ordering of those camera views
+            #   - action normalization: unnorm_key must match the training dataset stats
+            # ==============================================================================
             response = self.client.infer(vla_input)
 
             # Check if the response indicates an error

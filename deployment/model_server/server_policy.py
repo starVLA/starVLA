@@ -28,6 +28,29 @@ def main(args) -> None:
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
+    # =========================================================================
+    # !!! TRAIN / TEST CONSISTENCY — READ BEFORE SERVING !!!
+    # -------------------------------------------------------------------------
+    # This server replays the *training-time* observation contract. The eval
+    # client MUST feed observations exactly as the model saw them at TRAIN time,
+    # otherwise the success rate silently drops (no error is raised):
+    #   - state   : is proprioceptive state used? (use_state) and its dim/order
+    #   - img size: resize / crop resolution (e.g. 224x224)
+    #   - img num : how many camera views are fed
+    #   - img order: the ordering of those camera views
+    #   - action normalization: unnorm_key / dataset stats must match training
+    # `wrapper.metadata` (logged below and sent at handshake) exposes
+    # action_chunk_size / state_keys / action_keys — cross-check these against
+    # the training config used to produce `args.ckpt_path`.
+    # =========================================================================
+    logging.warning(
+        "[TRAIN/TEST CONSISTENCY CHECK] serving ckpt=%s — verify eval observations "
+        "(state / image size / image count / image order / action normalization) match "
+        "the training config. metadata=%s",
+        args.ckpt_path,
+        wrapper.metadata,
+    )
+
     # start websocket server; wrapper.metadata is sent at handshake.
     server = WebsocketPolicyServer(
         policy=wrapper,

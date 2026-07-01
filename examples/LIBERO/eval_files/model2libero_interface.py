@@ -136,6 +136,16 @@ class ModelClient:
                 "use_ddim": self.use_ddim,
                 "num_ddim_steps": self.num_ddim_steps,
             }
+            # === TRAIN/TEST CONSISTENCY: keep the observation below aligned with training ===
+            # Embodied policies degrade SILENTLY (no error) when the eval-time observation
+            # differs from what the model saw during TRAINING. Verify these match the
+            # training config used for this checkpoint:
+            #   - state       : whether proprioceptive state is included (and its dim/order/normalization))
+            #   - image size  : resize / crop resolution (e.g. 224x224)
+            #   - image count : how many camera views are fed
+            #   - image order : the ordering of those camera views
+            #   - action normalization: unnorm_key must match the training dataset stats
+            # ==============================================================================
             response = self.client.predict_action(vla_input)
             try:
                 actions_batch = response["data"]["actions"]  # (B, T, D), unnormalized server-side

@@ -12,6 +12,32 @@ from typing_extensions import override
 
 from . import msgpack_numpy
 
+# =============================================================================
+# TRAIN / TEST CONSISTENCY REMINDER (shown at every eval entry point)
+# -----------------------------------------------------------------------------
+# Every eval benchmark under `examples/` connects to the policy server through
+# this client, so this banner is emitted once per eval run. Embodied policies
+# are extremely sensitive to the gap between how observations are built during
+# TRAINING versus INFERENCE. A silent mismatch will NOT raise an error, it will
+# only quietly degrade the success rate.
+# =============================================================================
+_CONSISTENCY_REMINDER = (
+    "\n"
+    "============================================================\n"
+    "  [TRAIN/TEST CONSISTENCY CHECK] read before trusting results\n"
+    "------------------------------------------------------------\n"
+    "  Make sure the EVAL observation matches TRAINING for:\n"
+    "    - state    : whether proprioceptive state is fed (use_state)\n"
+    "                 and its dimension / ordering\n"
+    "    - img size : resize / crop resolution (e.g. 224x224)\n"
+    "    - img count: how many camera views are fed to the model\n"
+    "    - img order: the ordering of those camera views\n"
+    "    - horizon  : action chunk size / action horizon\n"
+    "  A mismatch on ANY of these silently lowers the success rate.\n"
+    "  Cross-check the values below against your training config.\n"
+    "============================================================"
+)
+
 
 class WebsocketClientPolicy:
     """Implements the Policy interface by communicating with a server over websocket.
@@ -27,6 +53,11 @@ class WebsocketClientPolicy:
         self._packer = msgpack_numpy.Packer()
         self._api_key = api_key
         self._ws, self._server_metadata = self._wait_for_server()
+
+        # Remind the user to keep the eval-time observation pipeline aligned with
+        # training, and echo the server metadata so the values can be verified.
+        logging.warning(_CONSISTENCY_REMINDER)
+        logging.warning("[TRAIN/TEST CONSISTENCY CHECK] server metadata: %s", self._server_metadata)
 
     def get_server_metadata(self) -> Dict:
         return self._server_metadata

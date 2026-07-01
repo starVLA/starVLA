@@ -127,6 +127,16 @@ class ModelClient:
         action_chunk_size = self.action_chunk_size
 
         if step % action_chunk_size == 0 or self.raw_actions is None:
+            # === TRAIN/TEST CONSISTENCY: keep the observation below aligned with training ===
+            # Embodied policies degrade SILENTLY (no error) when the eval-time observation
+            # differs from what the model saw during TRAINING. Verify these match the
+            # training config used for this checkpoint:
+            #   - state       : whether proprioceptive state is included (and its dim/order/normalization))
+            #   - image size  : resize / crop resolution (e.g. 224x224)
+            #   - image count : how many camera views are fed
+            #   - image order : the ordering of those camera views
+            #   - action normalization: unnorm_key must match the training dataset stats
+            # ==============================================================================
             response = self.client.predict_action(vla_input)
             # server already un-normalized via training-time transform
             raw_actions = np.array(response["data"]["actions"][0])  # (chunk, D)
