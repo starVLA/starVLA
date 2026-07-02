@@ -275,6 +275,8 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on reporting bug
 
 **LangForce** (ICML 2026): [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
 
+**LaWAM**: [*LaWAM: Latent World Action Models for Efficient Dynamics-Aware Robot Policies*](https://github.com/RLinf/LaWAM)
+
 Examples:
 ```bash
 accelerate launch \
