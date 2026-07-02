@@ -19,9 +19,10 @@ class SingleProcessDistSafetyTest(unittest.TestCase):
         num_params, num_trainable = TrainerUtils.print_trainable_parameters(model)
         self.assertEqual(num_params, num_trainable)
 
-        with tempfile.NamedTemporaryFile(suffix=".pt") as checkpoint_file:
-            torch.save(model.state_dict(), checkpoint_file.name)
-            loaded_model = TrainerUtils.load_pretrained_backbones(nn.Linear(2, 3), checkpoint_file.name)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = os.path.join(tmpdir, "checkpoint.pt")
+            torch.save(model.state_dict(), checkpoint_path)
+            loaded_model = TrainerUtils.load_pretrained_backbones(nn.Linear(2, 3), checkpoint_path)
 
         self.assertIsInstance(loaded_model, nn.Module)
 

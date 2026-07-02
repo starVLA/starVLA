@@ -13,6 +13,7 @@ Conventions:
 # Standard Library
 import argparse
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Tuple
@@ -21,8 +22,6 @@ from typing import Tuple
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin
-from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
@@ -32,18 +31,15 @@ from transformers import AutoProcessor, get_scheduler
 # Local Modules
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
+from starVLA.training.accelerator_utils import create_accelerator
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
-
-deepspeed_plugin = DeepSpeedPlugin()
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
-accelerator.print(accelerator.state)
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Initialize logger
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def load_fast_tokenizer():
@@ -323,6 +319,8 @@ def main(cfg) -> None:
 
     cfg = wrap_config(cfg)
     logger.info("✅ Configuration wrapped for access tracking")
+    accelerator = create_accelerator(cfg)
+    accelerator.print(accelerator.state)
 
     output_dir = setup_directories(cfg=cfg)
     vlm = build_framework(cfg)
