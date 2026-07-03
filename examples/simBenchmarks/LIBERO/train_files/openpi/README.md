@@ -4,6 +4,9 @@ This folder contains StarVLA configs for OpenPI-style PI0 and PI05 on LIBERO.
 Use the 8-GPU configs for full training, and `pi05_libero_local.yaml` for a
 single-machine smoke run.
 
+Converted OpenPI-to-StarVLA checkpoints are available at:
+`https://huggingface.co/tenstep/pi_model_starvla`
+
 ## Local Layout
 
 The default files assume this repo-local layout:
@@ -28,6 +31,10 @@ Override any of these with env vars in the shell scripts if your layout differs.
 - `pi0_05_to_starvla.py`: convert OpenPI checkpoints to StarVLA format.
 
 ## Convert Base Checkpoint
+
+If you already want ready-to-use converted checkpoints, download them from
+`https://huggingface.co/tenstep/pi_model_starvla` and place them under
+`openpi_converted_protocol/`.
 
 ```bash
 python examples/simBenchmarks/LIBERO/train_files/openpi/pi0_05_to_starvla.py \

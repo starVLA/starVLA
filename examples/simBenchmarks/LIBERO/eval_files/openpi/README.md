@@ -3,6 +3,9 @@
 This folder keeps the minimal LIBERO eval path for OpenPI-style `PI0` / `PI05`
 inside the StarVLA codebase.
 
+Converted OpenPI-to-StarVLA checkpoints are available at:
+`https://huggingface.co/tenstep/pi_model_starvla`
+
 Default model loading uses converted StarVLA checkpoints under
 `OPENPI_CONVERTED_ROOT`:
 
