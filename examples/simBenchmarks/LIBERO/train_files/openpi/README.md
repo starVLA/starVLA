@@ -68,6 +68,24 @@ bash examples/simBenchmarks/LIBERO/train_files/openpi/run_pi05_libero_8gpu.sh
 For a local smoke run, start from `pi05_libero_local.yaml` and lower or raise
 `per_device_batch_size`, `num_workers`, and `max_train_steps` as needed.
 
+## Reproduction Results
+
+| Method | Setting | Spatial | Object | Goal | LIBERO-10 | Avg |
+|---|---|---:|---:|---:|---:|---:|
+| OpenPI Repo (official) | mixed | 98.8 | 98.2 | 98.0 | 92.4 | 96.85 |
+| OpenPI JAX re-run eval | mixed | 98.4 | 99.2 | 98.8 | 91.2 | 96.90 |
+| OpenPI Torch re-run eval | FP32 | 98.2 | 98.6 | 97.4 | 91.2 | 96.35 |
+| OpenPI Torch re-run eval | BF16 | 98.0 | 99.0 | 98.4 | 93.4 | 97.20 |
+| StarVLA Torch reproduced eval | FP32-Eval1 | 98.0 | 98.4 | 97.2 | 92.8 | 96.60 |
+| StarVLA Torch reproduced eval | FP32-Eval2 | 98.0 | 98.4 | 98.6 | 92.6 | 96.90 |
+| StarVLA Torch reproduced eval | FP32-Eval3 | 98.6 | 99.4 | 98.6 | 92.6 | 97.30 |
+| StarVLA Torch reproduced eval | BF16 | 98.8 | 98.2 | 98.0 | 91.6 | 96.65 |
+| StarVLA Torch reproduced train + eval | mixed precision + DeepSpeed | 99.0 | 98.4 | 96.4 | TBD | TBD |
+
+Notes:
+- `re-run eval` results can fluctuate slightly because LIBERO evaluation is not bit-for-bit deterministic across runs.
+- StarVLA training uses mixed precision with DeepSpeed. This is different from the OpenPI Torch `BF16` setting, which refers to a pure Torch BF16 run.
+
 ## Notes
 
 - `include_state=true` is required for PI0 and PI05.
