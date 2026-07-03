@@ -80,7 +80,7 @@ For a local smoke run, start from `pi05_libero_local.yaml` and lower or raise
 | StarVLA Torch reproduced eval | FP32-Eval2 | 98.0 | 98.4 | 98.6 | 92.6 | 96.90 |
 | StarVLA Torch reproduced eval | FP32-Eval3 | 98.6 | 99.4 | 98.6 | 92.6 | 97.30 |
 | StarVLA Torch reproduced eval | BP16-mixed(deepspeed) | 98.8 | 98.2 | 98.0 | 91.6 | 96.65 |
-| StarVLA Torch reproduced train + eval | BP16-mixed(deepspeed) | 99.0 | 98.4 | 96.4 | TBD | TBD |
+| StarVLA Torch reproduced train + eval | BP16-mixed(deepspeed) | 99.0 | 98.4 | 96.4 | 91.2 | 96.25 |
 
 Notes:
 - `re-run eval` results can fluctuate slightly because LIBERO evaluation is not bit-for-bit deterministic across runs.
