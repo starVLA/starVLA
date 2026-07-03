@@ -44,7 +44,6 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             balance_dataset_weights=vla_dataset_cfg.get("balance_dataset_weights", False),
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
         )
-
         num_workers = int(vla_dataset_cfg.get("num_workers", 4))
         dataloader_kwargs = {
             "batch_size": cfg.datasets.vla_data.per_device_batch_size,
@@ -62,7 +61,6 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             **dataloader_kwargs,
         )
         if not dist.is_initialized() or dist.get_rank() == 0:
-            
             output_dir = Path(cfg.output_dir)
             vla_dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
         return vla_train_dataloader
