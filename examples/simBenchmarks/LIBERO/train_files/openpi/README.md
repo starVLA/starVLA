@@ -1,8 +1,7 @@
 # OpenPI PI0/PI05 LIBERO Training
 
 This folder contains StarVLA configs for OpenPI-style PI0 and PI05 on LIBERO.
-Use the 8-GPU configs for full training, and `pi05_libero_local.yaml` for a
-single-machine smoke run.
+Use the 8-GPU configs for full training.
 
 Converted OpenPI-to-StarVLA checkpoints are available at:
 `https://huggingface.co/tenstep/pi_model_starvla`
@@ -25,7 +24,6 @@ Override any of these with env vars in the shell scripts if your layout differs.
 
 - `pi0_libero_8gpu.yaml`: PI0 full training config.
 - `pi05_libero_8gpu.yaml`: PI05 full training config.
-- `pi05_libero_local.yaml`: PI05 local smoke/debug config.
 - `run_pi0_libero_8gpu.sh`: PI0 launcher.
 - `run_pi05_libero_8gpu.sh`: PI05 launcher.
 - `pi0_05_to_starvla.py`: convert OpenPI checkpoints to StarVLA format.
@@ -64,9 +62,6 @@ WANDB_ENTITY=your_wandb_entity \
 WANDB_MODE=disabled \
 bash examples/simBenchmarks/LIBERO/train_files/openpi/run_pi05_libero_8gpu.sh
 ```
-
-For a local smoke run, start from `pi05_libero_local.yaml` and lower or raise
-`per_device_batch_size`, `num_workers`, and `max_train_steps` as needed.
 
 ## Reproduction Results
 
