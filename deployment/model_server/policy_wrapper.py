@@ -30,6 +30,7 @@ import torch
 from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.framework.share_tools import read_mode_config
 
+from deployment.model_server.metadata_utils import build_image_metadata_from_model_config
 from deployment.model_server.policy_norm_processor import PolicyNormProcessor
 
 
@@ -55,6 +56,7 @@ class PolicyServerWrapper:
         # Co-located metadata.
         model_cfg, _ = read_mode_config(self._ckpt_path)
         self._model_cfg = model_cfg
+        self._image_metadata = build_image_metadata_from_model_config(self._model_cfg)
 
         # action_chunk_size = future_action_window_size + 1 (matches old client).
         action_model_cfg = model_cfg["framework"]["action_model"]
@@ -109,6 +111,8 @@ class PolicyServerWrapper:
     @property
     def metadata(self) -> Dict[str, Any]:
         """Model-invariant metadata; sent to client at websocket handshake."""
+        action_model_cfg = self._model_cfg.get("framework", {}).get("action_model", {})
+
         base = {
             "env": "starvla_policy_server",
             "ckpt_path": self._ckpt_path,
@@ -116,6 +120,10 @@ class PolicyServerWrapper:
             "available_unnorm_keys": self._available_unnorm_keys,
             "default_unnorm_key": self._default_unnorm_key,
         }
+        base.update(self._image_metadata)
+        if "num_inference_timesteps" in action_model_cfg:
+            base["num_inference_timesteps"] = action_model_cfg["num_inference_timesteps"]
+
         # Enrich with per-embodiment keys when a default processor already exists.
         if self._default_unnorm_key is not None:
             proc = self._get_processor(self._default_unnorm_key)

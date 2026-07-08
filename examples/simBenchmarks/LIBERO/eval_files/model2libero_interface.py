@@ -25,6 +25,44 @@ from deployment.model_server.tools.websocket_policy_client import WebsocketClien
 from examples.simBenchmarks.SimplerEnv.eval_files.adaptive_ensemble import AdaptiveEnsembler
 
 
+def _image_index_from_training_key(key: str) -> Optional[int]:
+    """Map common training image-key names to the LIBERO eval image list index."""
+    name = str(key).lower().replace("-", "_")
+    leaf = name.split(".")[-1]
+
+    if leaf in {"image_0", "primary", "primary_image", "agentview", "agentview_image", "image"}:
+        return 0
+    if "primary" in name or "agentview" in name:
+        return 0
+
+    if leaf in {"image_1", "wrist", "wrist_image", "eye_in_hand", "robot0_eye_in_hand_image"}:
+        return 1
+    if "wrist" in name or "eye_in_hand" in name:
+        return 1
+
+    return None
+
+
+def _image_indices_from_metadata(meta: dict) -> Optional[list[int]]:
+    """Return the requested eval image order from server metadata when available."""
+    requested = meta.get("vla_video_keys", None)
+    if requested is None:
+        requested = meta.get("vla_data_obs", None)
+    if not requested:
+        return None
+    if isinstance(requested, str):
+        requested = [requested]
+
+    indices: list[int] = []
+    for key in requested:
+        idx = _image_index_from_training_key(key)
+        if idx is None:
+            return None
+        if idx not in indices:
+            indices.append(idx)
+    return indices or None
+
+
 class ModelClient:
     def __init__(
         self,
@@ -45,6 +83,7 @@ class ModelClient:
         meta = self.client.get_server_metadata()
         self.action_chunk_size = int(meta["action_chunk_size"])
         self._server_metadata = meta
+        self._image_indices = _image_indices_from_metadata(meta)
 
         self.image_size: tuple = tuple(image_size)
         self.policy_setup = policy_setup
@@ -82,6 +121,21 @@ class ModelClient:
         # Cached unnormalized chunk; refreshed every `action_chunk_size` steps.
         self.raw_actions: Optional[np.ndarray] = None
 
+    def _align_images_to_training_config(self, example: dict) -> dict:
+        images = example.get("image")
+        if self._image_indices is None or not isinstance(images, (list, tuple)):
+            return example
+
+        selected = []
+        for idx in self._image_indices:
+            if idx >= len(images):
+                raise ValueError(
+                    f"Checkpoint metadata requested image index {idx}, but eval example only has "
+                    f"{len(images)} image(s). server_meta={self._server_metadata}"
+                )
+            selected.append(images[idx])
+        return {**example, "image": selected}
+
     def _add_image_to_history(self, image: np.ndarray) -> None:
         self.image_history.append(image)
         self.num_image_history = min(self.num_image_history + 1, self.horizon)
@@ -111,6 +165,8 @@ class ModelClient:
         task_description = example.get("lang", None)
         if task_description != self.task_description:
             self.reset(task_description)
+
+        example = self._align_images_to_training_config(example)
 
         # Resize images to self.image_size if needed.
         if self.image_size and example.get("image"):
