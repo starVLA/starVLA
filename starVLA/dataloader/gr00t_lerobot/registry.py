@@ -98,7 +98,7 @@ def _find_registry_dirs() -> list[Path]:
     return sorted(
         p
         for p in examples_dir.glob("**/train_files/data_registry")
-        if p.is_dir()
+        if p.is_dir() and "sdk_tools" not in p.relative_to(examples_dir).parts
     )
 
 
