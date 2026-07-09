@@ -373,4 +373,8 @@ DATASET_NAMED_MIXTURES = {
     "vla_arena_L0_L": [
         ("VLA_Arena_L0_L_lerobot_openpi", 1.0, "vla_arena_franka"),
     ],
+
+    "metaworld_mt50": [
+        ("metaworld_mt50_lerobot", 1.0, "metaworld_robot"),
+    ],
 }
