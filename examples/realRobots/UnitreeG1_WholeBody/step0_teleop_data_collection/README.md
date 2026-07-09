@@ -40,24 +40,26 @@ For StarVLA, this step's job is to produce the same kind of dataset that the NVl
 
 Start in simulation before touching the real robot.
 
-Terminal 1, from the GR00T-WholeBodyControl repo root:
+Terminal 1, MuJoCo simulation loop from the StarVLA repo root:
 
 ```bash
+cd examples/realRobots/UnitreeG1_WholeBody/sdk_tools/GR00T-WholeBodyControl
 source .venv_teleop/bin/activate
 python gear_sonic/scripts/run_sim_loop.py
 ```
 
-Terminal 2, from `gear_sonic_deploy/`:
+Terminal 2, SONIC deploy from the StarVLA repo root:
 
 ```bash
-cd gear_sonic_deploy
+cd examples/realRobots/UnitreeG1_WholeBody/sdk_tools/GR00T-WholeBodyControl/gear_sonic_deploy
 source scripts/setup_env.sh
 ./deploy.sh --input-type zmq_manager sim
 ```
 
-Terminal 3, from the repo root:
+Terminal 3, PICO teleop streamer from the StarVLA repo root:
 
 ```bash
+cd examples/realRobots/UnitreeG1_WholeBody/sdk_tools/GR00T-WholeBodyControl
 source .venv_teleop/bin/activate
 python gear_sonic/scripts/pico_manager_thread_server.py --manager \
   --vis_vr3pt --vis_smpl
@@ -76,6 +78,7 @@ Validation before continuing:
 Use GR00T-WholeBodyControl's data collection launcher as the first concrete collection path:
 
 ```bash
+cd examples/realRobots/UnitreeG1_WholeBody/sdk_tools/GR00T-WholeBodyControl
 python gear_sonic/scripts/launch_data_collection.py \
   --camera-host 192.168.123.164 \
   --task-prompt "pick up the soda can and place it in the bin"
@@ -109,17 +112,18 @@ Only move to the physical G1 after simulation teleop is stable.
 
 The upstream real-robot path uses two main terminals:
 
-Terminal 1, C++ deployment from `gear_sonic_deploy/`:
+Terminal 1, C++ deployment from the StarVLA repo root:
 
 ```bash
-cd gear_sonic_deploy
+cd examples/realRobots/UnitreeG1_WholeBody/sdk_tools/GR00T-WholeBodyControl/gear_sonic_deploy
 source scripts/setup_env.sh
 ./deploy.sh --input-type zmq_manager real
 ```
 
-Terminal 2, PICO teleop streamer from the repo root:
+Terminal 2, PICO teleop streamer from the StarVLA repo root:
 
 ```bash
+cd examples/realRobots/UnitreeG1_WholeBody/sdk_tools/GR00T-WholeBodyControl
 source .venv_teleop/bin/activate
 python gear_sonic/scripts/pico_manager_thread_server.py --manager
 ```

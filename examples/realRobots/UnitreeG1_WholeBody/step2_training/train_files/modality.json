@@ -1,0 +1,111 @@
+{
+  "state": {
+    "left_leg": {
+      "start": 0,
+      "end": 6,
+      "original_key": "observation.state"
+    },
+    "right_leg": {
+      "start": 6,
+      "end": 12,
+      "original_key": "observation.state"
+    },
+    "waist": {
+      "start": 12,
+      "end": 15,
+      "original_key": "observation.state"
+    },
+    "left_arm": {
+      "start": 15,
+      "end": 22,
+      "original_key": "observation.state"
+    },
+    "left_hand": {
+      "start": 22,
+      "end": 29,
+      "original_key": "observation.state"
+    },
+    "right_arm": {
+      "start": 29,
+      "end": 36,
+      "original_key": "observation.state"
+    },
+    "right_hand": {
+      "start": 36,
+      "end": 43,
+      "original_key": "observation.state"
+    },
+    "left_wrist_pos": {
+      "start": 0,
+      "end": 3,
+      "original_key": "observation.eef_state"
+    },
+    "left_wrist_abs_quat": {
+      "start": 3,
+      "end": 7,
+      "original_key": "observation.eef_state",
+      "rotation_type": "quaternion"
+    },
+    "right_wrist_pos": {
+      "start": 7,
+      "end": 10,
+      "original_key": "observation.eef_state"
+    },
+    "right_wrist_abs_quat": {
+      "start": 10,
+      "end": 14,
+      "original_key": "observation.eef_state",
+      "rotation_type": "quaternion"
+    },
+    "root_orientation": {
+      "start": 0,
+      "end": 4,
+      "original_key": "observation.root_orientation",
+      "rotation_type": "quaternion"
+    },
+    "projected_gravity": {
+      "start": 0,
+      "end": 3,
+      "original_key": "observation.projected_gravity"
+    },
+    "cpp_rotation_offset": {
+      "start": 0,
+      "end": 4,
+      "original_key": "observation.cpp_rotation_offset",
+      "rotation_type": "quaternion"
+    },
+    "init_base_quat": {
+      "start": 0,
+      "end": 4,
+      "original_key": "observation.init_base_quat",
+      "rotation_type": "quaternion"
+    }
+  },
+  "action": {
+    "motion_token": {
+      "start": 0,
+      "end": 64,
+      "original_key": "action.motion_token"
+    },
+    "left_hand_joints": {
+      "start": 0,
+      "end": 7,
+      "original_key": "teleop.left_hand_joints"
+    },
+    "right_hand_joints": {
+      "start": 0,
+      "end": 7,
+      "original_key": "teleop.right_hand_joints"
+    }
+  },
+  "video": {
+    "ego_view": {
+      "original_key": "observation.images.ego_view"
+    }
+  },
+  "annotation": {
+    "human.task_description": {
+      "original_key": "task_index"
+    }
+  }
+}

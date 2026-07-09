@@ -1,178 +1,293 @@
 # Step 1: Data Conversion
 
-This step prepares the GR00T-WholeBodyControl demonstrations for StarVLA training. In the primary example route, GR00T-WholeBodyControl already exports a LeRobot v2.1-style dataset, so this step is mostly validation, cleanup, and StarVLA schema registration.
+This step prepares G1 WholeBody demonstrations for StarVLA training on the
+local PC.
 
-StarVLA's preferred boundary is LeRobot v2.1 plus a clear modality schema. If the upstream collector already produces LeRobot v2.1, do not reconvert it unnecessarily. Instead, validate it and add the StarVLA registry files.
+For this setup, the collected data is already stored in LeRobot v2.1 layout.
+Do not reconvert it. Register it under StarVLA, validate the metadata, then
+pass the schema into `step2_training`.
 
-This means LeRobot G1, Unitree `xr_teleoperate`, Unitree `unitree_lerobot`, GR00T-WholeBodyControl, a custom Unitree logger, a rosbag pipeline, or another teleop stack can all be valid inputs. The requirement is not the source tool. The requirement is a consistent LeRobot dataset with documented semantics.
+## Local Working Layout
 
-## Primary Input from GR00T-WholeBodyControl
-
-GR00T-WholeBodyControl's VLA collection flow writes a dataset shaped like:
-
-```text
-outputs/<timestamp>-G1-<robot_id>/
-  data/
-    train-00000.parquet
-  videos/
-    observation.images.<camera_name>/
-      episode_000000.mp4
-  meta/
-    info.json
-    modality.json
-    episodes.jsonl
-    tasks.jsonl
-```
-
-Copy or symlink it into:
+Use the local paths on this machine:
 
 ```text
-playground/Datasets/UnitreeG1_WholeBody/lerobot/<task_name>/
+/home/hoi-4090-01/yjh/starVLA
+/home/hoi-4090-01/yjh/GR00T-WholeBodyControl
 ```
 
-## Post-Process the NVlabs Dataset
+The current dataset used for this example is:
 
-Before StarVLA training, run the upstream cleanup step if needed:
+```text
+/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+```
+
+If Git ever needs a local safe-directory entry for a copied workspace, use:
 
 ```bash
-source .venv_data_collection/bin/activate
-python gear_sonic/scripts/process_dataset.py \
-  --dataset-path outputs/<timestamp>-G1-<robot_id> \
-  --output-path outputs/<task_name>_cleaned
+git config --global --add safe.directory \
+  /home/hoi-4090-01/yjh/starVLA
 ```
 
-Use the cleaned dataset for StarVLA. This removes discarded demonstrations and stale motion frames according to the upstream workflow.
+## Register Data Under StarVLA
 
-## Generic Input
+The local example dataset is already present in StarVLA, so no extra import
+step is required on this PC.
 
-One of:
+If you later export another copy of `test_sonic`, replace the source path in
+the commands below with the archive location you saved on disk.
 
-```text
-playground/Datasets/UnitreeG1_WholeBody/raw/<task_name>/
-```
-
-or:
+The expected target structure is:
 
 ```text
-playground/Datasets/UnitreeG1_WholeBody/lerobot/<task_name>/
-```
-
-## Output
-
-```text
-playground/Datasets/UnitreeG1_WholeBody/lerobot/<task_name>/
-  data/
-  videos/
+playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic/
+  data/chunk-000/episode_000000.parquet
+  videos/chunk-000/observation.images.ego_view/episode_000000.mp4
   meta/
     info.json
     modality.json
     episodes.jsonl
     tasks.jsonl
+```
+
+## Source Dataset Schema
+
+The checked `test_sonic` dataset reports:
+
+```text
+codebase_version: v2.1
+fps: 50
+total_episodes: 49
+total_frames: 56919
+video key: observation.images.ego_view
+task: pick the toy on the table, and put it into the box.
+```
+
+The important tensor dimensions from a sampled parquet episode are:
+
+```text
+observation.state: 43
+observation.eef_state: 14
+action.wbc: 43
+action.motion_token: 64
+teleop.left_hand_joints: 7
+teleop.right_hand_joints: 7
+teleop.smpl_pose: 63
+teleop.vr_3pt_position: 9
+teleop.vr_3pt_orientation: 18
+```
+
+The `meta/modality.json` maps these fields into groups:
+
+```text
+state:
+  observation.state:
+    left_leg 0:6
+    right_leg 6:12
+    waist 12:15
+    left_arm 15:22
+    left_hand 22:29
+    right_arm 29:36
+    right_hand 36:43
+  observation.eef_state:
+    left_wrist_pos 0:3
+    left_wrist_abs_quat 3:7
+    right_wrist_pos 7:10
+    right_wrist_abs_quat 10:14
+
+action:
+  action.motion_token: 64
+  teleop.left_hand_joints: 7
+  teleop.right_hand_joints: 7
+  teleop.delta_heading: 1
+  teleop.smpl_pose: 63
+  teleop.vr_3pt_position: 9
+  teleop.vr_3pt_orientation: 18
+
+video:
+  observation.images.ego_view
+
+annotation:
+  annotation.human.task_description from task_index/tasks.jsonl
+```
+
+For the first StarVLA training pass, use the explicit robot type:
+
+```text
+unitree_g1_sonic_dex3
+```
+
+Recommended first action registry:
+
+```text
+action.motion_token: 64
+teleop.left_hand_joints: 7
+teleop.right_hand_joints: 7
+```
+
+This is a 78D controller target. Keep `action.wbc` available for analysis, but
+do not train both `action.wbc` and `action.motion_token` in the same first
+adapter unless the downstream policy head is designed for that.
+
+## Validate the Registered Dataset
+
+Metadata check with local system Python:
+
+```bash
+export DATASET=/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+dataset = Path(os.environ["DATASET"])
+info = json.loads((dataset / "meta/info.json").read_text())
+modality = json.loads((dataset / "meta/modality.json").read_text())
+tasks = [json.loads(line) for line in (dataset / "meta/tasks.jsonl").read_text().splitlines() if line.strip()]
+features = info.get("features", {})
+video_keys = [
+    key for key, value in features.items()
+    if value.get("dtype") in ("video", "image")
+]
+
+print("dataset:", dataset)
+print("codebase_version:", info.get("codebase_version"))
+print("fps:", info.get("fps"))
+print("episodes:", info.get("total_episodes"))
+print("frames:", info.get("total_frames"))
+print("video_keys:", video_keys)
+print("feature_keys:", sorted(features.keys()))
+print("state_groups:", sorted(modality.get("state", {}).keys()))
+print("action_groups:", sorted(modality.get("action", {}).keys()))
+print("task:", tasks[0]["task"] if tasks else None)
+PY
+```
+
+Parquet shape check using the local GR00T environment:
+
+```bash
+GROOT=/home/hoi-4090-01/yjh/GR00T-WholeBodyControl
+export DATASET=/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+
+"${GROOT}/.venv_data_collection/bin/python" - <<'PY'
+import os
+from pathlib import Path
+import pandas as pd
+
+dataset = Path(os.environ["DATASET"])
+parquet = next((dataset / "data/chunk-000").glob("episode_*.parquet"))
+df = pd.read_parquet(parquet)
+
+keys = [
+    "observation.state",
+    "observation.eef_state",
+    "action.wbc",
+    "action.motion_token",
+    "teleop.left_hand_joints",
+    "teleop.right_hand_joints",
+    "teleop.smpl_pose",
+    "teleop.vr_3pt_position",
+    "teleop.vr_3pt_orientation",
+]
+
+print("parquet:", parquet)
+print("rows:", len(df))
+for key in keys:
+    value = df[key].iloc[0]
+    print(key, len(value))
+PY
+```
+
+Video presence check:
+
+```bash
+DATASET=/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+
+find "${DATASET}/videos" -type f -name '*.mp4' | head
+```
+
+## Optional GR00T Cleanup
+
+The local GR00T repository provides the cleaner here:
+
+```text
+/home/hoi-4090-01/yjh/GR00T-WholeBodyControl/gear_sonic/scripts/process_dataset.py
+```
+
+For this PC, the `.venv_data_collection` environment already has the needed
+packages (`av`, `pandas`, `numpy`, `tyro`, `pyarrow`).
+
+To clean a dataset in place:
+
+```bash
+cd /home/hoi-4090-01/yjh/GR00T-WholeBodyControl
+source .venv_data_collection/bin/activate
+
+python gear_sonic/scripts/process_dataset.py \
+  --dataset-path /home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic \
+  --output-path /home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic_cleaned \
+  --remove-discarded
+```
+
+After cleanup, point the StarVLA path at the cleaned directory:
+
+```bash
+cd /home/hoi-4090-01/yjh/starVLA
+
+rm -rf playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+mv playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic_cleaned \
+  playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
 ```
 
 ## Conversion Strategy
 
-Use the least invasive converter possible:
+Use the least invasive route:
 
-1. If GR00T-WholeBodyControl already exported LeRobot v2.1, keep it and validate it.
-2. If LeRobot G1 already produced a LeRobot dataset, keep it.
-3. If Unitree `unitree_lerobot` can convert the collected JSON data, use it.
-4. If data is HDF5 / JSON / PKL / rosbag / vendor logs, convert to LeRobot.
-5. If another converter already works, such as an `any4lerobot` style pipeline, use it and document the command here.
-6. Only write a custom converter when the source format or action semantics require it.
-
-## Source-Specific Notes
-
-### From LeRobot G1
-
-Usually no structural conversion is needed. Validate the dataset and write StarVLA's `data_config.py` against the existing keys.
-
-### From Unitree XR Teleoperate
-
-The recorded data may need conversion into LeRobot. Preserve the XR action semantics, arm/end-effector type, camera source, and episode success metadata.
-
-### From Unitree LeRobot
-
-Use their converter when possible, then inspect the output. Their tooling is useful for Unitree JSON data, dataset visualization, episode editing, and conversion into LeRobot-compatible datasets.
-
-### From GR00T-WholeBodyControl
-
-Keep the LeRobot export and action contract. If using SONIC latent actions, document the latent/action groups explicitly in StarVLA's registry.
-
-For the primary example, treat the action as:
-
-```text
-action.sonic_latent: 64
-action.left_hand: 7
-action.right_hand: 7
-```
-
-These are the dimensions described by the NVlabs VLA workflow. Verify them against the actual dataset before training.
-
-## StarVLA Files to Add Later
-
-This folder is only the data conversion stage, but it should prepare the information needed for:
-
-```text
-../step2_training/train_files/
-  data_registry/data_config.py
-  modality.json
-  starvla_cotrain_g1_wholebody.yaml
-```
-
-Recommended robot type names for the primary example:
-
-```text
-unitree_g1_sonic
-```
-
-Use `unitree_g1_sonic` for the GR00T-WholeBodyControl / SONIC path. Use a different robot type if your data comes from another action representation.
-
-## Required Schema Notes
-
-Write these down before training:
-
-```text
-camera_order:
-  - video.<camera_0>
-  - video.<camera_1>
-
-state_keys:
-  - state.<group_name>: dim, unit, coordinate frame, order
-
-action_keys:
-  - action.<group_name>: dim, unit, control mode, frequency
-
-language_keys:
-  - annotation.human.action.task_description
-
-normalization:
-  state: q99
-  action: q99 / binary / passthrough
-```
-
-Use `q99` as the StarVLA-side default for continuous state and action groups. This means the dataset statistics must include `q01` and `q99` for each continuous key. Use `binary` only for true binary commands, and use `passthrough` only when a controller-specific field should not be normalized.
-
-## Validation Checklist
-
-Run these checks before training:
-
-- Episode count matches collection logs.
-- Discarded / failed episodes are removed or tagged intentionally.
-- All frames have valid timestamps.
-- Camera videos decode correctly.
-- Camera order matches the intended training order.
-- State vector shape is constant.
-- Action vector shape is constant.
-- Continuous state/action statistics include `q01` and `q99`.
-- `modality.json` key names match the actual LeRobot fields.
-- A sampled episode can be replayed without loading a real robot.
+1. If the dataset is already LeRobot v2.1, keep it and validate it.
+2. If the dataset only needs filtering, use `process_dataset.py`.
+3. If a future dataset is HDF5, JSON, PKL, rosbag, or vendor logs, convert it
+   to the same LeRobot v2.1 boundary first.
+4. Only write a custom converter when the source format or action semantics
+   cannot be represented by the existing LeRobot fields.
 
 ## Handoff to Step 2
 
-Move to [step2_training](../step2_training/README.md) when:
+Move to [step2_training](../step2_training/README.md) when these values are final:
 
-- the LeRobot dataset exists,
-- `meta/modality.json` is present,
-- the action/state dimensions are final for this first experiment,
-- you know the `data_root_dir`, `data_mix`, and `robot_type` strings.
+```text
+data_root_dir:
+  /home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot
+
+data_mix:
+  test_sonic
+
+robot_type:
+  unitree_g1_sonic_dex3
+
+video_keys:
+  observation.images.ego_view
+
+state_keys:
+  observation.state
+  observation.eef_state
+
+action_keys:
+  action.motion_token
+  teleop.left_hand_joints
+  teleop.right_hand_joints
+
+language_keys:
+  annotation.human.task_description
+
+normalization:
+  continuous state/action keys: q99
+```
+
+Before full training:
+
+- Episode count matches `meta/info.json`.
+- `meta/modality.json` and parquet tensor shapes agree.
+- Camera videos decode and match the episode count.
+- The selected action keys match the deployment-side SONIC controller contract.
+- Keep 6D-hand datasets and 7D-hand datasets in separate robot-type configs.

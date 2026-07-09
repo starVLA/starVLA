@@ -59,6 +59,70 @@ The server returns unnormalized action chunks through `deployment/model_server/p
 
 This replaces the upstream `run_gr00t_server.py` role. The controller side should still see the same high-level action semantics expected by the selected G1 route.
 
+## StarVLA Inference Wrapper
+
+The sim / eval data flow is:
+
+```text
+camera + robot state
+  -> GR00T inference loop
+  -> PolicyClient shim
+  -> StarVLA websocket policy server
+  -> unnormalized 78D action chunk
+  -> SONIC / C++ deploy
+```
+
+The client wrapper lives here:
+
+```text
+examples/realRobots/UnitreeG1_WholeBody/step3_deployment/eval_files/model2unitree_g1_interface.py
+```
+
+It converts the GR00T-style observation dict into the StarVLA request format:
+
+```python
+{
+    "examples": [{
+        "image": [ego_view_image],
+        "lang": task_prompt,
+        "state": flat_proprioception,
+    }],
+    "unnorm_key": "new_embodiment",
+}
+```
+
+and splits the returned action chunk into:
+
+```text
+action.motion_token      -> [T, 64]
+action.left_hand_joints  -> [T, 7]
+action.right_hand_joints -> [T, 7]
+```
+
+To let the existing GR00T `run_vla_inference.py` import this wrapper without editing its source, prepend both the StarVLA repo root and this deployment directory to `PYTHONPATH` before launching the GR00T sim stack:
+
+```bash
+export PYTHONPATH=/home/hoi-4090-01/yjh/starVLA:/home/hoi-4090-01/yjh/starVLA/examples/realRobots/UnitreeG1_WholeBody/step3_deployment:${PYTHONPATH}
+```
+
+The compatibility shim at `step3_deployment/gr00t/policy/server_client.py` then shadows the GR00T `PolicyClient` import and forwards calls to StarVLA.
+
+The deployment scripts now discover the normalization key from the policy server metadata when possible. For the current smoke-tested checkpoint, that key is `new_embodiment`.
+
+For a direct local smoke test:
+
+```bash
+cd /home/hoi-4090-01/yjh/starVLA
+PYTHONPATH=$PWD:$PWD/examples/realRobots/UnitreeG1_WholeBody/step3_deployment \
+  python examples/realRobots/UnitreeG1_WholeBody/step3_deployment/eval_files/local_self_test.py \
+    --ckpt-path results/Checkpoints/starvla_qwenoft_g1_sonic_smoke/checkpoints/steps_1_pytorch_model.pt \
+    --server-host 127.0.0.1 \
+    --server-port 5694
+```
+
+The helper script `step3_deployment/run_starvla_eval.sh` wraps the same path setup for repeated checks.
+The matching server launcher is `step3_deployment/run_policy_server.sh`.
+
 ## G1 Adapter Responsibilities
 
 The G1-side adapter should do only bridge work:

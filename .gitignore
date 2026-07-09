@@ -255,3 +255,7 @@ bar
 code
 examples/simBenchmarks/LIBERO/eval_files/auto_eval_scripts/run_all_libero_untested.sh
 starVLA/model/framework/VLM4A/QwenGR00T_v2.py
+examples/realRobots/UnitreeG1_WholeBody/sdk_tools/Jinhui.sh
+examples/realRobots/UnitreeG1_WholeBody/step3_deployment/eval_files/local_self_test.py
+examples/realRobots/UnitreeG1_WholeBody/sdk_tools/SonicStar
+examples/realRobots/UnitreeG1_WholeBody/sdk_tools/sonicstar_wbc_deployment_reference
