@@ -151,7 +151,7 @@ Only start full training after both pass.
 This workspace has been verified with a 1-step smoke training run:
 
 ```bash
-cd /home/hoi-4090-01/yjh/starVLA
+cd starVLA
 WANDB_MODE=disabled BATCH=1 MAX_STEPS=1 SAVE_EVERY=1 EVAL_EVERY=1 LOG_EVERY=1 \
   bash examples/realRobots/UnitreeG1_WholeBody/step2_training/train_files/run_starvla_qwenoft_g1_sonic_train.sh
 ```

@@ -9,24 +9,29 @@ pass the schema into `step2_training`.
 
 ## Local Working Layout
 
-Use the local paths on this machine:
+Run StarVLA commands from the repository root:
 
-```text
-/home/hoi-4090-01/yjh/starVLA
-/home/hoi-4090-01/yjh/GR00T-WholeBodyControl
+```bash
+cd starVLA
 ```
 
-The current dataset used for this example is:
+If you also use GR00T-WholeBodyControl locally, keep it next to `starVLA` or
+set `GROOT` to its location:
+
+```bash
+GROOT=../GR00T-WholeBodyControl
+```
+
+The current dataset used for this example is under the StarVLA repository:
 
 ```text
-/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
 ```
 
 If Git ever needs a local safe-directory entry for a copied workspace, use:
 
 ```bash
-git config --global --add safe.directory \
-  /home/hoi-4090-01/yjh/starVLA
+git config --global --add safe.directory "$(pwd)"
 ```
 
 ## Register Data Under StarVLA
@@ -134,7 +139,8 @@ adapter unless the downstream policy head is designed for that.
 Metadata check with local system Python:
 
 ```bash
-export DATASET=/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+cd starVLA
+export DATASET=playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
 
 python3 - <<'PY'
 import json
@@ -167,8 +173,9 @@ PY
 Parquet shape check using the local GR00T environment:
 
 ```bash
-GROOT=/home/hoi-4090-01/yjh/GR00T-WholeBodyControl
-export DATASET=/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+cd starVLA
+GROOT=../GR00T-WholeBodyControl
+export DATASET=playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
 
 "${GROOT}/.venv_data_collection/bin/python" - <<'PY'
 import os
@@ -202,7 +209,8 @@ PY
 Video presence check:
 
 ```bash
-DATASET=/home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
+cd starVLA
+DATASET=playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
 
 find "${DATASET}/videos" -type f -name '*.mp4' | head
 ```
@@ -212,7 +220,7 @@ find "${DATASET}/videos" -type f -name '*.mp4' | head
 The local GR00T repository provides the cleaner here:
 
 ```text
-/home/hoi-4090-01/yjh/GR00T-WholeBodyControl/gear_sonic/scripts/process_dataset.py
+<GROOT_ROOT>/gear_sonic/scripts/process_dataset.py
 ```
 
 For this PC, the `.venv_data_collection` environment already has the needed
@@ -221,19 +229,19 @@ packages (`av`, `pandas`, `numpy`, `tyro`, `pyarrow`).
 To clean a dataset in place:
 
 ```bash
-cd /home/hoi-4090-01/yjh/GR00T-WholeBodyControl
+cd ../GR00T-WholeBodyControl
 source .venv_data_collection/bin/activate
 
 python gear_sonic/scripts/process_dataset.py \
-  --dataset-path /home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic \
-  --output-path /home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic_cleaned \
+  --dataset-path ../starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic \
+  --output-path ../starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic_cleaned \
   --remove-discarded
 ```
 
 After cleanup, point the StarVLA path at the cleaned directory:
 
 ```bash
-cd /home/hoi-4090-01/yjh/starVLA
+cd starVLA
 
 rm -rf playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic
 mv playground/Datasets/UnitreeG1_WholeBody/lerobot/test_sonic_cleaned \
@@ -257,7 +265,7 @@ Move to [step2_training](../step2_training/README.md) when these values are fina
 
 ```text
 data_root_dir:
-  /home/hoi-4090-01/yjh/starVLA/playground/Datasets/UnitreeG1_WholeBody/lerobot
+  playground/Datasets/UnitreeG1_WholeBody/lerobot
 
 data_mix:
   test_sonic

@@ -102,7 +102,8 @@ action.right_hand_joints -> [T, 7]
 To let the existing GR00T `run_vla_inference.py` import this wrapper without editing its source, prepend both the StarVLA repo root and this deployment directory to `PYTHONPATH` before launching the GR00T sim stack:
 
 ```bash
-export PYTHONPATH=/home/hoi-4090-01/yjh/starVLA:/home/hoi-4090-01/yjh/starVLA/examples/realRobots/UnitreeG1_WholeBody/step3_deployment:${PYTHONPATH}
+cd starVLA
+export PYTHONPATH=$PWD:$PWD/examples/realRobots/UnitreeG1_WholeBody/step3_deployment:${PYTHONPATH}
 ```
 
 The compatibility shim at `step3_deployment/gr00t/policy/server_client.py` then shadows the GR00T `PolicyClient` import and forwards calls to StarVLA.
@@ -112,7 +113,7 @@ The deployment scripts now discover the normalization key from the policy server
 For a direct local smoke test:
 
 ```bash
-cd /home/hoi-4090-01/yjh/starVLA
+cd starVLA
 PYTHONPATH=$PWD:$PWD/examples/realRobots/UnitreeG1_WholeBody/step3_deployment \
   python examples/realRobots/UnitreeG1_WholeBody/step3_deployment/eval_files/local_self_test.py \
     --ckpt-path results/Checkpoints/starvla_qwenoft_g1_sonic_smoke/checkpoints/steps_1_pytorch_model.pt \
