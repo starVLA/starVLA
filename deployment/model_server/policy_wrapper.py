@@ -33,6 +33,23 @@ from starVLA.model.framework.share_tools import read_mode_config
 from deployment.model_server.policy_norm_processor import PolicyNormProcessor
 
 
+def _training_obs_image_size(model_cfg: Dict[str, Any]) -> Optional[List[int]]:
+    """Return training image size metadata when it is explicitly configured.
+
+    This is only a consistency check for eval clients. It is not used to infer
+    camera order or to rewrite eval observations.
+    """
+    vla_data_cfg = model_cfg.get("datasets", {}).get("vla_data", {})
+    size = vla_data_cfg.get("obs_image_size") or vla_data_cfg.get("image_size")
+    if size is None and "default_image_resolution" in vla_data_cfg:
+        default_resolution = vla_data_cfg["default_image_resolution"]
+        if isinstance(default_resolution, (list, tuple)) and len(default_resolution) >= 2:
+            size = default_resolution[-2:]
+    if not isinstance(size, (list, tuple)) or len(size) != 2:
+        return None
+    return [int(size[0]), int(size[1])]
+
+
 class PolicyServerWrapper:
     """Wraps a `baseframework` for use as a websocket-server policy."""
 
@@ -115,6 +132,12 @@ class PolicyServerWrapper:
             "action_chunk_size": self._action_chunk_size,
             "available_unnorm_keys": self._available_unnorm_keys,
             "default_unnorm_key": self._default_unnorm_key,
+            "training_data_mix": self._model_cfg.get("datasets", {}).get("vla_data", {}).get("data_mix"),
+            "training_obs_image_size": _training_obs_image_size(self._model_cfg),
+            "eval_image_contract": (
+                "Eval clients must explicitly choose image count and order. "
+                "The server does not infer or reorder camera views from training config."
+            ),
         }
         # Enrich with per-embodiment keys when a default processor already exists.
         if self._default_unnorm_key is not None:
