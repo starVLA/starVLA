@@ -22,12 +22,12 @@ Exposed API:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 import torch
 
-from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.base_framework import baseframework, merge_config_overrides
 from starVLA.model.framework.share_tools import read_mode_config
 
 from deployment.model_server.policy_norm_processor import PolicyNormProcessor
@@ -59,23 +59,25 @@ class PolicyServerWrapper:
         device: str = "cuda",
         use_bf16: bool = False,
         unnorm_key: Optional[str] = None,
+        config_overrides: Sequence[str] | None = None,
     ) -> None:
         self._ckpt_path = str(ckpt_path)
 
         logging.info("PolicyServerWrapper: loading framework from %s", self._ckpt_path)
-        framework = baseframework.from_pretrained(self._ckpt_path)
+        framework = baseframework.from_pretrained(self._ckpt_path, config_overrides=config_overrides)
         if use_bf16:
             framework = framework.to(torch.bfloat16)
         framework = framework.to(device).eval()
         self._framework = framework
 
         # Co-located metadata.
-        model_cfg, _ = read_mode_config(self._ckpt_path)
+        model_cfg, norm_stats = read_mode_config(self._ckpt_path)
+        model_cfg = merge_config_overrides(model_cfg, config_overrides)
         self._model_cfg = model_cfg
 
         # action_chunk_size = future_action_window_size + 1 (matches old client).
         action_model_cfg = model_cfg["framework"]["action_model"]
-        
+
         if "action_horizon" in action_model_cfg:
             self._action_chunk_size = int(action_model_cfg["action_horizon"])
         elif "future_action_window_size" in action_model_cfg:
@@ -91,8 +93,7 @@ class PolicyServerWrapper:
         self._norm_processors: Dict[str, PolicyNormProcessor] = {}
 
         # Peek at available keys without building a full processor.
-        _, _ns = read_mode_config(self._ckpt_path)
-        self._available_unnorm_keys: List[str] = list(_ns.keys())
+        self._available_unnorm_keys: List[str] = list(norm_stats.keys())
 
         # Eagerly build when unambiguous; defer for multi-key / no explicit key.
         if unnorm_key is not None or len(self._available_unnorm_keys) == 1:

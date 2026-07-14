@@ -9,7 +9,8 @@ Note: No device placement or optimizer concerns handled here (delegated to train
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
+from omegaconf import OmegaConf
 
 import numpy as np
 import torch
@@ -21,6 +22,39 @@ from starVLA.training.trainer_utils import initialize_overwatch
 
 logger = initialize_overwatch(__name__)
 _FRAMEWORKS_IMPORTED = False
+
+
+def merge_config_overrides(model_config: dict, config_overrides: Sequence[str] | None = None) -> dict:
+    """Merge optional OmegaConf dotlist overrides into a checkpoint config.
+
+    The checkpoint config has lower precedence than the dotlist. Values are not
+    resolved, so unrelated interpolations remain untouched.
+    """
+    if isinstance(config_overrides, str):
+        raise TypeError("config_overrides must be a sequence of KEY=VALUE strings, not a bare string.")
+    if not config_overrides:
+        return model_config
+
+    overrides = list(config_overrides)
+    non_string_overrides = [item for item in overrides if not isinstance(item, str)]
+    if non_string_overrides:
+        raise TypeError(
+            "config_overrides must be a sequence of KEY=VALUE strings; "
+            f"got non-string entries: {non_string_overrides}"
+        )
+
+    bad_overrides = [item for item in overrides if "=" not in item]
+    if bad_overrides:
+        raise ValueError("Invalid config_overrides entries. Expected KEY=VALUE dotlist items, " f"got: {bad_overrides}")
+
+    try:
+        override_cfg = OmegaConf.from_dotlist(overrides)
+        return OmegaConf.to_container(
+            OmegaConf.merge(OmegaConf.create(model_config), override_cfg),
+            resolve=False,
+        )
+    except Exception as exc:
+        raise ValueError(f"Failed to parse config_overrides={overrides!r}: {exc}") from exc
 
 
 def _auto_import_framework_modules() -> None:
@@ -85,11 +119,13 @@ class baseframework(PreTrainedModel):
       - Use provided helpers for action normalization handling
     """
 
-    def __init__(self, hf_config=PretrainedConfig()) -> None:
+    def __init__(self, hf_config: PretrainedConfig | None = None) -> None:
         """
         Initialize base nn.Module. Subclasses add components.
         """
 
+        if hf_config is None:
+            hf_config = PretrainedConfig()
         super().__init__(hf_config)
 
     # ------------------------------------------------------------------
@@ -142,7 +178,7 @@ class baseframework(PreTrainedModel):
             return hasattr(self, "qwen_vl_interface") or type(self).forward_vlm is not baseframework.forward_vlm
         return False
 
-    def compute_loss(self, tag: str, batch, loss_scale: dict = None) -> Dict[str, torch.Tensor] | None:
+    def compute_loss(self, tag: str, batch, loss_scale: dict | None = None) -> Dict[str, torch.Tensor] | None:
         """Unified forward entry-point: route to the right forward by *tag*.
 
         The trainer calls ``model.compute_loss(tag, batch)`` for every
@@ -206,6 +242,7 @@ class baseframework(PreTrainedModel):
     def from_pretrained(
         cls,
         pretrained_checkpoint: str,
+        config_overrides: Sequence[str] | None = None,
         **kwargs,
     ) -> None:
         """
@@ -220,6 +257,8 @@ class baseframework(PreTrainedModel):
 
         Args:
             pretrained_checkpoint: Path to .pt file inside run/checkpoints directory.
+            config_overrides: Optional OmegaConf dotlist overrides applied after the
+                checkpoint config and before model construction.
             **kwargs: Extra constructor overrides passed to subclass.
 
         Returns:
@@ -231,11 +270,12 @@ class baseframework(PreTrainedModel):
         """
         pretrained_checkpoint = Path(pretrained_checkpoint)
         model_config, norm_stats = read_mode_config(pretrained_checkpoint)  # read config and norm_stats
+        model_config = merge_config_overrides(model_config, config_overrides)
 
         config = dict_to_namespace(model_config)
         model_config = config
         model_config.trainer.pretrained_checkpoint = None
-        
+
         FrameworkModel = build_framework(cfg=model_config)
         # set for action un-norm
         FrameworkModel.norm_stats = norm_stats
@@ -266,4 +306,3 @@ class baseframework(PreTrainedModel):
         # **ensure model is on GPU**
         FrameworkModel = FrameworkModel
         return FrameworkModel
-

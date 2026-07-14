@@ -74,6 +74,23 @@ bash examples/simBenchmarks/LIBERO/eval_files/run_policy_server.sh
 
 ⚠️ **Note:** Please ensure that you specify the correct checkpoint path in `examples/simBenchmarks/LIBERO/eval_files/run_policy_server.sh`  
 
+### Released Qwen3-PI LIBERO checkpoint compatibility
+
+PR #373 introduced the canonical LayerwiseFM path used by current and newly
+trained models. The released `StarVLA/Qwen3-VL-PI-LIBERO-4in1` checkpoint was
+trained with historical LayerwiseFM semantics, so evaluate that checkpoint with
+the compatibility override below:
+
+```bash
+CKPT=/path/to/StarVLA/Qwen3-VL-PI-LIBERO-4in1/checkpoints/steps_100000_pytorch_model.pt \
+USE_CANONICAL_FORWARD=false \
+bash examples/simBenchmarks/LIBERO/eval_files/run_policy_server.sh
+```
+
+When `USE_CANONICAL_FORWARD` is unset, the server keeps the canonical default.
+Do not edit the checkpoint `config.yaml`; use the launcher override instead.
+The released checkpoint config uses 4 inference steps.
+
 
 ---
 
