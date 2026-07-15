@@ -25,3 +25,12 @@ We release a series of modified models and finetuning checkpoints to facilitate 
 | Model | Description | Avg. Length | Link |
 | --- | --- | --- | --- |
 | **QWen2.5VL-GR00T-Calvin_D_D** | Training on [Calvin_D_D](https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/simBenchmarks/calvin) | 3.786 | [🤗 Hugging Face](https://huggingface.co/Simplicissimus-S/StarVLA-QwenGR00T_Qwen2.5-VL-3B-Instruct-Action_calvin_D_D) |
+
+## VM4A
+
+VM4A provides from-scratch visuomotor baselines that use StarVLA's shared data, normalization, training, and deployment interfaces. See [VM4A: VisuoMotor for Action](VM4A.md) for configuration and implementation details.
+
+| Model | Description | Checkpoint |
+| --- | --- | --- |
+| **ACT** | LeRobot ACTPolicy wrapper for direct image-and-state action chunking | real-robot validated; public checkpoint TBD per maintainer discussion |
+| **Diffusion Policy** | Vendored non-hybrid image policy with a ResNet-18 encoder and DDPM action generation | real-robot validated; public checkpoint TBD per maintainer discussion |
