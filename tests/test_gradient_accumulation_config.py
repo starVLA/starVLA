@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ACCELERATOR_UTILS_PATH = REPO_ROOT / "starVLA/training/accelerator_utils.py"
+TRAINER_TOOLS_PATH = REPO_ROOT / "starVLA/training/trainer_utils/trainer_tools.py"
 
 
 class _DeepSpeedPlugin:
@@ -24,7 +24,7 @@ class _Accelerator:
 
 
 def _load_build_accelerator():
-    path = ACCELERATOR_UTILS_PATH
+    path = TRAINER_TOOLS_PATH
     tree = ast.parse(path.read_text(), filename=str(path))
     function = next(
         node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_accelerator"
