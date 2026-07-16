@@ -21,7 +21,6 @@ from typing import Tuple
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
@@ -32,18 +31,9 @@ from transformers import AutoProcessor, get_scheduler
 # Local Modules
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
+from starVLA.training.accelerator_utils import build_accelerator
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
-
-def _build_accelerator(cfg) -> Accelerator:
-    deepspeed_plugin = DeepSpeedPlugin()
-    local_accelerator = Accelerator(
-        gradient_accumulation_steps=cfg.trainer.gradient_accumulation_steps,
-        deepspeed_plugin=deepspeed_plugin,
-    )
-    local_accelerator.print(local_accelerator.state)
-    return local_accelerator
-
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -330,7 +320,7 @@ def main(cfg) -> None:
     cfg = wrap_config(cfg)
     logger.info("✅ Configuration wrapped for access tracking")
 
-    accelerator = _build_accelerator(cfg)
+    accelerator = build_accelerator(cfg)
     output_dir = setup_directories(cfg=cfg)
     vlm = build_framework(cfg)
     vlm_train_dataloader = prepare_data(cfg=cfg, accelerator=accelerator, output_dir=output_dir)
