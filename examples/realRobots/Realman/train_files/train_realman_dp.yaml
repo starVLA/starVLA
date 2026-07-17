@@ -49,7 +49,9 @@ datasets:
 
     # Parent directory of the <your_dataset> directory registered in data_config.py.
     data_root_dir: /path/to/lerobot_datasets
-    data_mix: realman_example
+    # DP-specific mixture: its action window equals framework.horizon (16) so training
+    # targets are the immediate actions after each sampled observation.
+    data_mix: realman_example_dp
 
     # Apply deltas to the joint command only; the gripper target remains absolute.
     action_mode: "delta"

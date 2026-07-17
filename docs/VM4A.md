@@ -75,7 +75,10 @@ Important framework knobs are:
 | `num_inference_steps` | Diffusion Policy | Optional denoising-step override at inference |
 | `image_size`, `image_keys` | Both | Input resolution and ordered camera names |
 
-The dataset registry's action horizon must cover the selected policy horizon. Keep action/state dimensions and camera keys synchronized across the registry and YAML.
+The dataset registry's action window must start at the sampled observation and cover the selected
+policy horizon; Diffusion Policy trains on the immediate `horizon`-step prefix of that window (the
+Realman example uses a DP-specific mixture whose window equals the horizon exactly). Keep
+action/state dimensions and camera keys synchronized across the registry and YAML.
 
 ## Code Structure
 

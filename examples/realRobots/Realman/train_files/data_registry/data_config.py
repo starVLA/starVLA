@@ -44,15 +44,25 @@ class RealmanRM75DataConfig:
 
     observation_indices = [0]
     state_indices = [0]
-    # Matches the ACT chunk size and covers the shorter Diffusion Policy horizon.
+    # Action window for ACT: matches its chunk_size so the policy trains on the immediate
+    # 50-step chunk. Diffusion Policy uses the dedicated config below instead — its window
+    # must equal framework.horizon so training targets start at the sampled observation.
     action_indices = list(range(50))
 
     def modality_config(self):
         return {
-            "video": ModalityConfig(delta_indices=self.observation_indices, modality_keys=self.video_keys),
-            "state": ModalityConfig(delta_indices=self.state_indices, modality_keys=self.state_keys),
-            "action": ModalityConfig(delta_indices=self.action_indices, modality_keys=self.action_keys),
-            "language": ModalityConfig(delta_indices=self.observation_indices, modality_keys=self.language_keys),
+            "video": ModalityConfig(
+                delta_indices=self.observation_indices, modality_keys=self.video_keys
+            ),
+            "state": ModalityConfig(
+                delta_indices=self.state_indices, modality_keys=self.state_keys
+            ),
+            "action": ModalityConfig(
+                delta_indices=self.action_indices, modality_keys=self.action_keys
+            ),
+            "language": ModalityConfig(
+                delta_indices=self.observation_indices, modality_keys=self.language_keys
+            ),
         }
 
     def transform(self):
@@ -78,8 +88,20 @@ class RealmanRM75DataConfig:
         )
 
 
+class RealmanRM75DPDataConfig(RealmanRM75DataConfig):
+    """Realman config for Diffusion Policy: the action window equals the DP horizon.
+
+    Diffusion Policy models a fixed ``framework.horizon`` (16 in ``train_realman_dp.yaml``)
+    starting at the sampled observation. Requesting exactly that window keeps the training
+    targets immediate (t .. t+15) and avoids loading unused far-future actions.
+    """
+
+    action_indices = list(range(16))
+
+
 ROBOT_TYPE_CONFIG_MAP = {
     "realman_rm75_delta_joints": RealmanRM75DataConfig(),
+    "realman_rm75_delta_joints_dp": RealmanRM75DPDataConfig(),
 }
 
 # The embodiment tag is read from the DataConfig class variable.
@@ -91,6 +113,15 @@ DATASET_NAMED_MIXTURES = {
             "<your_dataset>",
             1.0,
             "realman_rm75_delta_joints",
+        ),
+    ],
+    # Diffusion Policy variant of the same dataset: identical schema/transforms, but the
+    # action window matches framework.horizon (see RealmanRM75DPDataConfig).
+    "realman_example_dp": [
+        (
+            "<your_dataset>",
+            1.0,
+            "realman_rm75_delta_joints_dp",
         ),
     ],
 }

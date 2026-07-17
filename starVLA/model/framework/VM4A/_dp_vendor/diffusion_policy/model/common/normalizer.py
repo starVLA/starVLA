@@ -1,7 +1,24 @@
 from typing import Union, Dict
 
 import unittest
-import zarr
+
+# VM4A vendoring note: zarr is only needed for the fit-from-zarr code path, which the
+# StarVLA integration never exercises. Import it lazily so framework auto-discovery does
+# not require zarr to be installed; the stub keeps `zarr.Array` type hints evaluable
+# (isinstance checks against the stub are simply False). This is the only functional
+# deviation from the vendored upstream file.
+try:
+    import zarr
+except ImportError:  # pragma: no cover - exercised only when zarr is absent
+
+    class _ZarrArrayStub:
+        pass
+
+    class _ZarrModuleStub:
+        Array = _ZarrArrayStub
+
+    zarr = _ZarrModuleStub()
+
 import numpy as np
 import torch
 import torch.nn as nn

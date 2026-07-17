@@ -12,6 +12,7 @@ from typing import List
 
 import numpy as np
 import torch
+from PIL import Image
 import torchvision
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
@@ -22,7 +23,10 @@ _DP_VENDOR_PATH = Path(__file__).resolve().parent / "_dp_vendor"
 if str(_DP_VENDOR_PATH) not in sys.path:
     sys.path.insert(0, str(_DP_VENDOR_PATH))
 
-from diffusion_policy.model.common.normalizer import LinearNormalizer, SingleFieldLinearNormalizer
+from diffusion_policy.model.common.normalizer import (
+    LinearNormalizer,
+    SingleFieldLinearNormalizer,
+)
 from diffusion_policy.model.diffusion.ema_model import EMAModel
 from diffusion_policy.model.vision.multi_image_obs_encoder import MultiImageObsEncoder
 from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy
@@ -71,7 +75,9 @@ class DiffusionPolicyDefaultConfig:
 
 
 def _get_image_size(config) -> tuple[int, int]:
-    image_size = tuple(config.get("image_size", DiffusionPolicyDefaultConfig.image_size))
+    image_size = tuple(
+        config.get("image_size", DiffusionPolicyDefaultConfig.image_size)
+    )
     return int(image_size[0]), int(image_size[1])
 
 
@@ -79,7 +85,9 @@ def _build_shape_meta(config) -> dict:
     image_height, image_width = _get_image_size(config)
     obs_meta = {
         image_key: {"shape": [3, image_height, image_width], "type": "rgb"}
-        for image_key in tuple(config.get("image_keys", DiffusionPolicyDefaultConfig.image_keys))
+        for image_key in tuple(
+            config.get("image_keys", DiffusionPolicyDefaultConfig.image_keys)
+        )
     }
     obs_meta["state"] = {"shape": [int(config.state_dim)], "type": "low_dim"}
     return {
@@ -98,7 +106,11 @@ class DiffusionPolicy(baseframework):
         obs_encoder = MultiImageObsEncoder(
             shape_meta=shape_meta,
             rgb_model=torchvision.models.resnet18(
-                weights="IMAGENET1K_V1" if framework_config.get("pretrained_backbone", True) else None
+                weights=(
+                    "IMAGENET1K_V1"
+                    if framework_config.get("pretrained_backbone", True)
+                    else None
+                )
             ),
             resize_shape=None,
             crop_shape=None,
@@ -214,7 +226,11 @@ class DiffusionPolicy(baseframework):
             for k, v in state_dict.items()
             if k.startswith(self._EMA_KEY_PREFIX)
         }
-        base_sd = OrderedDict((k, v) for k, v in state_dict.items() if not k.startswith(self._EMA_KEY_PREFIX))
+        base_sd = OrderedDict(
+            (k, v)
+            for k, v in state_dict.items()
+            if not k.startswith(self._EMA_KEY_PREFIX)
+        )
         # Preserve PyTorch state-dict metadata used for submodule version compatibility while
         # stripping only the EMA keys.
         metadata = getattr(state_dict, "_metadata", None)
@@ -238,9 +254,14 @@ class DiffusionPolicy(baseframework):
                 if (
                     k in ema_now
                     and torch.is_floating_point(ema_now[k])
-                    and not torch.allclose(ema_now[k], v.to(dtype=ema_now[k].dtype, device=ema_now[k].device))
+                    and not torch.allclose(
+                        ema_now[k],
+                        v.to(dtype=ema_now[k].dtype, device=ema_now[k].device),
+                    )
                 ):
-                    raise RuntimeError(f"DiffusionPolicy.load_state_dict: loaded true EMA differs from checkpoint ({k})")
+                    raise RuntimeError(
+                        f"DiffusionPolicy.load_state_dict: loaded true EMA differs from checkpoint ({k})"
+                    )
         else:
             # Old checkpoint: reseed the EMA averaged_model, which has the same structure because
             # it is a deepcopy, from action_model after its checkpoint weights have been loaded.
@@ -262,7 +283,9 @@ class DiffusionPolicy(baseframework):
         # starVLA StateActionTransform/PolicyNormProcessor own normalization.
         # DP internal normalizers must be identity to avoid double normalization.
         framework_config = self.config.framework
-        keys = list(framework_config.get("image_keys", DiffusionPolicyDefaultConfig.image_keys)) + ["state", "action"]
+        keys = list(
+            framework_config.get("image_keys", DiffusionPolicyDefaultConfig.image_keys)
+        ) + ["state", "action"]
         normalizer = LinearNormalizer()
         for key in keys:
             normalizer[key] = SingleFieldLinearNormalizer.create_identity()
@@ -271,19 +294,38 @@ class DiffusionPolicy(baseframework):
     def _sync_ema_to_action_model(self) -> None:
         action_param = next(self.action_model.parameters())
         ema_param = next(self._ema.averaged_model.parameters())
-        if ema_param.device != action_param.device or ema_param.dtype != action_param.dtype:
-            self._ema.averaged_model.to(device=action_param.device, dtype=action_param.dtype)
+        if (
+            ema_param.device != action_param.device
+            or ema_param.dtype != action_param.dtype
+        ):
+            self._ema.averaged_model.to(
+                device=action_param.device, dtype=action_param.dtype
+            )
 
-    def _examples_to_dp_batch(self, examples: List[dict], require_action: bool = True) -> dict:
+    def _examples_to_dp_batch(
+        self, examples: List[dict], require_action: bool = True
+    ) -> dict:
         if not examples:
             raise ValueError("DP batch requires at least one example")
 
         framework_config = self.config.framework
-        image_keys = list(framework_config.get("image_keys", DiffusionPolicyDefaultConfig.image_keys))
-        n_obs_steps = int(framework_config.get("n_obs_steps", DiffusionPolicyDefaultConfig.n_obs_steps))
-        horizon = int(framework_config.get("horizon", DiffusionPolicyDefaultConfig.horizon))
-        action_dim = int(framework_config.get("action_dim", DiffusionPolicyDefaultConfig.action_dim))
-        state_dim = int(framework_config.get("state_dim", DiffusionPolicyDefaultConfig.state_dim))
+        image_keys = list(
+            framework_config.get("image_keys", DiffusionPolicyDefaultConfig.image_keys)
+        )
+        n_obs_steps = int(
+            framework_config.get(
+                "n_obs_steps", DiffusionPolicyDefaultConfig.n_obs_steps
+            )
+        )
+        horizon = int(
+            framework_config.get("horizon", DiffusionPolicyDefaultConfig.horizon)
+        )
+        action_dim = int(
+            framework_config.get("action_dim", DiffusionPolicyDefaultConfig.action_dim)
+        )
+        state_dim = int(
+            framework_config.get("state_dim", DiffusionPolicyDefaultConfig.state_dim)
+        )
         image_height, image_width = _get_image_size(framework_config)
         target_image_size = (image_width, image_height)
         model_param = next(self.action_model.parameters())
@@ -299,7 +341,9 @@ class DiffusionPolicy(baseframework):
                 try:
                     image_source = example["image"][view_idx]
                 except (IndexError, TypeError) as exc:
-                    raise ValueError(f"DP image key {image_key} expects example['image'][{view_idx}]") from exc
+                    raise ValueError(
+                        f"DP image key {image_key} expects example['image'][{view_idx}]"
+                    ) from exc
 
                 if isinstance(image_source, (list, tuple)):
                     frames = list(image_source)
@@ -309,26 +353,43 @@ class DiffusionPolicy(baseframework):
                 if len(frames) == 1 and n_obs_steps > 1:
                     frames = frames * n_obs_steps
                 elif len(frames) < n_obs_steps:
-                    raise ValueError(f"DP image key {image_key} needs {n_obs_steps} frames, got {len(frames)}")
+                    raise ValueError(
+                        f"DP image key {image_key} needs {n_obs_steps} frames, got {len(frames)}"
+                    )
                 else:
                     frames = frames[-n_obs_steps:]
 
-                if isinstance(frames[0], np.ndarray):
+                if isinstance(frames[0], np.ndarray) and all(
+                    isinstance(f, np.ndarray)
+                    and f.shape[:2] == (image_height, image_width)
+                    for f in frames
+                ):
                     # Fast path: batch uint8 HWC worker output for one H2D transfer and GPU
-                    # normalization; otherwise retain the backward-compatible PIL path.
+                    # normalization — only when every frame already matches the configured
+                    # input size. Any other resolution falls through to the PIL path below,
+                    # which resizes instead of tripping the encoder's shape assertion.
                     arr = np.stack(frames, axis=0)
                     seq = torch.from_numpy(arr).to(device, non_blocking=True)
-                    seq = seq.permute(0, 3, 1, 2).to(torch.float32).div_(255.0).to(model_dtype)
+                    seq = (
+                        seq.permute(0, 3, 1, 2)
+                        .to(torch.float32)
+                        .div_(255.0)
+                        .to(model_dtype)
+                    )
                     image_sequences.append(seq)
                 else:
                     frame_tensors = []
                     for image in frames:
+                        if isinstance(image, np.ndarray):
+                            image = Image.fromarray(image)
                         image = image.convert("RGB")
                         if image.size != target_image_size:
                             image = image.resize(target_image_size)
                         image_array = np.asarray(image, dtype=np.float32) / 255.0
                         image_tensor = (
-                            torch.from_numpy(image_array).permute(2, 0, 1).to(device=device, dtype=model_dtype)
+                            torch.from_numpy(image_array)
+                            .permute(2, 0, 1)
+                            .to(device=device, dtype=model_dtype)
                         )
                         frame_tensors.append(image_tensor)
                     image_sequences.append(torch.stack(frame_tensors, dim=0))
@@ -336,19 +397,27 @@ class DiffusionPolicy(baseframework):
 
         states = []
         for example in examples:
-            state = example.get("state", np.zeros((n_obs_steps, state_dim), dtype=np.float32))
+            state = example.get(
+                "state", np.zeros((n_obs_steps, state_dim), dtype=np.float32)
+            )
             state_tensor = torch.as_tensor(state, dtype=model_dtype, device=device)
             if state_tensor.ndim == 1:
                 if state_tensor.shape[0] != state_dim:
-                    raise ValueError(f"DP state must have {state_dim} values, got {state_tensor.shape[0]}")
+                    raise ValueError(
+                        f"DP state must have {state_dim} values, got {state_tensor.shape[0]}"
+                    )
                 state_tensor = state_tensor.unsqueeze(0).repeat(n_obs_steps, 1)
             elif state_tensor.ndim == 2:
                 if state_tensor.shape[-1] != state_dim:
-                    raise ValueError(f"DP state must have shape [T, {state_dim}], got {tuple(state_tensor.shape)}")
+                    raise ValueError(
+                        f"DP state must have shape [T, {state_dim}], got {tuple(state_tensor.shape)}"
+                    )
                 if state_tensor.shape[0] == 1:
                     state_tensor = state_tensor.repeat(n_obs_steps, 1)
                 elif state_tensor.shape[0] < n_obs_steps:
-                    raise ValueError(f"DP state history must be at least {n_obs_steps}, got {state_tensor.shape[0]}")
+                    raise ValueError(
+                        f"DP state history must be at least {n_obs_steps}, got {state_tensor.shape[0]}"
+                    )
                 else:
                     state_tensor = state_tensor[-n_obs_steps:]
             else:
@@ -365,12 +434,23 @@ class DiffusionPolicy(baseframework):
 
         actions = []
         for example in examples:
-            action_tensor = torch.as_tensor(example["action"], dtype=model_dtype, device=device)
+            action_tensor = torch.as_tensor(
+                example["action"], dtype=model_dtype, device=device
+            )
             if action_tensor.ndim != 2 or action_tensor.shape[-1] != action_dim:
-                raise ValueError(f"DP action must have shape [T, {action_dim}], got {tuple(action_tensor.shape)}")
+                raise ValueError(
+                    f"DP action must have shape [T, {action_dim}], got {tuple(action_tensor.shape)}"
+                )
             if action_tensor.shape[0] < horizon:
-                raise ValueError(f"DP action horizon must be at least {horizon}, got {action_tensor.shape[0]}")
-            actions.append(action_tensor[-horizon:])
+                raise ValueError(
+                    f"DP action horizon must be at least {horizon}, got {action_tensor.shape[0]}"
+                )
+            # Take the immediate prefix (t .. t+horizon-1). Dataloaders whose action window
+            # starts at the current step then always train DP on the actions that follow the
+            # sampled observation, even if they provide a longer window (e.g. one shared with
+            # a longer-chunk framework such as ACT). Identical to the previous behavior when
+            # the window length equals the horizon.
+            actions.append(action_tensor[:horizon])
         batch["action"] = torch.stack(actions, dim=0)
 
         return batch
@@ -380,6 +460,14 @@ class DiffusionPolicy(baseframework):
         with _model_dtype_no_autocast(self.action_model):
             loss = self.action_model.compute_loss(batch)
         if self.action_model.training:
+            # Known timing caveat: StarVLA's trainer offers no post-optimizer hook to a
+            # framework, so the EMA is stepped here (once per training forward, tracking the
+            # weights as of the previous optimizer step). Compared to upstream Diffusion
+            # Policy (EMA after optimizer.step) the EMA lags by exactly one update, which is
+            # negligible over full training; with gradient accumulation the decay schedule
+            # advances per micro-batch (towards unchanged weights). Wiring the update to the
+            # optimizer would require trainer changes and is intentionally out of scope for
+            # this additive integration.
             self._sync_ema_to_action_model()
             self._ema.step(self.action_model)
         return {"action_loss": loss}
