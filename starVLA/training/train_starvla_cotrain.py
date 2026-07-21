@@ -35,7 +35,12 @@ from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_accelerator, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    build_accelerator,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -292,7 +297,7 @@ class VLAMTrainer(TrainerUtils):
             # `accelerator.sync_gradients`), so `_train_step` reports whether an
             # optimizer step actually happened. Fall back to `sync_gradients`
             # for the non-DeepSpeed path.
-            optimizer_stepped = step_metrics.pop("_optimizer_step", self.accelerator.sync_gradients)
+            optimizer_stepped = step_metrics.pop("_optimizer_step")
             if optimizer_stepped:
                 progress_bar.update(1)
                 self.completed_steps += 1

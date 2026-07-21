@@ -44,7 +44,13 @@ from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_accelerator, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    build_accelerator,
+    build_param_lr_groups,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -340,7 +346,7 @@ class VLATrainer(TrainerUtils):
 
             # DeepSpeed decides accumulation boundaries inside the engine, so
             # `_train_step` reports whether this microbatch produced an update.
-            optimizer_stepped = step_metrics.pop("_optimizer_step", self.accelerator.sync_gradients)
+            optimizer_stepped = step_metrics.pop("_optimizer_step")
             if optimizer_stepped:
                 progress_bar.update(1)
                 self.completed_steps += 1
@@ -361,7 +367,11 @@ class VLATrainer(TrainerUtils):
             if optimizer_stepped:
                 self._log_metrics(step_metrics)
 
-            if optimizer_stepped and self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
+            if (
+                optimizer_stepped
+                and self.completed_steps % self.config.trainer.save_interval == 0
+                and self.completed_steps > 0
+            ):
                 self._save_checkpoint()
 
             if self.completed_steps >= self.config.trainer.max_train_steps:
