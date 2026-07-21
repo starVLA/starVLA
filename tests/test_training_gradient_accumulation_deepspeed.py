@@ -1,15 +1,20 @@
 """Real DeepSpeed gradient-accumulation smoke test.
 
 Run this file through ``accelerate launch`` with a DeepSpeed ZeRO-2 or ZeRO-3
-configuration. The same command works with one or multiple processes.
+configuration and ``--trainer {vla,vlm,cotrain}``. The same command works with
+one or multiple processes.
 """
 
+import argparse
 from types import SimpleNamespace
 
 import torch
+from accelerate.utils import DistributedType
 from torch.utils.data import DataLoader, TensorDataset
 
 from starVLA.training.train_starvla import VLATrainer
+from starVLA.training.train_starvla_cotrain import VLAMTrainer as CoTrainTrainer
+from starVLA.training.train_starvlm import VLAMTrainer as VLMTrainer
 from starVLA.training.trainer_utils.trainer_tools import build_accelerator
 
 
@@ -23,6 +28,9 @@ class _ToyModel(torch.nn.Module):
     def forward(self, value):
         return {"action_loss": self.projection(value).sum()}
 
+    def qwen_vl_interface(self, value):
+        return SimpleNamespace(loss=self.projection(value).sum())
+
 
 class _Scheduler:
     def __init__(self):
@@ -32,11 +40,12 @@ class _Scheduler:
         self.steps += 1
 
 
-def main():
+def main(trainer_kind):
     config = SimpleNamespace(
         trainer=SimpleNamespace(
             gradient_accumulation_steps=2,
             gradient_clipping=None,
+            loss_scale=SimpleNamespace(vlm=1.0),
         )
     )
     accelerator = build_accelerator(config)
@@ -47,13 +56,17 @@ def main():
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     engine = model
-    assert hasattr(engine, "is_gradient_accumulation_boundary")
-    assert hasattr(engine, "backward")
+    assert accelerator.distributed_type == DistributedType.DEEPSPEED
     assert accelerator.gradient_accumulation_steps == 2
     assert engine.gradient_accumulation_steps() == 2
 
     scheduler = _Scheduler()
-    trainer = VLATrainer.__new__(VLATrainer)
+    trainer_cls = {
+        "vla": VLATrainer,
+        "vlm": VLMTrainer,
+        "cotrain": CoTrainTrainer,
+    }[trainer_kind]
+    trainer = trainer_cls.__new__(trainer_cls)
     trainer.config = config
     trainer.model = engine
     trainer.optimizer = optimizer
@@ -64,7 +77,12 @@ def main():
     initial_global_steps = engine.global_steps
     for (value,) in dataloader:
         value = value.to(dtype=engine.module.projection.weight.dtype)
-        metrics = trainer._train_step(value)
+        if trainer_kind == "vla":
+            metrics = trainer._train_step(value)
+        elif trainer_kind == "vlm":
+            metrics = trainer._train_step({"value": value})
+        else:
+            metrics = trainer._train_step(value, {"value": value})
         boundaries.append(metrics["_optimizer_step"])
 
     assert boundaries == [False, True]
@@ -74,10 +92,14 @@ def main():
     state_dict = accelerator.get_state_dict(engine)
     if accelerator.is_main_process:
         final_weight = state_dict["projection.weight"].float().item()
-        assert abs(final_weight - 0.95) < 0.006
-    accelerator.print("DeepSpeed gradient accumulation smoke passed")
+        expected_weight = 0.90 if trainer_kind == "cotrain" else 0.95
+        assert abs(final_weight - expected_weight) < 0.006
+    accelerator.print(f"DeepSpeed {trainer_kind} gradient accumulation smoke passed")
     accelerator.state.destroy_process_group()
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--trainer", choices=("vla", "vlm", "cotrain"), required=True)
+    args = parser.parse_args()
+    main(args.trainer)
