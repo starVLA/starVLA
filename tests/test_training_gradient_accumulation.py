@@ -6,6 +6,7 @@ from unittest import mock
 
 import torch
 from accelerate import Accelerator
+from accelerate.utils import DistributedType
 
 TRAINERS = (
     ("starVLA.training.train_starvla", "vla"),
@@ -159,6 +160,7 @@ class TrainingGradientAccumulationTest(unittest.TestCase):
                 model = _ToyModel()
                 engine = _FakeDeepSpeedEngine(model, [False, True])
                 accelerator = mock.Mock()
+                accelerator.distributed_type = DistributedType.DEEPSPEED
                 accelerator.unwrap_model.return_value = model
                 scheduler = mock.Mock()
                 optimizer = mock.Mock()

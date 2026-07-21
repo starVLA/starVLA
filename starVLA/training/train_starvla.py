@@ -33,7 +33,7 @@ except ImportError:
 
 import wandb
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedType, set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -413,13 +413,13 @@ class VLATrainer(TrainerUtils):
         # DeepSpeed ZeRO-2/3 cannot use Accelerate's `accumulate()` path because
         # that path may enter `no_sync()`. Let the engine own accumulation and
         # optimizer stepping when the prepared model is a DeepSpeed engine.
-        if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 output_dict = self.model.forward(batch_vla)
                 action_loss = output_dict["action_loss"]
 
             self.model.backward(action_loss)
-            optimizer_stepped = bool(self.model.is_gradient_accumulation_boundary())
+            optimizer_stepped = self.model.is_gradient_accumulation_boundary()
             self.model.step()
             if optimizer_stepped:
                 self.lr_scheduler.step()

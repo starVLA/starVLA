@@ -22,7 +22,7 @@ import torch
 import torch.distributed as dist
 import wandb
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedType, set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -278,14 +278,14 @@ class VLAMTrainer(TrainerUtils):
         """Execute single training step."""
         log_dict = {}
 
-        if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 unwrapped = self.accelerator.unwrap_model(self.model)
                 vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
 
             self.model.backward(vlm_loss)
-            optimizer_stepped = bool(self.model.is_gradient_accumulation_boundary())
+            optimizer_stepped = self.model.is_gradient_accumulation_boundary()
             self.model.step()
             if optimizer_stepped:
                 self.lr_scheduler.step()

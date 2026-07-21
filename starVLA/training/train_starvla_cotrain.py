@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 import wandb
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedType, set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -292,11 +292,8 @@ class VLAMTrainer(TrainerUtils):
             step_metrics = self._train_step(batch_vla, batch_vlm)
             t_end_model = time.perf_counter()
 
-            # When the model is a DeepSpeed engine, gradient-accumulation
-            # boundaries are decided by the engine (not by
-            # `accelerator.sync_gradients`), so `_train_step` reports whether an
-            # optimizer step actually happened. Fall back to `sync_gradients`
-            # for the non-DeepSpeed path.
+            # `_train_step` reports whether accumulation reached an optimizer
+            # boundary so outer-loop side effects stay tied to real updates.
             optimizer_stepped = step_metrics.pop("_optimizer_step")
             if optimizer_stepped:
                 progress_bar.update(1)
@@ -365,7 +362,7 @@ class VLAMTrainer(TrainerUtils):
         # logic of ZeRO stage 2". When the prepared model is a DeepSpeed engine,
         # drive gradient accumulation through the engine directly: `backward()`
         # accumulates and `step()` only updates on the engine's own boundary.
-        if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 output_dict = self.model.forward(batch_vla)
                 action_loss = output_dict["action_loss"]
@@ -377,7 +374,7 @@ class VLAMTrainer(TrainerUtils):
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.model.backward(vlm_loss)
 
-            optimizer_stepped = bool(self.model.is_gradient_accumulation_boundary())
+            optimizer_stepped = self.model.is_gradient_accumulation_boundary()
             self.model.step()
             if optimizer_stepped:
                 self.lr_scheduler.step()
