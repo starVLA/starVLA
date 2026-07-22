@@ -184,10 +184,47 @@ datasets:
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
     data_mix: libero_all          # all 4 suites; use "libero_goal" for single suite
+    action_horizon: ${framework.action_model.action_horizon}
+    normalization_modes: min_max  # replace the DataConfig's existing modes
     per_device_batch_size: 16
 ```
 
 The `data_mix` field selects which datasets to combine. These mixtures are defined in [`examples/simBenchmarks/LIBERO/train_files/data_registry/data_config.py`](../examples/simBenchmarks/LIBERO/train_files/data_registry/data_config.py):
+
+`action_horizon` is linked to the model value through OmegaConf interpolation.
+The dataloader samples actions with `range(action_horizon)` and raises an error
+at startup if an explicitly configured data horizon differs from the model
+horizon. Therefore a single override changes both sides safely:
+
+```bash
+--framework.action_model.action_horizon 16
+```
+
+`normalization_modes` accepts either one mode, which replaces all normalization
+modes already selected by the DataConfig, or a per-modality/per-key mapping:
+
+```yaml
+# Quick global switch while preserving which keys are normalized:
+normalization_modes: q99
+
+# Fine-grained form:
+normalization_modes:
+  action: q99
+  action.gripper: binary
+  state.joints: mean_std
+```
+
+Supported modes are `min_max`, `q99`, `mean_std`, and `binary`. Setting an
+individual key to `null` disables normalization for that key. The same resolved
+pipeline is reconstructed by the policy server for action un-normalization.
+For example, both settings can be switched in one training invocation:
+
+```bash
+python -m starVLA.training.train_starvla \
+  --config_yaml examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml \
+  --framework.action_model.action_horizon 16 \
+  --datasets.vla_data.normalization_modes q99
+```
 
 ```python
 DATASET_NAMED_MIXTURES = {
