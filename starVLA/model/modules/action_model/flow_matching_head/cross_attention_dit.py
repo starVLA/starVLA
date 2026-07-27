@@ -331,6 +331,94 @@ class DiT(ModelMixin, ConfigMixin):
             return self.proj_out_2(hidden_states)
 
 
+class AlternateVLDiT(DiT):
+    """
+    Alternate Vision-Language DiT that separates image and non-image (text) tokens
+    during cross-attention processing.
+
+    Ported from GR00T N1.7 (``gr00t.model.modules.dit.AlternateVLDiT``): even-indexed
+    cross-attention blocks alternate between attending to *non-image* and *image*
+    backbone tokens every ``2 * attend_text_every_n_blocks`` blocks, while odd-indexed
+    blocks run self-attention (requires ``interleave_self_attention=True``).
+
+    Unlike :class:`DiT`, this variant needs an ``image_mask`` (which backbone tokens are
+    image tokens) plus a ``backbone_attention_mask`` so the image/text subsets can be
+    selected per block.
+    """
+
+    def __init__(self, *args, attend_text_every_n_blocks: int = 2, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.attend_text_every_n_blocks = attend_text_every_n_blocks
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,  # Shape: (B, T, D)
+        encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D)
+        timestep: Optional[torch.LongTensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        return_all_hidden_states: bool = False,
+        image_mask: Optional[torch.Tensor] = None,
+        backbone_attention_mask: Optional[torch.Tensor] = None,
+    ):
+        assert image_mask is not None, "AlternateVLDiT requires `image_mask` (which backbone tokens are image tokens)."
+        assert (
+            backbone_attention_mask is not None
+        ), "AlternateVLDiT requires `backbone_attention_mask`. Pass the VLM attention mask."
+        assert self.config.interleave_self_attention, "AlternateVLDiT requires `interleave_self_attention=True`."
+
+        # Encode timesteps
+        temb = self.timestep_encoder(timestep)
+
+        # Process through transformer blocks - single pass through the blocks
+        hidden_states = hidden_states.contiguous()
+        encoder_hidden_states = encoder_hidden_states.contiguous()
+
+        # image_mask shape: (B, S) where True indicates image tokens.
+        # For attention, False means "don't attend to this token".
+        image_attention_mask = image_mask & backbone_attention_mask
+        non_image_attention_mask = (~image_mask) & backbone_attention_mask
+
+        all_hidden_states = [hidden_states]
+
+        # Process through transformer blocks
+        for idx, block in enumerate(self.transformer_blocks):
+            if idx % 2 == 1:
+                # Self-attention blocks
+                hidden_states = block(
+                    hidden_states,
+                    attention_mask=None,
+                    encoder_hidden_states=None,
+                    encoder_attention_mask=None,
+                    temb=temb,
+                )
+            else:
+                # Cross-attention blocks - alternate between non-image and image tokens
+                if idx % (2 * self.attend_text_every_n_blocks) == 0:
+                    # Attend to non-image tokens
+                    curr_encoder_attention_mask = non_image_attention_mask
+                else:
+                    # Attend to image tokens
+                    curr_encoder_attention_mask = image_attention_mask
+
+                hidden_states = block(
+                    hidden_states,
+                    attention_mask=None,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=curr_encoder_attention_mask,
+                    temb=temb,
+                )
+            all_hidden_states.append(hidden_states)
+
+        # Output processing
+        conditioning = temb
+        shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
+        hidden_states = self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
+        if return_all_hidden_states:
+            return self.proj_out_2(hidden_states), all_hidden_states
+        else:
+            return self.proj_out_2(hidden_states)
+
+
 class SelfAttentionTransformer(ModelMixin, ConfigMixin):
     _supports_gradient_checkpointing = True
 
@@ -398,3 +486,139 @@ class SelfAttentionTransformer(ModelMixin, ConfigMixin):
             return hidden_states, all_hidden_states
         else:
             return hidden_states
+
+
+class RoboTTTDiT(DiT):
+    """TTT-augmented DiT for RoboTTT (arxiv 2607.15275).
+
+    Adds a :class:`TTTLayer` after each DiT attention block. Unlike :class:`DiT` /
+    :class:`AlternateVLDiT`, this variant processes a **trajectory**: hidden states are
+    ``[B, T_time, L_step, D]`` (per-timestep tokens: register + proprio + noised-action)
+    cross-attending to per-timestep VL tokens ``[B, T_time, S, D]``. Attention operates
+    *within* each timestep (reshape to ``[B*T, L, D]``); the TTT layer operates *across*
+    the time dimension (reshape to ``[B*L, T, D]``), compressing the trajectory history
+    into fast weights (RoboTTT §3.1). Fast weights are carried across timesteps / segments
+    via the returned ``ttt_states``.
+
+    Args:
+        *args, **kwargs: forwarded to :class:`DiT` (num_layers, attention heads, …).
+        ttt_cfg: dict of :class:`TTTLayer` kwargs (``num_heads``, ``mlp_inner_dim``,
+            ``base_lr``, ``gate_init``, ``rope_theta``, ``chunk_size``). One TTT layer is
+            built per DiT block (RoboTTT Appendix A.1: "a TTT layer to each of its 16 DiT
+            layers").
+        use_alternate_vl_dit: if True, use the AlternateVLDiT image/text alternating
+            cross-attention pattern (N1.7 default); else plain cross-attention.
+    """
+
+    def __init__(
+        self,
+        *args,
+        ttt_cfg: Optional[dict] = None,
+        use_alternate_vl_dit: bool = True,
+        attend_text_every_n_blocks: int = 2,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        from starVLA.model.modules.action_model.ttt_layer import TTTLayer  # local import avoids cycles
+
+        ttt_cfg = ttt_cfg or {}
+        ttt_dim = self.inner_dim  # TTT operates in the DiT latent space
+        self.ttt_layers = nn.ModuleList([TTTLayer(dim=ttt_dim, **ttt_cfg) for _ in range(self.config.num_layers)])
+        self.use_alternate_vl_dit = use_alternate_vl_dit
+        self.attend_text_every_n_blocks = attend_text_every_n_blocks
+        print(
+            "Total number of RoboTTTDiT TTT parameters: ",
+            sum(p.numel() for p in self.ttt_layers.parameters() if p.requires_grad),
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,  # [B, T_time, L_step, inner_dim]
+        encoder_hidden_states: torch.Tensor,  # [B, T_time, S, inner_dim]
+        timestep: torch.Tensor,  # [B, T_time] flow-matching timestep per (sample, time)
+        image_mask: Optional[torch.Tensor] = None,  # [B, T_time, S] bool (alternate mode)
+        backbone_attention_mask: Optional[torch.Tensor] = None,  # [B, T_time, S] bool
+        ttt_states: Optional[list] = None,  # per-layer carried fast weights
+        tbptt_segment_length: Optional[int] = None,
+        update_ttt: bool = True,  # False → apply-only (inference denoising reuses fast weights)
+    ):
+        B, T_time, L_step, _ = hidden_states.shape
+        S = encoder_hidden_states.shape[2]
+        D = self.inner_dim
+        enc_dim = encoder_hidden_states.shape[-1]  # = cross_attention_dim (VLM hidden size)
+
+        # Per-(sample,time) flow timestep → temb of shape [B*T, inner_dim].
+        temb = self.timestep_encoder(timestep.reshape(-1))
+
+        hidden_states = hidden_states.contiguous()
+        encoder_hidden_states = encoder_hidden_states.contiguous()
+        # Flatten time into batch for per-timestep attention.
+        hs = hidden_states.reshape(B * T_time, L_step, D)  # [B*T, L, inner_dim]
+        ehs = encoder_hidden_states.reshape(B * T_time, S, enc_dim)  # [B*T, S, cross_attn_dim]
+        if image_mask is not None:
+            image_mask = image_mask.reshape(B * T_time, S)
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.reshape(B * T_time, S)
+
+        if ttt_states is None:
+            ttt_states = [None] * len(self.ttt_layers)
+
+        all_hidden_states = [hidden_states]
+        for idx, block in enumerate(self.transformer_blocks):
+            # ── 1. Attention within each timestep (on [B*T, L, D]) ──────────
+            if idx % 2 == 1 and self.config.interleave_self_attention:
+                # Self-attention block (no cross-attn).
+                hs = block(
+                    hs,
+                    attention_mask=None,
+                    encoder_hidden_states=None,
+                    encoder_attention_mask=None,
+                    temb=temb,
+                )
+            elif self.use_alternate_vl_dit and image_mask is not None:
+                # AlternateVLDiT: alternate image / non-image cross-attention.
+                assert backbone_attention_mask is not None, "alternate mode needs backbone_attention_mask"
+                image_attention_mask = image_mask & backbone_attention_mask
+                non_image_attention_mask = (~image_mask) & backbone_attention_mask
+                if idx % (2 * self.attend_text_every_n_blocks) == 0:
+                    curr_mask = non_image_attention_mask
+                else:
+                    curr_mask = image_attention_mask
+                hs = block(
+                    hs,
+                    attention_mask=None,
+                    encoder_hidden_states=ehs,
+                    encoder_attention_mask=curr_mask,
+                    temb=temb,
+                )
+            else:
+                # Plain cross-attention block.
+                hs = block(
+                    hs,
+                    attention_mask=None,
+                    encoder_hidden_states=ehs,
+                    encoder_attention_mask=backbone_attention_mask,
+                    temb=temb,
+                )
+            all_hidden_states.append(hs)
+
+            # ── 2. TTT across the time dimension (RoboTTT §3.1) ─────────────
+            # [B*T, L, D] → [B, T, L, D] → [B*L, T, D] (each token position = a time series).
+            hs_traj = hs.reshape(B, T_time, L_step, D).permute(0, 2, 1, 3).reshape(B * L_step, T_time, D)
+            hs_traj, new_state = self.ttt_layers[idx](
+                hs_traj,
+                state=ttt_states[idx],
+                tbptt_segment_length=tbptt_segment_length,
+                update=update_ttt,
+            )
+            ttt_states[idx] = new_state
+            # back to [B, T, L, D]
+            hs = hs_traj.reshape(B, L_step, T_time, D).permute(0, 2, 1, 3).reshape(B * T_time, L_step, D)
+
+        # ── 3. Output projection (per-timestep, temb-conditioned) ──────────
+        conditioning = temb
+        shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
+        hs = self.norm_out(hs) * (1 + scale[:, None]) + shift[:, None]
+        out = self.proj_out_2(hs)  # [B*T, L, output_dim]
+        out = out.reshape(B, T_time, L_step, -1)
+        return out, ttt_states
