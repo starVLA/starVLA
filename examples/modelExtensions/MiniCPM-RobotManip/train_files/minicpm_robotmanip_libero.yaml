@@ -1,0 +1,65 @@
+run_id: minicpm_robotmanip_libero_full_finetune
+run_root_dir: playground/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_MiniCPM_RobotManip
+is_debug: false
+
+framework:
+  name: MiniCPMRobotManip
+  # Released 1.5B checkpoint (backbone + pretrained 80-D GR00T head), loaded via
+  # trust_remote_code. Set to a local path to avoid re-downloading from HF.
+  base_vlm: openbmb/MiniCPM-RobotManip
+  attn_implementation: eager
+  repeated_diffusion_steps: 8
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    data_root_dir: playground/Datasets/LIBERO_EE6D
+    data_mix: minicpm_robotmanip_libero_ee6d
+    lerobot_version: v3.0
+    include_state: true
+    # The released model was trained with an FP32 action head and FP32
+    # state/action targets. Avoid the dataloader's legacy FP16 packing, which
+    # quantizes absolute EE positions by as much as 0.49 mm before loss.
+    state_action_dtype: float32
+    # The released model and evaluation interface both use 448×448 inputs.
+    image_size: 448
+    per_device_batch_size: 12
+    num_workers: 2
+    video_backend: torchvision_av
+    # Match the LIBERO branch of the released mixed post-training recipe.
+    balance_dataset_weights: true
+    balance_trajectory_weights: true
+    drop_incomplete_action_chunks: true
+
+trainer:
+  max_train_steps: 1500
+  num_warmup_steps: 100
+  save_interval: 250
+  eval_interval: 1000000   # closed-loop eval is out of scope for this example
+  learning_rate:
+    # Conservative full-parameter training from the released checkpoint.
+    base: 1.0e-07
+    model.action_head: 3.0e-06
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    # Keep the floor proportional because the VLM and action head intentionally
+    # use different peak learning rates.
+    min_lr_rate: 0.1
+  freeze_modules: ''
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 1.0e-08
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: true
+
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

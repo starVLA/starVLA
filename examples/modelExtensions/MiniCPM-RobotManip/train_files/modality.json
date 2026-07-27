@@ -1,0 +1,19 @@
+{
+    "state": {
+        "eef_position": {"start": 0, "end": 3, "original_key": "observation.xvla_abs_ee6d"},
+        "eef_rotation": {"start": 3, "end": 9, "original_key": "observation.xvla_abs_ee6d"},
+        "gripper":      {"start": 9, "end": 10, "original_key": "observation.xvla_abs_ee6d"}
+    },
+    "action": {
+        "eef_position": {"start": 0, "end": 3, "original_key": "observation.xvla_abs_ee6d"},
+        "eef_rotation": {"start": 3, "end": 9, "original_key": "observation.xvla_abs_ee6d"},
+        "gripper":      {"start": 9, "end": 10, "original_key": "observation.xvla_abs_ee6d"}
+    },
+    "video": {
+        "primary_image": {"original_key": "observation.images.image"},
+        "wrist_image":    {"original_key": "observation.images.wrist_image"}
+    },
+    "annotation": {
+        "human.action.task_description": {"original_key": "task_index"}
+    }
+}
