@@ -142,7 +142,17 @@ class TTTLayer(nn.Module):
         Returns:
             (y [B, T, C], new_state).
         """
-        training = self.training
+        # Build the meta-graph (outer task loss backprops through the inner fast-weight
+        # update into θ_K/θ_V/θ_Q/θ_lr/W0) only when the *outer* autograd context is
+        # grad-enabled AND the module is in training mode. ``self.training`` alone is NOT
+        # a reliable signal at inference: ``predict_action`` runs under ``no_grad`` but
+        # ``set_frozen_modules_to_eval_mode`` leaves the trainable DiT (and thus this
+        # layer) in ``train()``, so ``self.training`` would be True and we'd take the
+        # ``create_graph=True`` / ``retain_graph=True`` branch under ``no_grad`` — which
+        # is ill-formed and raises "differentiated Tensors ... not ... used in the graph".
+        # ``torch.is_grad_enabled()`` at entry reflects whether the caller will backprop.
+        outer_grad_enabled = torch.is_grad_enabled()
+        training = outer_grad_enabled and self.training
         B, T, C = x.shape
         H, d = self.num_heads, self.head_dim
         x_h = x.reshape(B, H, T, d)
@@ -166,9 +176,10 @@ class TTTLayer(nn.Module):
             y = x + self.gate * out
             return y, (W1, W2)
 
-        # Inner gradient step needs a graph. During training the outer graph is enabled;
-        # during inference (outer no_grad) we re-enable grad locally and detach outputs.
-        grad_ctx = torch.enable_grad() if not torch.is_grad_enabled() else nullcontext()
+        # Inner gradient step needs a graph. During a training forward the outer graph is
+        # already enabled; during inference (outer no_grad) we re-enable grad locally and
+        # detach outputs so the inner update runs but nothing leaks into the outer graph.
+        grad_ctx = torch.enable_grad() if not outer_grad_enabled else nullcontext()
 
         chunk = self.chunk_size
         outs = []
