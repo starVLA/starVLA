@@ -254,7 +254,12 @@ class RoboTTT(baseframework):
         return {"action_loss": out["action_loss"]}
 
     # ── predict_action (inference) ──────────────────────────────────────
-    @torch.inference_mode()
+    # NOTE: ``no_grad`` (not ``inference_mode``): the TTT layer updates fast weights by
+    # computing an *inner gradient* at inference (``ttt_layer.TTTLayer.forward`` calls
+    # ``torch.autograd.grad`` under a local ``torch.enable_grad()``). ``inference_mode``
+    # produces tensors with no ``grad_fn`` that even ``enable_grad`` cannot rescue, so
+    # the TTT inner loop raises "element 0 of tensors does not require grad".
+    @torch.no_grad()
     def predict_action(self, examples: List[dict], **kwargs: Any) -> dict:
         """``examples`` = context trajectory (list of per-timestep dicts; last = current).
 
