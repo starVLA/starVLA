@@ -1378,17 +1378,37 @@ class LeRobotSingleDataset(Dataset):
 
     def _pack_sample(self, data: dict) -> dict:
         """Pack transformed modality data into training sample format."""
+        state_action_dtype = (
+            self.data_cfg.get("state_action_dtype", "float16")
+            if self.data_cfg is not None
+            else "float16"
+        )
+        try:
+            state_action_dtype = np.dtype(state_action_dtype)
+        except TypeError as exc:
+            raise ValueError(
+                f"state_action_dtype must be a NumPy dtype name, got {state_action_dtype!r}"
+            ) from exc
+
+        image_size = self.data_cfg.get("image_size", 224) if self.data_cfg is not None else 224
+        if isinstance(image_size, int):
+            image_size = (image_size, image_size)
+        else:
+            image_size = tuple(image_size)
+            if len(image_size) != 2:
+                raise ValueError(f"image_size must be an int or a 2-item sequence, got {image_size!r}")
+
         step_images = []
         for video_key in self.modality_keys["video"]:
             image = data[video_key][0]
-            image = Image.fromarray(image).resize((224, 224))
+            image = Image.fromarray(image).resize(image_size)
             step_images.append(image)
 
         language = data[self.modality_keys["language"][0]][0]
         action = []
         for action_key in self.modality_keys["action"]:
             action.append(data[action_key])
-        action = np.concatenate(action, axis=1).astype(np.float16)
+        action = np.concatenate(action, axis=1).astype(state_action_dtype)
 
         sample = {
             "action": action,
@@ -1410,7 +1430,7 @@ class LeRobotSingleDataset(Dataset):
                     stacklevel=2,
                 )
             else:
-                state = np.concatenate(state, axis=1).astype(np.float16)
+                state = np.concatenate(state, axis=1).astype(state_action_dtype)
                 sample["state"] = state
 
         return sample
@@ -2205,11 +2225,50 @@ class LeRobotMixtureDataset(Dataset):
         self.seed = seed
         self.mode = mode
         self.data_cfg = kwargs["data_cfg"] if "data_cfg" in kwargs else None
+        self.drop_incomplete_action_chunks = bool(
+            self.data_cfg.get("drop_incomplete_action_chunks", False)
+            if self.data_cfg is not None
+            else False
+        )
+
+        self._valid_step_bounds: list[tuple[int, int]] = []
+        self._effective_trajectory_lengths: list[np.ndarray] = []
+        if self.drop_incomplete_action_chunks:
+            # Sample only base frames whose action offsets stay in the episode.
+            for dataset in self.datasets:
+                offsets = [
+                    np.asarray(dataset.delta_indices[key], dtype=np.int64)
+                    for key in dataset.modality_keys.get("action", [])
+                ]
+                offsets = np.concatenate(offsets) if offsets else np.array([], dtype=np.int64)
+                min_offset = int(offsets.min()) if offsets.size else 0
+                max_offset = int(offsets.max()) if offsets.size else 0
+                valid_start = max(0, -min_offset)
+                end_trim = max(0, max_offset)
+                effective_lengths = np.maximum(
+                    np.asarray(dataset.trajectory_lengths, dtype=np.int64)
+                    - valid_start
+                    - end_trim,
+                    0,
+                )
+                if not np.any(effective_lengths > 0):
+                    raise ValueError(
+                        f"Dataset {dataset.dataset_name!r} has no complete action chunks "
+                        f"for action offset range [{min_offset}, {max_offset}]"
+                    )
+                self._valid_step_bounds.append((valid_start, end_trim))
+                self._effective_trajectory_lengths.append(effective_lengths)
 
         # Set properties for sampling
 
         # 1. Dataset lengths
-        self._dataset_lengths = np.array([len(dataset) for dataset in self.datasets])
+        if self.drop_incomplete_action_chunks:
+            self._dataset_lengths = np.array(
+                [lengths.sum() for lengths in self._effective_trajectory_lengths]
+            )
+            print(f"Dropped incomplete action chunks; effective dataset lengths: {self._dataset_lengths}")
+        else:
+            self._dataset_lengths = np.array([len(dataset) for dataset in self.datasets])
         print(f"Dataset lengths: {self._dataset_lengths}")
         self._getitem_count = 0
         # 2. Dataset sampling weights
@@ -2238,11 +2297,19 @@ class LeRobotMixtureDataset(Dataset):
         self._trajectory_sampling_weights: list[np.ndarray] = []
         for i, dataset in enumerate(self.datasets):
             trajectory_sampling_weights = np.ones(len(dataset.trajectory_lengths))
+            if self.drop_incomplete_action_chunks:
+                trajectory_sampling_weights[self._effective_trajectory_lengths[i] == 0] = 0
             if self.balance_trajectory_weights:
-                trajectory_sampling_weights *= dataset.trajectory_lengths
+                trajectory_sampling_weights *= (
+                    self._effective_trajectory_lengths[i]
+                    if self.drop_incomplete_action_chunks
+                    else dataset.trajectory_lengths
+                )
             
-            # Check for zero or negative weights before normalization
-            if np.any(trajectory_sampling_weights <= 0):
+            if self.drop_incomplete_action_chunks:
+                if np.any(trajectory_sampling_weights < 0):
+                    raise ValueError(f"Dataset {i} has negative trajectory sampling weights")
+            elif np.any(trajectory_sampling_weights <= 0):
                 print(f"Warning: Dataset {i} has zero or negative trajectory weights")
                 trajectory_sampling_weights = np.maximum(trajectory_sampling_weights, 1e-8)
             
@@ -2335,7 +2402,12 @@ class LeRobotMixtureDataset(Dataset):
         trajectory_id = dataset.trajectory_ids[trajectory_index]
 
         # Sample step
-        base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
+        if self.drop_incomplete_action_chunks:
+            valid_start, end_trim = self._valid_step_bounds[dataset_index]
+            valid_end_exclusive = int(dataset.trajectory_lengths[trajectory_index]) - end_trim
+            base_index = int(rng.integers(valid_start, valid_end_exclusive))
+        else:
+            base_index = rng.choice(dataset.trajectory_lengths[trajectory_index])
         return dataset, trajectory_id, base_index
 
     
