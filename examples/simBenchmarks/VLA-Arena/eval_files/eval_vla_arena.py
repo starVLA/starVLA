@@ -278,6 +278,7 @@ def _run_episode(
 
             # Rotate 180° to match training pre-processing
             img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
+            wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
             replay_images.append(img)
 
             state = np.concatenate((
@@ -287,7 +288,7 @@ def _run_episode(
             ))
 
             example_dict = {
-                "image": [img],
+                "image": [img, wrist_img],
                 "lang": effective_description,
             }
 
