@@ -134,6 +134,38 @@ refactor(model): move QwenOFT to framework/VLM4A/
 
 ### 6. Open a Pull Request
 
+#### PR Title Format
+
+PR titles follow the pattern:
+
+```
+[<type>] (<scope>): <short description>
+```
+
+The `(<scope>)` part is optional. Use square brackets `[type]` to categorise the PR at a glance:
+
+| Type | When to use |
+|------|-------------|
+| `[feat]` | New feature |
+| `[fix]` | Bug fix |
+| `[docs]` | Documentation only |
+| `[refactor]` | Code restructuring without behaviour change |
+| `[chore]` | Tooling, CI, reorganisation, i18n |
+| `[perf]` | Performance improvement |
+| `[test]` | Adding or updating tests |
+
+**Examples:**
+
+```
+[feat] (dataloader): add streaming statistics with Welford's algorithm
+[fix] (training): remove invalid resolve kwarg in save_full_config
+[chore] (i18n): translate all Chinese text to English
+[chore]: reorganize examples/ into simBenchmarks/ modelExtensions/ realRobots/
+[docs] (eval): warn about train/test observation consistency at eval entry points
+```
+
+---
+
 Target branch: **`starVLA_dev`** (not `starVLA`).
 
 Use the following template for your PR description:

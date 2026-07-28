@@ -170,9 +170,9 @@ class InternVLA_M1(baseframework):
             dict:
                 action_loss (torch.Tensor): Scalar diffusion noise prediction loss.
         """
-        batch_images = [example["image"] for example in examples]  #  [B，[PLT]]
+        batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
-        actions = [example["action"] for example in examples]  # label [B， len, 7]
+        actions = [example["action"] for example in examples]  # label [B, len, 7]
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
@@ -423,7 +423,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_yaml",
         type=str,
-        default="examples/LIBERO/train_files/starvla_cotrain_libero.yaml",
+        default="examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml",
         help="Path to YAML config",
     )
     args, clipargs = parser.parse_known_args()

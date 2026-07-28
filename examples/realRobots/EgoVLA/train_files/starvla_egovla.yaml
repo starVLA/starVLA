@@ -1,0 +1,75 @@
+run_id: starvla_egovla_bimanual
+run_root_dir: results/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_egovla
+is_debug: false
+version_id: "0.21"
+
+# EgoVLA framework: VILA (SigLIP-384 + Qwen2-1.5B) + mlp_downsample projector +
+# transformer trajectory decoder -> 48-dim per-step MANO/camera-frame action.
+# `base_vlm` points at a VILA-style checkpoint dir with {llm, vision_tower,
+# mm_projector} sub-folders (e.g. the public ego_vla_checkpoint/ckpt-6720),
+# from which the vision tower / LLM / projector weights are loaded natively.
+framework:
+  name: EgoVLA
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/ego_vla_checkpoint/ckpt-6720
+    attn_implementation: sdpa
+    use_bf16: true
+  action_model:
+    action_model_type: EgoVLATrajDecoder
+    action_dim: 48          # 2 hands x (3 trans + 6 rot6d + 15 MANO)
+    action_hidden_dim: 1536 # Qwen2-1.5B hidden (aligned to the LLM at runtime)
+    action_horizon: 30      # future steps per chunk
+    proprio_size: 16
+    use_proprio: true
+    sep_proprio: true
+    traj_decoder_type: transformer_split_action_v2
+  # Action-query placeholder token id range (EgoVLA action_tokenizer).
+  input_placeholder_end_token_idx: 151195
+  input_placeholder_start_token_idx: 151375
+  action_query_token_id: 151300
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    include_state: true
+    data_root_dir: /home/dhy/Projects/datasets
+    data_mix: your_egovla_data_mix
+    action_type: abs_qpos
+    action_mode: abs
+    sequential_step_sampling: false
+    per_device_batch_size: 1
+    load_all_data_for_training: true
+    obs_image_size: [384, 384]   # SigLIP-384
+    delete_pause_frame: false
+    video_backend: torchvision_av
+
+trainer:
+  max_train_steps: 5000
+  num_warmup_steps: 100
+  save_interval: 500
+  eval_interval: 1000
+  learning_rate:
+    base: 2.0e-06          # EgoVLA finetunes the VLM at a low LR
+    qwen_vl_interface: 1.0e-06
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-07
+  freeze_modules: ''        # on 16GB, freeze the VLM / use LoRA
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
+  save_format: pt

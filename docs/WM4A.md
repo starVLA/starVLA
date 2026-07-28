@@ -85,7 +85,7 @@ the LIBERO benchmark:
 
 ```bash
 # From the starVLA project root
-bash examples/LIBERO/train_files/run_libero_train.sh
+bash examples/simBenchmarks/LIBERO/train_files/run_libero_train.sh
 ```
 
 Before running, edit the script to set your local paths:
@@ -93,7 +93,7 @@ Before running, edit the script to set your local paths:
 ```bash
 Framework_name=CosmoPredict2OFT          # or CosmoPredict2GR00T, WanOFT, etc.
 base_wm=nvidia/Cosmos-Predict2-2B-Video2World>  # still needed for tokenizer/processor
-config_yaml=./examples/LIBERO/train_files/starvla_cotrain_libero.yaml
+config_yaml=./examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml
 libero_data_root=<path_to_LIBERO_dataset>
 data_mix=libero_all                       # or libero_goal
 ```

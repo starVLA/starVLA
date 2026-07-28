@@ -87,7 +87,7 @@ _DISCOVERED = False
 
 
 def _find_registry_dirs() -> list[Path]:
-    """Return all ``examples/*/train_files/data_registry/`` directories."""
+    """Return all ``examples/**/train_files/data_registry/`` directories."""
     # Walk up from this file to the repo root
     # registry.py is at starVLA/dataloader/gr00t_lerobot/registry.py
     #   parents: [0]=gr00t_lerobot, [1]=dataloader, [2]=starVLA(pkg), [3]=repo root
@@ -95,12 +95,11 @@ def _find_registry_dirs() -> list[Path]:
     examples_dir = repo_root / "examples"
     if not examples_dir.is_dir():
         return []
-    dirs: list[Path] = []
-    for bench_dir in sorted(examples_dir.iterdir()):
-        registry_dir = bench_dir / "train_files" / _REGISTRY_DIR_NAME
-        if registry_dir.is_dir():
-            dirs.append(registry_dir)
-    return dirs
+    return sorted(
+        p
+        for p in examples_dir.glob("**/train_files/data_registry")
+        if p.is_dir() and "sdk_tools" not in p.relative_to(examples_dir).parts
+    )
 
 
 def _load_module_from_path(module_name: str, file_path: Path):
@@ -122,7 +121,7 @@ def discover_and_merge() -> None:
     _DISCOVERED = True
 
     for registry_dir in _find_registry_dirs():
-        bench_name = registry_dir.parents[1].name  # examples/<BenchName>/train_files/data_registry
+        bench_name = registry_dir.parents[1].name  # examples/**/<BenchName>/train_files/data_registry
         prefix = f"_data_registry_{bench_name}"
 
         # --- data_config.py (may contain all three registries) ---

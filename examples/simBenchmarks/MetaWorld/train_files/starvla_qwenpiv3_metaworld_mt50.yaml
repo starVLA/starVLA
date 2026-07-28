@@ -1,0 +1,48 @@
+# MetaWorld MT50 training config for starVLA (QwenPI_v3)
+run_id: starvla_qwenpiv3_metaworld_mt50
+run_root_dir: results/Checkpoints
+seed: 42
+wandb_entity: your_wandb_entity
+wandb_project: starVLA_metaworld
+is_debug: false
+
+framework:
+  name: QwenPI_v3
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen2.5-VL-3B-Instruct
+    attn_implementation: sdpa
+  action_model:
+    action_dim: 4
+    state_dim: 4
+    action_horizon: 8
+
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    data_root_dir: playground/Datasets/metaworld_starvla
+    data_mix: metaworld_mt50
+    per_device_batch_size: 2
+    obs_image_size: [224, 224]
+    video_backend: torchvision_av
+
+trainer:
+  max_train_steps: 100
+  num_warmup_steps: 10
+  save_interval: 100
+  eval_interval: 1000
+  learning_rate:
+    base: 2.5e-05
+    qwen_vl_interface: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06
+  freeze_modules: ''
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: true
+  optimizer:
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

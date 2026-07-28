@@ -41,5 +41,10 @@ def get_vlm_model(config):
         from starVLA.model.modules.vlm.CosmosReason2 import _CosmosReason2_Interface
 
         return _CosmosReason2_Interface(config)
+    elif "egovla" in vlm_name.lower() or "ego_vla" in vlm_name.lower() or "vila" in vlm_name.lower():
+        # EgoVLA (VILA): SigLIP-384 + Qwen2-1.5B + mlp_downsample projector.
+        from starVLA.model.modules.vlm.VILA import _EgoVLA_VILA_Interface
+
+        return _EgoVLA_VILA_Interface(config)
     else:
         raise NotImplementedError(f"VLM model {vlm_name} not implemented")

@@ -403,7 +403,7 @@ def read_mode_config(pretrained_checkpoint):
 # Config compatibility / "tightening" layer (introduced in version_id "0.21").
 #
 # Goal: keep user-facing YAMLs short and unambiguous while preserving full
-# back-compat for old checkpoints' config.yaml. See bar/config_收紧.md for
+# back-compat for old checkpoints' config.yaml. See bar/config_tighten.md for
 # the design rationale.
 #
 # This function is *idempotent* — calling it multiple times yields the same

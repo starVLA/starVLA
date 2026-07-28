@@ -135,8 +135,8 @@ Example format (in the PR description):
 | LIBERO-Goal | Success Rate (avg 3 seeds) | 78.5% |
 
 - Checkpoint: https://huggingface.co/<your-username>/starvla-xxx
-- Config: `examples/LIBERO/train_files/xxx.yaml`
-- Reproduce: `bash examples/LIBERO/eval.sh --ckpt <hf-path>`
+- Config: `examples/simBenchmarks/LIBERO/train_files/xxx.yaml`
+- Reproduce: `bash examples/simBenchmarks/LIBERO/eval.sh --ckpt <hf-path>`
 ```
 
 ### 3. Testing

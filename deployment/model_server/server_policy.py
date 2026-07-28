@@ -18,15 +18,43 @@ def main(args) -> None:
     eval clients (LIBERO / SimplerEnv / etc.) just need to forward `examples`
     and consume already-unnormalized actions from the response.
     """
+    config_overrides = getattr(args, "config_override", [])
+    if config_overrides:
+        override_keys = [item.split("=", 1)[0] for item in config_overrides]
+        logging.info("Applying config override keys: %s", override_keys)
     wrapper = PolicyServerWrapper(
         ckpt_path=args.ckpt_path,
         device="cuda",
         use_bf16=args.use_bf16,
+        config_overrides=config_overrides,
     )
 
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
+
+    # =========================================================================
+    # !!! TRAIN / TEST CONSISTENCY — READ BEFORE SERVING !!!
+    # -------------------------------------------------------------------------
+    # This server replays the *training-time* observation contract. The eval
+    # client MUST feed observations exactly as the model saw them at TRAIN time,
+    # otherwise the success rate silently drops (no error is raised):
+    #   - state   : is proprioceptive state used? (use_state) and its dim/order
+    #   - img size: resize / crop resolution (e.g. 224x224)
+    #   - img num : how many camera views are fed
+    #   - img order: the ordering of those camera views
+    #   - action normalization: unnorm_key / dataset stats must match training
+    # `wrapper.metadata` (logged below and sent at handshake) exposes
+    # action_chunk_size / state_keys / action_keys — cross-check these against
+    # the training config used to produce `args.ckpt_path`.
+    # =========================================================================
+    logging.warning(
+        "[TRAIN/TEST CONSISTENCY CHECK] serving ckpt=%s — verify eval observations "
+        "(state / image size / image count / image order / action normalization) match "
+        "the training config. metadata=%s",
+        args.ckpt_path,
+        wrapper.metadata,
+    )
 
     # start websocket server; wrapper.metadata is sent at handshake.
     server = WebsocketPolicyServer(
@@ -46,6 +74,13 @@ def build_argparser():
     parser.add_argument("--port", type=int, default=10093)
     parser.add_argument("--use_bf16", action="store_true")
     parser.add_argument("--idle_timeout", type=int, default=1800, help="Idle timeout in seconds, -1 means never close")
+    parser.add_argument(
+        "--config_override",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Repeatable OmegaConf dotlist override applied before model construction.",
+    )
     return parser
 
 

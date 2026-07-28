@@ -22,15 +22,32 @@ Exposed API:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 import torch
 
-from starVLA.model.framework.base_framework import baseframework
+from starVLA.model.framework.base_framework import baseframework, merge_config_overrides
 from starVLA.model.framework.share_tools import read_mode_config
 
 from deployment.model_server.policy_norm_processor import PolicyNormProcessor
+
+
+def _training_obs_image_size(model_cfg: Dict[str, Any]) -> Optional[List[int]]:
+    """Return training image size metadata when it is explicitly configured.
+
+    This is only a consistency check for eval clients. It is not used to infer
+    camera order or to rewrite eval observations.
+    """
+    vla_data_cfg = model_cfg.get("datasets", {}).get("vla_data", {})
+    size = vla_data_cfg.get("obs_image_size") or vla_data_cfg.get("image_size")
+    if size is None and "default_image_resolution" in vla_data_cfg:
+        default_resolution = vla_data_cfg["default_image_resolution"]
+        if isinstance(default_resolution, (list, tuple)) and len(default_resolution) >= 2:
+            size = default_resolution[-2:]
+    if not isinstance(size, (list, tuple)) or len(size) != 2:
+        return None
+    return [int(size[0]), int(size[1])]
 
 
 class PolicyServerWrapper:
@@ -42,23 +59,25 @@ class PolicyServerWrapper:
         device: str = "cuda",
         use_bf16: bool = False,
         unnorm_key: Optional[str] = None,
+        config_overrides: Sequence[str] | None = None,
     ) -> None:
         self._ckpt_path = str(ckpt_path)
 
         logging.info("PolicyServerWrapper: loading framework from %s", self._ckpt_path)
-        framework = baseframework.from_pretrained(self._ckpt_path)
+        framework = baseframework.from_pretrained(self._ckpt_path, config_overrides=config_overrides)
         if use_bf16:
             framework = framework.to(torch.bfloat16)
         framework = framework.to(device).eval()
         self._framework = framework
 
         # Co-located metadata.
-        model_cfg, _ = read_mode_config(self._ckpt_path)
+        model_cfg, norm_stats = read_mode_config(self._ckpt_path)
+        model_cfg = merge_config_overrides(model_cfg, config_overrides)
         self._model_cfg = model_cfg
 
         # action_chunk_size = future_action_window_size + 1 (matches old client).
         action_model_cfg = model_cfg["framework"]["action_model"]
-        
+
         if "action_horizon" in action_model_cfg:
             self._action_chunk_size = int(action_model_cfg["action_horizon"])
         elif "future_action_window_size" in action_model_cfg:
@@ -74,8 +93,7 @@ class PolicyServerWrapper:
         self._norm_processors: Dict[str, PolicyNormProcessor] = {}
 
         # Peek at available keys without building a full processor.
-        _, _ns = read_mode_config(self._ckpt_path)
-        self._available_unnorm_keys: List[str] = list(_ns.keys())
+        self._available_unnorm_keys: List[str] = list(norm_stats.keys())
 
         # Eagerly build when unambiguous; defer for multi-key / no explicit key.
         if unnorm_key is not None or len(self._available_unnorm_keys) == 1:
@@ -106,6 +124,17 @@ class PolicyServerWrapper:
             )
         return self._norm_processors[cache_key]
 
+    def get_norm_processor(self, unnorm_key: Optional[str] = None) -> PolicyNormProcessor:
+        """Public accessor for the per-unnorm_key normalization processor.
+
+        Protocol adapters (e.g. the GR00T ZMQ compat server) use this to read
+        the training-time ``action_keys`` / ``state_keys`` and their per-key
+        dims so they can split the flat action chunk into named groups.
+        """
+        return self._get_processor(
+            unnorm_key if unnorm_key is not None else self._default_unnorm_key
+        )
+
     @property
     def metadata(self) -> Dict[str, Any]:
         """Model-invariant metadata; sent to client at websocket handshake."""
@@ -115,6 +144,12 @@ class PolicyServerWrapper:
             "action_chunk_size": self._action_chunk_size,
             "available_unnorm_keys": self._available_unnorm_keys,
             "default_unnorm_key": self._default_unnorm_key,
+            "training_data_mix": self._model_cfg.get("datasets", {}).get("vla_data", {}).get("data_mix"),
+            "training_obs_image_size": _training_obs_image_size(self._model_cfg),
+            "eval_image_contract": (
+                "Eval clients must explicitly choose image count and order. "
+                "The server does not infer or reorder camera views from training config."
+            ),
         }
         # Enrich with per-embodiment keys when a default processor already exists.
         if self._default_unnorm_key is not None:

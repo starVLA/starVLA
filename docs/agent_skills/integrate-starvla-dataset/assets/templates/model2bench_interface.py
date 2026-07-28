@@ -13,8 +13,8 @@ Always exercise this in 3 steps (Skill Phase 7):
     3. closed-loop on real env
 
 Cribbing references:
-    examples/Robocasa_365/eval_files/model2robocasa365_interface.py        (in-process sim)
-    examples/RoboChallenge_table30v2/eval_files/model2robochallenge_interface.py  (HTTP server)
+    examples/simBenchmarks/Robocasa_365/eval_files/model2robocasa365_interface.py        (in-process sim)
+    examples/realRobots/RoboChallenge_table30v2/eval_files/model2robochallenge_interface.py  (HTTP server)
 """
 from __future__ import annotations
 

@@ -1,0 +1,16 @@
+# Keep the build context small: only source code is needed inside the image.
+.git
+.github
+.vscode
+assets
+playground
+wheels
+results
+experiments
+wandb
+tf-logs
+**/__pycache__
+*.pyc
+*.pt
+*.ckpt
+*.egg-info

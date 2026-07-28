@@ -216,7 +216,7 @@ def train(attn_implementation="flash_attention_2"):
             r=training_args.lora_r or 64,
             lora_alpha=training_args.lora_alpha or 128,
             lora_dropout=training_args.lora_dropout or 0.05,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Qwen 的 attention 线性层
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Qwen attention linear layers
             bias="none",
             task_type=TaskType.CAUSAL_LM,
         )
@@ -224,7 +224,7 @@ def train(attn_implementation="flash_attention_2"):
     else:
         set_model(model_args, model)
 
-        # 只在主进程打印（兼容单卡和多卡模式）
+        # Only print on rank 0 (compatible with single-GPU and multi-GPU modes)
         if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
             model.visual.print_trainable_parameters()
             model.model.print_trainable_parameters()

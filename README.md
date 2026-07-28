@@ -9,7 +9,7 @@
 <a href="https://starvla.github.io/"><img src="https://img.shields.io/badge/Project%20Page-starvla.github.io-blue?style=for-the-badge&logo=github" alt="Project Page"></a>
 <a href="https://huggingface.co/StarVLA"><img src="https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface" alt="Model & Data on Hugging Face"></a>
 <a href="https://arxiv.org/abs/2604.05014"><img src="https://img.shields.io/badge/arXiv-2604.05014-red?style=for-the-badge&logo=arxiv" alt="Technical Report"></a>
-<a href="https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845"><img src="https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat" alt="WeChat"></a>
+<a href="https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845"><img src="https://img.shields.io/badge/WeChat-Join%20Discussion%20Group-brightgreen?style=for-the-badge&logo=wechat" alt="WeChat"></a>
 </p>
 
 > **📢 Citation Update:** Our technical report is now on arXiv ([2604.05014](https://arxiv.org/abs/2604.05014)). We kindly invite you to use the [updated BibTeX](#citation) for any ongoing or future citations. If you have already cited StarVLA in a previous version of your work, we would greatly appreciate it if you could update the citation entry in your camera-ready or future revisions. Thank you for your understanding and support! 🙏
@@ -22,7 +22,9 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 > **⚠️ Branch notice:** The `starVLA_dev` branch is where we actively merge new features and may be temporarily unstable. For verified results, use the stable `starVLA` branch. Thanks to StarVLA's low-coupling design, switching between branches is painless. We encourage trying `starVLA_dev` and welcome PRs if you spot any issues!
 
-> **💡 Tip:** Files under any `**/bar/` directory are git-ignored, so you can place your custom scripts there (e.g., `examples/LIBERO/train_files/bar/my_train.sh`) without polluting the repo.
+> **💡 Tip:** Files under any `**/bar/` directory are git-ignored, so you can place your custom scripts there (e.g., `examples/simBenchmarks/LIBERO/train_files/bar/my_train.sh`) without polluting the repo.
+
+**[2026/06/22]** 🔥 We are creating a [StarVLA Contributors Group](https://github.com/starVLA/starVLA/issues/393) to make contributor communication easier and discuss contributor list before each release. Welcome everyone to help maintain StarVLA's open-source infrastructure together.
 
 **[2026/05/30]** 🔥 StarVLA now supports [VLA training with **Qwen-series backbones** on **Ascend NPU**](https://github.com/starVLA/starVLA/pull/336). See the [related discussion](https://github.com/starVLA/starVLA/issues/341) for details and feedback.
 
@@ -30,13 +32,13 @@ In StarVLA (also a pun on "start VLA" ),  each functional component (model, data
 
 **[2026/05/01]** 🔥 We now provide a step-by-step guide for [integrating your own robot / dataset into StarVLA](docs/integrate_your_dataset.md).
 
-**[2026/05/01]** 🔥 We are building [agent skills](docs/agent_skills) to make StarVLA a powerful substrate for AI coding agents — we have verified that GitHub Copilot (Claude Opus 4.7) can autonomously integrate [examples/Robocasa_365](examples/Robocasa_365) and [examples/RoboChallenge_table30v2](examples/RoboChallenge_table30v2) from scratch. Going forward, StarVLA will be continuously optimised to be equally easy to use for humans and code agents.
+**[2026/05/01]** 🔥 We are building [agent skills](docs/agent_skills) to make StarVLA a powerful substrate for AI coding agents — we have verified that GitHub Copilot (Claude Opus 4.7) can autonomously integrate [examples/Robocasa_365](examples/simBenchmarks/Robocasa_365) and [examples/RoboChallenge_table30v2](examples/realRobots/RoboChallenge_table30v2) from scratch. Going forward, StarVLA will be continuously optimised to be equally easy to use for humans and code agents.
 
 **[2026/05/01]** 🙏 Special thanks to the [AllenAI](https://github.com/allenai) team for providing optimised Docker environments and evaluation-acceleration support via [vla-evaluation-harness](https://github.com/allenai/vla-evaluation-harness)! If you need to speed up large-scale VLA benchmark evaluation, we recommend checking it out.
 
 
 
-**[2026/04/18]** 🔥 StarVLA now supports [DOMINO](examples/DOMINO), a dynamic manipulation benchmark for moving objects and time-varying scenes. Original DOMINO repository is [here](https://github.com/H-EmbodVis/DOMINO).
+**[2026/04/18]** 🔥 StarVLA now supports [DOMINO](examples/simBenchmarks/DOMINO), a dynamic manipulation benchmark for moving objects and time-varying scenes. Original DOMINO repository is [here](https://github.com/H-EmbodVis/DOMINO).
 
 **[2026/04/09]** 🎯 Thanks to the [RLinf](https://rlinf.readthedocs.io) team, StarVLA now supports **RL post-training**! Check out the [StarVLA × RLinf tutorial](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/starvla.html) to get started.
 
@@ -55,20 +57,20 @@ Training configs and efficiency benchmarks for community reference.
 
 **[2026/01/29]** Calvin benchmark experiments were conducted by the UNT team. For inquiries, please contact Zhijie Song (1600013008@pku.edu.cn) or Feng Yan (bphengyan@163.com).
 
-**[2025/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/Behavior), [RoboTwin 2.0](examples/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchmarks with the community!
+**[2025/12/25]** We've simultaneously established pipelines for [Behavior-1K](examples/simBenchmarks/Behavior), [RoboTwin 2.0](examples/simBenchmarks/Robotwin), and CALVIN. We'd love to collaborate and share baseline results for more benchmarks with the community!
 
 <details>
 <summary><b>Prior Timeline</b></summary>
 
-**[2025/12/25]**  We've released RoboCasa evaluation support, which was trained **without pretraining and reached SOTA performance**. Check out more details in [examples/Robocasa_tabletop](examples/Robocasa_tabletop).
+**[2025/12/25]**  We've released RoboCasa evaluation support, which was trained **without pretraining and reached SOTA performance**. Check out more details in [examples/Robocasa_tabletop](examples/simBenchmarks/Robocasa_tabletop).
 
 **[2025/12/15]** Completed a release regression check to ensure the public code runs smoothly. Routine updates—including recent support for the LeRobot dataset v3.0 and DeepSpeed ZeRO-3—will continue to appear in the [🚧 Daily Development Log](https://github.com/starVLA/starVLA/issues/64#issue-3727060165).
 
-**[2025/12/09]** Became the first open-source repository to support training with [train your vlm](starVLA/training/train_starvlm.py), [train your vla](starVLA/training/train_starvla.py), and [train your vla with vlm](starVLA/training/train_starvla_cotrain.py). Check out how to co-train your VLA with multimodal data in [examples/CoTrainVLM](examples/CoTrainVLM/README.md).
+**[2025/12/09]** Became the first open-source repository to support training with [train your vlm](starVLA/training/train_starvlm.py), [train your vla](starVLA/training/train_starvla.py), and [train your vla with vlm](starVLA/training/train_starvla_cotrain.py). Check out how to co-train your VLA with multimodal data in [examples/CoTrainVLM](examples/modelExtensions/CoTrainVLM/README.md).
 
 **[2025/11/12]** We now support [Florence-2](https://github.com/anyantudre/Florence-2-Vision-Language-Model) as a smaller VLM for resource-constrained development. StarVLA can now run on a single A100 GPU. See the [🚀Train with a smaller VLM](docs/faq.md#how-to-train-with-a-smaller-vlm) section for more details.
 
-**[2025/10/30]:** We released the LIBERO Training & Evaluation README. Results are very promising. More details are in [examples/LIBERO](examples/LIBERO).
+**[2025/10/30]:** We released the LIBERO Training & Evaluation README. Results are very promising. More details are in [examples/LIBERO](examples/simBenchmarks/LIBERO).
 
 **[2025/10/25]:** We fixed several script links and so everything is smoother now. Thanks to the community for the feedback.
 
@@ -273,13 +275,15 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on reporting bug
 
 **LangForce** (ICML 2026): [*LangForce: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries*](https://github.com/ZGC-EmbodyAI/LangForce)
 
+**LaWAM**: [*LaWAM: Latent World Action Models for Efficient Dynamics-Aware Robot Policies*](https://github.com/RLinf/LaWAM)
+
 Examples:
 ```bash
 accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml  \
   --num_processes 8 \
   starVLA/training/train_internvla.py \
-  --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
+  --config_yaml examples/simBenchmarks/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.qwenvl.base_vlm Qwen/Qwen2.5-VL-7B-Instruct \ # override framework choice
   --framework.action_model.new_module ${module_name} \ # plug-in a new module to action model
@@ -341,7 +345,7 @@ Empty `reload_modules` means full load all model. However, starVLA does not save
       --num_machines $SLURM_NNODES \
       --num_processes=${TOTAL_GPUS} \
       starVLA/training/train_starvla.py \
-      --config_yaml examples/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
+      --config_yaml examples/simBenchmarks/SimplerEnv/train_files/starvla_cotrain_oxe.yaml \
       --framework.name QwenGR00T \
       --framework.qwenvl.base_vlm microsoft/Florence-2-large \
       --run_root_dir ${run_root_dir} \
@@ -364,18 +368,21 @@ StarVLA is released under the MIT License, which permits commercial use, modific
 
 ```bibtex
 
-@article{ye2026starvla,
+@inproceedings{ye2026starvla,
   title={StarVLA-$$\backslash$alpha $: Reducing Complexity in Vision-Language-Action Systems},
   author={Ye, Jinhui and Gao, Ning and Yang, Senqiao and Zheng, Jinliang and Wang, Zixuan and Chen, Yuxin and Chen, Pengguang and Chen, Yilun and Liu, Shu and Jia, Jiaya},
-  journal={arXiv preprint arXiv:2604.11757},
-  year={2026}
+  booktitle = {European Conference on Computer Vision (ECCV)},
+  year      = {2026}
 }
 
 @article{community2026starvla,
   title={StarVLA: A Lego-like Codebase for Vision-Language-Action Model Developing},
   author={Community, StarVLA},
   journal={arXiv preprint arXiv:2604.05014},
-  year={2026}
+  year={2026},
+  eprint={2604.05014},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
 }
 ```
 

@@ -1,49 +1,49 @@
-# World Model 模块设计 (`starVLA/model/modules/world_model/`)
+# World Model Module (`starVLA/model/modules/world_model/`)
 
-## 定位
+## Overview
 
-World Model 模块封装用于动作预测的 **世界模型** 后端。
-与 VLM 模块不同，World Model 在预训练阶段关注物理世界建模
-（如视频预测、空间推理），提供对物理规律更强的先验理解。
+The World Model module wraps **world model** backends used for action prediction.
+Unlike VLM backends, these models focus on physical-world modeling during pretraining
+(e.g., video prediction, spatial reasoning), providing stronger physical-prior understanding.
 
-## 为什么 Cosmos-Reason2 用 Qwen3VL 架构？
+## Why Does Cosmos-Reason2 Use the Qwen3-VL Architecture?
 
-Cosmos-Reason2 是 NVIDIA 基于 Qwen3-VL 架构进行物理推理微调的模型。
-底层使用相同的 `Qwen3VLForConditionalGeneration` 和 `Qwen3VLProcessor`，
-因此接口与 VLM wrapper 完全兼容。区别在于：
+Cosmos-Reason2 is NVIDIA's model fine-tuned for physical reasoning on top of the Qwen3-VL architecture.
+It shares the same `Qwen3VLForConditionalGeneration` and `Qwen3VLProcessor` under the hood,
+making its interface fully compatible with the VLM wrappers. The differences are:
 
-- **预训练任务不同**：Cosmos 侧重物理推理和因果理解
-- **表征含义不同**：hidden_states 编码了更丰富的时空动态信息
-- **应用场景**：更适合需要物理理解的操作任务
+- **Different pretraining objective**: Cosmos focuses on physical reasoning and causal understanding
+- **Different representation semantics**: hidden_states encode richer spatio-temporal dynamics
+- **Use case**: better suited for manipulation tasks requiring physical understanding
 
-## 接口规范
+## Interface Contract
 
-与 VLM 模块完全对齐（方便 framework 层透明替换）：
+Fully aligned with the VLM module (enabling transparent swap at the framework layer):
 
-| 方法 | 签名 | 用途 |
+| Method | Signature | Purpose |
 |------|------|------|
-| `__init__` | `(config)` | 加载预训练模型 + processor |
-| `forward` | `(**kwargs) -> CausalLMOutputWithPast` | 前向传播 |
-| `generate` | `(**kwargs)` | 自回归生成 |
-| `build_qwenvl_inputs` | `(images, instructions)` | 构建模型输入 |
+| `__init__` | `(config)` | Load pretrained model + processor |
+| `forward` | `(**kwargs) -> CausalLMOutputWithPast` | Forward pass |
+| `generate` | `(**kwargs)` | Autoregressive generation |
+| `build_qwenvl_inputs` | `(images, instructions)` | Build model inputs |
 
-## 工厂函数
+## Factory Function
 
 ```python
 from starVLA.model.modules.world_model import get_world_model
-wm = get_world_model(config)  # 根据模型名路由
+wm = get_world_model(config)  # Dispatches on model name
 ```
 
-## 现有实现
+## Existing Implementations
 
-| 文件 | 类名 | 支持的模型 | 架构 |
+| File | Class | Supported Models | Architecture |
 |------|------|-----------|------|
-| `CosmosReason2.py` | `_CosmosReason2_Interface` | nvidia/Cosmos-Reason2-2B | Qwen3-VL (自回归 LM), hidden=2048 |
-| `CosmoPredict2.py` | `_CosmoPredict2_Interface` | nvidia/Cosmos-Predict2-2B | DiT (扩散 Transformer), hidden=4096 |
+| `CosmosReason2.py` | `_CosmosReason2_Interface` | nvidia/Cosmos-Reason2-2B | Qwen3-VL (autoregressive LM), hidden=2048 |
+| `CosmoPredict2.py` | `_CosmoPredict2_Interface` | nvidia/Cosmos-Predict2-2B | DiT (Diffusion Transformer), hidden=4096 |
 
-## Framework 层使用
+## Usage in Framework Layer
 
-World Model 由 `framework/WM4A/` 下的框架使用：
+The World Model is consumed by frameworks under `framework/WM4A/`:
 
 ```python
 # WM4A/CosmosGR00T.py
@@ -52,33 +52,33 @@ from starVLA.model.modules.world_model import get_world_model
 class Cosmos_GR00T(baseframework):
     def __init__(self, config):
         self.qwen_vl_interface = get_world_model(config=self.config)
-        # 后续与 VLM4A 框架完全一致
+        # Subsequent usage is identical to VLM4A frameworks
 ```
 
-## 架构全景
+## Architecture Overview
 
 ```
 starVLA/model/
 ├── modules/
-│   ├── vlm/                # VLM 后端 (Qwen2.5-VL, Qwen3-VL, ...)
-│   ├── world_model/        # 世界模型后端 (Cosmos-Reason2, ...)
-│   ├── action_model/       # 动作头 (DiT, FAST, L1Regression, ...)
-│   ├── dino_model/         # DINO 空间编码器
-│   └── projector/          # QFormer 等投影模块
+│   ├── vlm/                # VLM backends (Qwen2.5-VL, Qwen3-VL, ...)
+│   ├── world_model/        # World model backends (Cosmos-Reason2, ...)
+│   ├── action_model/       # Action heads (DiT, FAST, L1Regression, ...)
+│   ├── dino_model/         # DINO spatial encoder
+│   └── projector/          # QFormer and other projection modules
 ├── framework/
-│   ├── base_framework.py   # 基类 + build_framework() + 自动导入
-│   ├── share_tools.py      # 配置合并等工具
-│   ├── VLM4A/              # VLM-for-Action 框架
+│   ├── base_framework.py   # Base class + build_framework() + auto-import
+│   ├── share_tools.py      # Config merge utilities
+│   ├── VLM4A/              # VLM-for-Action frameworks
 │   │   ├── QwenGR00T.py    # VLM + DiT flow-matching
-│   │   ├── QwenFast.py     # VLM + FAST 离散 token
+│   │   ├── QwenFast.py     # VLM + FAST discrete token
 │   │   ├── QwenAdapter.py  # VLM + Query adapter
 │   │   ├── QwenPI.py       # VLM + Layer-wise FM
 │   │   ├── QwenDual.py     # VLM + DINO + DiT
 │   │   ├── LangForce.py    # VLM + Dual-branch DiT
 │   │   ├── ABot_M0.py      # VLM + VGGT + DiT
 │   │   └── M1.py           # VLM + DINO + QFormer + DiT
-│   └── WM4A/               # World-Model-for-Action 框架
+│   └── WM4A/               # World-Model-for-Action frameworks
 │       ├── CosmosGR00T.py           # CosmosReason2 + Flowmatching
 │       └── CosmoPredict2GR00T.py    # CosmosPredict2 (DiT) + Flowmatching
-└── tools.py                # Registry, 归一化工具
+└── tools.py                # Registry, normalization utilities
 ```
