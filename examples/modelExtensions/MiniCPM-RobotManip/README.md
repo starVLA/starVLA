@@ -35,9 +35,9 @@ are masked out of the loss. `embodiment_id = 0`, `action_horizon = 30`.
 ## Data preparation
 
 This recipe requires the filtered, 20 Hz LeRobot-v3 conversion with absolute
-EE6D targets. The converted dataset will be released soon at
+EE6D targets. The converted dataset is available at
 [`openbmb/MiniCPM-RobotManip-LIBERO`](https://huggingface.co/datasets/openbmb/MiniCPM-RobotManip-LIBERO).
-Once it is published, download it with:
+Download it with:
 
 ```bash
 huggingface-cli download openbmb/MiniCPM-RobotManip-LIBERO \
