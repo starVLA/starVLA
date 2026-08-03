@@ -141,14 +141,23 @@ def update_processor_pixels(processor, data_args):
 
 def _build_messages(item: Dict[str, Any], base_path: Path) -> List[Dict[str, Any]]:
     # Extract and normalize images and videos
-    images = item.get("image") or []
+    # Support both image/images and video/videos for inconsistent dataset metadata, convert to list uniformly.
+    images = item.get("images") or item.get("image") or []
     if isinstance(images, str):
         images = [images]
-
-    videos = item.get("video") or []
+        
+    videos = item.get("videos") or item.get("video") or []
     if isinstance(videos, str):
         videos = [videos]
 
+    # Check if at least one media exists
+    if not images and not videos:
+        raise ValueError(
+            "No valid image/video identifiers found. "
+            "This code only supports data tagged with 'image', 'images', 'video', 'videos'.\n"
+            "Example: 'please describe the picture <image>' or 'please describe the picture <images>'."
+        )
+    
     # Build media pools with absolute paths
     image_pool = [
         {"type": "image", "image": load_image(_make_abs_paths(base_path, img))} for img in images
