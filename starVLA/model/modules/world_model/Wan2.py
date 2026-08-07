@@ -171,12 +171,31 @@ class _Wan2_Interface(nn.Module):
             return_attention_mask=True,
             return_tensors="pt",
         ).to(device)
+        attention_mask = text_inputs.attention_mask
+        seq_lens = attention_mask.gt(0).sum(dim=1).long()
 
         with torch.no_grad():
             text_embeds = self.text_encoder(
                 input_ids=text_inputs.input_ids,
-                attention_mask=text_inputs.attention_mask,
+                attention_mask=attention_mask,
             ).last_hidden_state  # [B, L, 4096]
+
+        # Match Wan's text-conditioning format: keep only valid UMT5 tokens,
+        # then pad the encoder outputs back to the fixed context length with zeros.
+        # Checkpoints released before this change were trained with non-zero UMT5
+        # hidden states at padded positions and retain that legacy behavior.
+        text_embeds = [
+            embeds[:seq_len] for embeds, seq_len in zip(text_embeds, seq_lens)
+        ]
+        text_embeds = torch.stack(
+            [
+                torch.cat(
+                    [embeds, embeds.new_zeros(max_length - embeds.size(0), embeds.size(1))]
+                )
+                for embeds in text_embeds
+            ],
+            dim=0,
+        )
 
         return text_embeds.to(dtype=torch.bfloat16)  # [B, max_length, 4096]
 
