@@ -379,8 +379,16 @@ class VLATrainer(TrainerUtils):
         )
 
         if self.accelerator.is_main_process:
-            normalized_actions = output_dict["normalized_actions"]
-            actions = np.array(actions)
+            normalized_actions = output_dict["normalized_actions"]  # [B, H_pred, D]
+            actions = np.array(actions)  # [B, H_gt, D] — raw data chunk (may be longer)
+            # The framework slices each per-timestep action chunk to [-action_horizon:]
+            # (e.g. RoboTTT._trajectory_actions) and predict_action returns that same
+            # horizon, so H_pred <= H_gt. Align the ground truth the same way (tail slice)
+            # so the eval metric compares only the predicted horizon instead of crashing
+            # on a broadcast shape mismatch (e.g. (1,8,14) vs (1,16,14)).
+            h_pred = normalized_actions.shape[1]
+            if actions.shape[1] != h_pred:
+                actions = actions[:, -h_pred:, :]
             num_pots = np.prod(actions.shape)
             score = TrainerUtils.euclidean_distance(normalized_actions, actions)
             step_metrics["mse_score"] = score / num_pots
