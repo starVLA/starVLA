@@ -21,9 +21,8 @@ from typing import Tuple
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedType, set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -33,11 +32,12 @@ from transformers import AutoProcessor, get_scheduler
 from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
-
-deepspeed_plugin = DeepSpeedPlugin()
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
-accelerator.print(accelerator.state)
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    build_accelerator,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -239,16 +239,18 @@ class VLAMTrainer(TrainerUtils):
             batch_vlm = self._get_next_batch()
             step_metrics = self._train_step(batch_vlm)
 
-            if self.accelerator.sync_gradients:
+            optimizer_stepped = step_metrics.pop("_optimizer_step")
+            if optimizer_stepped:
                 progress_bar.update(1)
                 self.completed_steps += 1
 
-            if self.completed_steps % self.config.trainer.eval_interval == 0:
+            if optimizer_stepped and self.completed_steps % self.config.trainer.eval_interval == 0:
                 step_metrics = self.eval_action_model(step_metrics)
 
-            self._log_metrics(step_metrics)
+            if optimizer_stepped:
+                self._log_metrics(step_metrics)
 
-            if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
+            if optimizer_stepped and self.completed_steps % self.config.trainer.save_interval == 0:
                 self._save_checkpoint()
                 if dist.is_initialized():
                     dist.barrier()
@@ -275,23 +277,49 @@ class VLAMTrainer(TrainerUtils):
     def _train_step(self, batch_vlm):
         """Execute single training step."""
         log_dict = {}
+
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                unwrapped = self.accelerator.unwrap_model(self.model)
+                vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
+                vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
+
+            self.model.backward(vlm_loss)
+            optimizer_stepped = self.model.is_gradient_accumulation_boundary()
+            self.model.step()
+            if optimizer_stepped:
+                self.lr_scheduler.step()
+
+            return {
+                "vlm_loss": vlm_loss.item(),
+                "_optimizer_step": optimizer_stepped,
+            }
+
         with self.accelerator.accumulate(self.model):
-            self.optimizer.zero_grad()
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 unwrapped = self.accelerator.unwrap_model(self.model)
                 vlm_output = unwrapped.qwen_vl_interface(**batch_vlm)
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 
-            if self.config.trainer.gradient_clipping is not None:
+            gradients_synced = self.accelerator.sync_gradients
+            if gradients_synced and self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            # Only step the LR scheduler when gradients are actually synced.
-            # See train_starvla.py for full explanation.
-            if self.accelerator.sync_gradients:
+            if gradients_synced:
                 self.lr_scheduler.step()
-            log_dict["vlm_loss"] = vlm_loss.item()
+            self.optimizer.zero_grad()
+
+            if gradients_synced:
+                log_dict.update(
+                    {
+                        "vlm_loss": vlm_loss.item(),
+                        "_optimizer_step": True,
+                    }
+                )
+            else:
+                log_dict["_optimizer_step"] = False
 
         return log_dict
 
@@ -324,6 +352,7 @@ def main(cfg) -> None:
     cfg = wrap_config(cfg)
     logger.info("✅ Configuration wrapped for access tracking")
 
+    accelerator = build_accelerator(cfg)
     output_dir = setup_directories(cfg=cfg)
     vlm = build_framework(cfg)
     vlm_train_dataloader = prepare_data(cfg=cfg, accelerator=accelerator, output_dir=output_dir)

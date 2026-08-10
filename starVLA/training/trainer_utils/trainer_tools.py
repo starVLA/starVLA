@@ -13,6 +13,7 @@ import torch
 import torch.distributed as dist
 from transformers import get_scheduler
 
+from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,6 +21,16 @@ logger = get_logger(__name__)
 
 def _dist_rank() -> int:
     return dist.get_rank() if dist.is_initialized() else 0
+
+
+def build_accelerator(cfg) -> Accelerator:
+    deepspeed_plugin = DeepSpeedPlugin()
+    accelerator = Accelerator(
+        gradient_accumulation_steps=cfg.trainer.gradient_accumulation_steps,
+        deepspeed_plugin=deepspeed_plugin,
+    )
+    accelerator.print(accelerator.state)
+    return accelerator
 
 
 # === Define Tracker Interface ===

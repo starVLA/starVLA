@@ -23,9 +23,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedType, set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -36,11 +35,12 @@ from starVLA.dataloader import build_dataloader
 from starVLA.model.framework.base_framework import build_framework
 from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
-from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
-
-deepspeed_plugin = DeepSpeedPlugin()
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
-accelerator.print(accelerator.state)
+from starVLA.training.trainer_utils.trainer_tools import (
+    TrainerUtils,
+    build_accelerator,
+    normalize_dotlist_args,
+    setup_optimizer_and_scheduler,
+)
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -292,12 +292,9 @@ class VLAMTrainer(TrainerUtils):
             step_metrics = self._train_step(batch_vla, batch_vlm)
             t_end_model = time.perf_counter()
 
-            # When the model is a DeepSpeed engine, gradient-accumulation
-            # boundaries are decided by the engine (not by
-            # `accelerator.sync_gradients`), so `_train_step` reports whether an
-            # optimizer step actually happened. Fall back to `sync_gradients`
-            # for the non-DeepSpeed path.
-            optimizer_stepped = step_metrics.pop("_optimizer_step", self.accelerator.sync_gradients)
+            # `_train_step` reports whether accumulation reached an optimizer
+            # boundary so outer-loop side effects stay tied to real updates.
+            optimizer_stepped = step_metrics.pop("_optimizer_step")
             if optimizer_stepped:
                 progress_bar.update(1)
                 self.completed_steps += 1
@@ -365,7 +362,7 @@ class VLAMTrainer(TrainerUtils):
         # logic of ZeRO stage 2". When the prepared model is a DeepSpeed engine,
         # drive gradient accumulation through the engine directly: `backward()`
         # accumulates and `step()` only updates on the engine's own boundary.
-        if hasattr(self.model, "is_gradient_accumulation_boundary") and hasattr(self.model, "backward"):
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 output_dict = self.model.forward(batch_vla)
                 action_loss = output_dict["action_loss"]
@@ -377,7 +374,7 @@ class VLAMTrainer(TrainerUtils):
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.model.backward(vlm_loss)
 
-            optimizer_stepped = bool(self.model.is_gradient_accumulation_boundary())
+            optimizer_stepped = self.model.is_gradient_accumulation_boundary()
             self.model.step()
             if optimizer_stepped:
                 self.lr_scheduler.step()
@@ -392,8 +389,6 @@ class VLAMTrainer(TrainerUtils):
             return log_dict
 
         with self.accelerator.accumulate(self.model):
-            self.optimizer.zero_grad()
-
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 output_dict = self.model.forward(batch_vla)
                 action_loss = output_dict["action_loss"]
@@ -406,22 +401,28 @@ class VLAMTrainer(TrainerUtils):
                 vlm_loss = vlm_output.loss * self.config.trainer.loss_scale.vlm
             self.accelerator.backward(vlm_loss)
 
-            if self.config.trainer.gradient_clipping is not None:
+            gradients_synced = self.accelerator.sync_gradients
+            # Clip/log only after the full accumulated gradient is ready. Also
+            # keep zero_grad after step; placing it before backward clears the
+            # earlier microbatches on the sync step.
+            if gradients_synced and self.config.trainer.gradient_clipping is not None:
                 self.accelerator.clip_grad_norm_(self.model.parameters(), self.config.trainer.gradient_clipping)
 
             self.optimizer.step()
-            # Only step the LR scheduler when gradients are actually synced.
-            # See train_starvla.py for full explanation.
-            if self.accelerator.sync_gradients:
+            if gradients_synced:
                 self.lr_scheduler.step()
+            self.optimizer.zero_grad()
 
-            log_dict.update(
-                {
-                    "action_dit_loss": action_loss.item(),
-                    "vlm_loss": vlm_loss.item(),
-                    "_optimizer_step": self.accelerator.sync_gradients,
-                }
-            )
+            if gradients_synced:
+                log_dict.update(
+                    {
+                        "action_dit_loss": action_loss.item(),
+                        "vlm_loss": vlm_loss.item(),
+                        "_optimizer_step": True,
+                    }
+                )
+            else:
+                log_dict["_optimizer_step"] = False
 
         return log_dict
 
@@ -457,6 +458,7 @@ def main(cfg) -> None:
     cfg = wrap_config(cfg)
     logger.info("✅ Configuration wrapped for access tracking")
 
+    accelerator = build_accelerator(cfg)
     output_dir = setup_directories(cfg=cfg)
     vla = build_framework(cfg)
     vla_train_dataloader, vlm_train_dataloader = prepare_data(cfg=cfg, accelerator=accelerator, output_dir=output_dir)

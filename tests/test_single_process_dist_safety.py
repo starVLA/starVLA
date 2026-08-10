@@ -52,7 +52,10 @@ cfg = types.SimpleNamespace(
     )
 )
 fake_accelerator = types.SimpleNamespace(dataloader_config=types.SimpleNamespace(dispatch_batches=None))
-with mock.patch.object(module, "build_dataloader", return_value=[1, 2, 3]):
+with (
+    mock.patch.object(module, "logger"),
+    mock.patch.object(module, "build_dataloader", return_value=[1, 2, 3]),
+):
     dataloader = module.prepare_data(cfg, fake_accelerator, output_dir=None)
 assert dataloader == [1, 2, 3]
 """,
@@ -72,7 +75,10 @@ cfg = types.SimpleNamespace(
     )
 )
 fake_accelerator = types.SimpleNamespace(dataloader_config=types.SimpleNamespace(dispatch_batches=None))
-with mock.patch.object(module, "build_dataloader", return_value=[1]):
+with (
+    mock.patch.object(module, "logger"),
+    mock.patch.object(module, "build_dataloader", return_value=[1]),
+):
     dataloader = module.prepare_data(cfg, fake_accelerator, output_dir=None)
 assert dataloader == [1]
 """,
@@ -93,7 +99,10 @@ cfg = types.SimpleNamespace(
     )
 )
 fake_accelerator = types.SimpleNamespace(dataloader_config=types.SimpleNamespace(dispatch_batches=None))
-with mock.patch.object(module, "build_dataloader", side_effect=[[1], [2]]):
+with (
+    mock.patch.object(module, "logger"),
+    mock.patch.object(module, "build_dataloader", side_effect=[[1], [2]]),
+):
     vla_dataloader, vlm_dataloader = module.prepare_data(cfg, fake_accelerator, output_dir=None)
 assert vla_dataloader == [1]
 assert vlm_dataloader == [2]
