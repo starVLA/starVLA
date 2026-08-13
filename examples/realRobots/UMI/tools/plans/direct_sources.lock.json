@@ -1,0 +1,30 @@
+{
+  "Original-UMI": {
+    "url": "https://real.stanford.edu/umi/data/dish_washing/bimanual_dish_washing.zarr.zip",
+    "filename": "Original-UMI__bimanual_dish_washing.zarr.zip",
+    "expected_bytes": 22839303656,
+    "target_cases": 400,
+    "case_basis": "complete public bimanual dish-washing archive"
+  },
+  "ManiWAV": {
+    "url": "https://real.stanford.edu/maniwav/data/wipe/replay_buffer.zarr.zip",
+    "filename": "ManiWAV__wipe_replay_buffer.zarr.zip",
+    "expected_bytes": 2851473337,
+    "target_cases": 400,
+    "case_basis": "complete public wipe replay-buffer archive"
+  },
+  "DexUMI": {
+    "url": "https://real.stanford.edu/dexumi/dataset/inspire/cube_picking.zip",
+    "filename": "DexUMI__inspire_cube_picking.zip",
+    "expected_bytes": 2018347250,
+    "target_cases": 400,
+    "case_basis": "complete public cube-picking archive"
+  },
+  "ManipForce": {
+    "google_drive_id": "1xp4oWpiwtiqlyPAFymck2vCtmIlwp5St",
+    "filename": "ManipForce__Gear_assembly.zip",
+    "expected_bytes": 29274436559,
+    "target_cases": 400,
+    "case_basis": "complete public gear-assembly archive"
+  }
+}
