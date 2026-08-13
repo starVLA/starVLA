@@ -129,7 +129,10 @@ def hf_download(name: str, item: dict[str, Any], root: Path, args: argparse.Name
         for pattern in item["files"]:
             command.extend(("--include", pattern))
         subprocess.run(command, check=True)
-    return {"status": "downloaded", "destination": str(destination), "files": len(item["files"])}
+    count, missing = matches_exist(destination, item["files"])
+    if missing:
+        raise IOError(f"download finished with {len(missing)} missing patterns: {missing[:5]}")
+    return {"status": "downloaded", "destination": str(destination), "files_on_disk": count}
 
 
 def normal_direct_download(url: str, partial: Path, offset: int, timeout: int):
@@ -177,6 +180,12 @@ def direct_download(name: str, item: dict[str, Any], root: Path, args: argparse.
     disk_guard(root, args.min_free_gib)
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_suffix(destination.suffix + ".part")
+    if partial.exists() and partial.stat().st_size == expected:
+        partial.replace(destination)
+        return {"status": "recovered", "destination": str(destination), "bytes": expected}
+    if partial.exists() and partial.stat().st_size > expected:
+        corrupt = partial.with_suffix(partial.suffix + f".oversize-{int(time.time())}")
+        partial.replace(corrupt)
     for attempt in range(1, args.retries + 1):
         try:
             offset = partial.stat().st_size if partial.exists() else 0
@@ -280,14 +289,16 @@ def command_download(plan: dict[str, dict[str, Any]], root: Path, args: argparse
     return 1 if any(result["status"] in {"failed", "requires_acceptance"} for result in results.values()) else 0
 
 
-def command_verify(plan: dict[str, dict[str, Any]], root: Path, args: argparse.Namespace) -> int:
+def command_verify(
+    plan: dict[str, dict[str, Any]], root: Path, args: argparse.Namespace, *, full_plan: bool = False
+) -> int:
     results = {name: verify_one(name, item, root, args.deep) for name, item in plan.items()}
     summarize(results)
     complete = all(result["status"] == "ok" for result in results.values())
     marker = root / ".all_available_400_sources_downloaded"
-    if complete:
+    if complete and full_plan:
         marker.touch()
-    elif marker.exists():
+    elif full_plan and marker.exists():
         marker.unlink()
     return 0 if complete else 2
 
@@ -311,17 +322,19 @@ def main() -> int:
     args = build_parser().parse_args()
     root = args.root.expanduser().resolve()
     try:
-        plan = selected_plan(load_plan(), args.families)
+        complete_plan = load_plan()
+        plan = selected_plan(complete_plan, args.families)
+        full_plan = set(plan) == set(complete_plan)
         if args.command == "doctor":
             return command_doctor(plan, root, args)
         if args.command == "download":
             return command_download(plan, root, args)
         if args.command == "verify":
-            return command_verify(plan, root, args)
+            return command_verify(plan, root, args, full_plan=full_plan)
         download_status = command_download(plan, root, args)
         if download_status and not args.dry_run:
             return download_status
-        return 0 if args.dry_run else command_verify(plan, root, args)
+        return 0 if args.dry_run else command_verify(plan, root, args, full_plan=full_plan)
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -4,10 +4,8 @@ datasets:
   vla_data:
     dataset_py: umi_datasets
 
-    # Must match one action-semantics bucket (abs pose, delta EEF, joint, hand).
-    action_horizon: 8
-    action_dim: 23
-    state_dim: 23
+    # action_horizon/action_dim/state_dim are inferred from
+    # framework.action_model. If repeated here, values must match exactly.
     strict_dimensions: true
 
     max_views: 2

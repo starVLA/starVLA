@@ -112,9 +112,16 @@ through `starVLA/dataloader/umi_datasets.py`. The adapter adds:
 - fixed horizon packing plus action/state/image validity masks;
 - the same list-of-dictionaries batch contract consumed by StarVLA models.
 
-Keep `strict_dimensions: true` for current QwenOFT training. QwenOFT does not
-yet apply `action_mask` in its L1 loss, so padding heterogeneous action spaces
-would otherwise train against artificial zeros. More importantly, do not put
-absolute pose, delta EEF, joint-space and dexterous-hand actions into one
-mixture merely because their tensors can be padded to the same width. Select a
-registry mixture whose members have matching action semantics.
+Action horizon/dimension and state dimension are read from
+`framework.action_model`; they need not be duplicated under `vla_data`. If
+both sections specify a value, startup fails when they disagree instead of
+silently producing a mismatched label tensor.
+
+QwenOFT applies `action_mask` to its L1 loss when the UMI adapter supplies it,
+so a short final chunk does not train against padded cells. Keep
+`strict_dimensions: true` for the normal training path: it catches conversion
+errors early and guarantees the configured horizon/dimensions. More
+importantly, do not put absolute pose, delta EEF, joint-space and
+dexterous-hand actions into one mixture merely because tensors can be padded
+to the same width. The UMI loader rejects mixed semantics unless the config
+explicitly opts in.
