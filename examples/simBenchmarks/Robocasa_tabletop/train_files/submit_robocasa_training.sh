@@ -51,6 +51,7 @@ export freeze_module_list=""
 export action_input_dim=2560
 export DIT_TYPE="DiT-B"
 export config_yaml=./examples/simBenchmarks/Robocasa_tabletop/train_files/starvla_cotrain_robocasa_gr1.yaml
+export data_root_dir=/root/tianyi/LDA-1B/playground/Datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
 export data_mix=fourier_gr1_unified_1000
 export include_state=True
 export run_root_dir=./results/Checkpoints
@@ -72,9 +73,6 @@ export output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
 # mv this script to the output dir
 cp $0 ${output_dir}/
-
-  # --datasets.vla_data.include_state ${include_state} \
-
 srun --jobid $SLURM_JOBID bash -c 'accelerate launch \
   --config_file starVLA/config/deepseeds/deepspeed_zero2.yaml \
   --main_process_ip $MASTER_ADDR \
@@ -88,7 +86,9 @@ srun --jobid $SLURM_JOBID bash -c 'accelerate launch \
   --framework.action_model.action_model_type ${DIT_TYPE} \
   --framework.qwenvl.base_vlm ${base_vlm} \
   --datasets.vla_data.per_device_batch_size 8 \
+  --datasets.vla_data.include_state ${include_state} \
   --trainer.freeze_modules ${freeze_module_list} \
+  --datasets.vla_data.data_root_dir ${data_root_dir} \
   --datasets.vla_data.data_mix ${data_mix} \
   --trainer.max_train_steps 200000 \
   --trainer.save_interval 10000 \

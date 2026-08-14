@@ -10,7 +10,7 @@ Framework_name=QwenPI_v2
 base_vlm=./playground/Pretrained_models/Qwen3-VL-4B-Instruct
 freeze_module_list='' # just for fast debug, sota is under fully FT, i.g., freeze_module_list=""
 DIT_TYPE="DiT-B"
-data_root_dir=./playground/Datasets/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
+data_root_dir=/root/tianyi/LDA-1B/playground/Datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
 data_mix=fourier_gr1_unified_1000
 
 

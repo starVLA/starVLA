@@ -1,0 +1,4471 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "RoboCasa Stage-2 当前训练健康报告",
+    "description": "Active E256 optimization health, reproducibility, and run-lifecycle risk.",
+    "generatedAt": "2026-08-10T07:31:08Z",
+    "cards": [
+      {
+        "id": "step_card",
+        "dataset": "summary",
+        "sourceId": "current_snapshot",
+        "metrics": [
+          {
+            "label": "最新 optimizer step",
+            "field": "latest_step",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "loss_card",
+        "dataset": "summary",
+        "sourceId": "current_snapshot",
+        "metrics": [
+          {
+            "label": "最新 action loss",
+            "field": "latest_loss",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "accuracy_card",
+        "dataset": "summary",
+        "sourceId": "current_snapshot",
+        "metrics": [
+          {
+            "label": "最新 token accuracy",
+            "field": "latest_accuracy",
+            "format": "percent"
+          }
+        ]
+      },
+      {
+        "id": "throughput_card",
+        "dataset": "summary",
+        "sourceId": "current_snapshot",
+        "metrics": [
+          {
+            "label": "近 2k samples/s",
+            "field": "samples_per_second",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "critical_card",
+        "dataset": "summary",
+        "sourceId": "current_snapshot",
+        "metrics": [
+          {
+            "label": "严重数值/系统事件",
+            "field": "critical_events",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "loss_trend",
+        "title": "相同 E256 配置的 action loss 曲线",
+        "subtitle": "500-step 滚动均值；首次 E256 到 30.2k，当前 run 延伸至近 100k",
+        "type": "line",
+        "dataset": "training_trend",
+        "sourceId": "same_e256_metrics",
+        "encodings": {
+          "x": {
+            "field": "step",
+            "type": "quantitative",
+            "label": "Optimizer step"
+          },
+          "y": {
+            "field": "action_loss",
+            "type": "quantitative",
+            "label": "Action loss"
+          },
+          "color": {
+            "field": "series",
+            "type": "nominal",
+            "label": "Run"
+          }
+        },
+        "layout": "full"
+      },
+      {
+        "id": "accuracy_trend",
+        "title": "相同 E256 配置的 token accuracy 曲线",
+        "subtitle": "500-step 滚动均值；末段已平台化但仍缓慢改善",
+        "type": "line",
+        "dataset": "training_trend",
+        "sourceId": "same_e256_metrics",
+        "valueFormat": "percent",
+        "encodings": {
+          "x": {
+            "field": "step",
+            "type": "quantitative",
+            "label": "Optimizer step"
+          },
+          "y": {
+            "field": "token_accuracy",
+            "type": "quantitative",
+            "label": "Token accuracy",
+            "format": "percent"
+          },
+          "color": {
+            "field": "series",
+            "type": "nominal",
+            "label": "Run"
+          }
+        },
+        "layout": "full"
+      },
+      {
+        "id": "mse_trend",
+        "title": "Validation MSE（连续动作空间）",
+        "subtitle": "每 2k step 一次；单点有明显抖动，越低越好",
+        "type": "line",
+        "dataset": "mse_trend",
+        "sourceId": "validation_mse",
+        "encodings": {
+          "x": {
+            "field": "step",
+            "type": "quantitative",
+            "label": "Optimizer step"
+          },
+          "y": {
+            "field": "mse_x1e3",
+            "type": "quantitative",
+            "label": "MSE × 10⁻³"
+          },
+          "color": {
+            "field": "series",
+            "type": "nominal",
+            "label": "Run"
+          }
+        },
+        "layout": "full"
+      },
+      {
+        "id": "group_delta",
+        "title": "最后 10k 的 codebook group accuracy 斜率",
+        "subtitle": "每 1k optimizer steps 的线性变化；负值表示轻微回落",
+        "type": "bar",
+        "dataset": "group_delta",
+        "sourceId": "group_deltas",
+        "valueFormat": "percent",
+        "encodings": {
+          "x": {
+            "field": "group",
+            "type": "nominal",
+            "label": "Codebook group"
+          },
+          "y": {
+            "field": "accuracy_slope_per_1k",
+            "type": "quantitative",
+            "label": "Accuracy slope / 1k",
+            "format": "percent"
+          },
+          "tooltip": [
+            {
+              "field": "mean_accuracy",
+              "type": "quantitative",
+              "label": "末 10k 均值",
+              "format": "percent"
+            },
+            {
+              "field": "latest_accuracy",
+              "type": "quantitative",
+              "label": "最新单点",
+              "format": "percent"
+            }
+          ]
+        },
+        "layout": "full"
+      },
+      {
+        "id": "token_accuracy_gap_by_scale",
+        "title": "E256 相对 40.33% E128 的 accuracy 差距贡献",
+        "subtitle": "共同末 10k；E256−E128。五个尺度合计 −13.53 个百分点",
+        "type": "bar",
+        "dataset": "token_accuracy_gap_by_scale",
+        "sourceId": "token_gap_diagnosis",
+        "valueFormat": "percent",
+        "encodings": {
+          "x": {
+            "field": "scale",
+            "type": "nominal",
+            "label": "Token scale"
+          },
+          "y": {
+            "field": "gap_contribution",
+            "type": "quantitative",
+            "label": "对总体 accuracy 差距的贡献",
+            "format": "percent"
+          },
+          "tooltip": [
+            {
+              "field": "e256_accuracy",
+              "type": "quantitative",
+              "label": "当前 E256 accuracy",
+              "format": "percent"
+            },
+            {
+              "field": "e128_accuracy",
+              "type": "quantitative",
+              "label": "40.33% E128 accuracy",
+              "format": "percent"
+            },
+            {
+              "field": "raw_gap",
+              "type": "quantitative",
+              "label": "该尺度原始差距",
+              "format": "percent"
+            },
+            {
+              "field": "gap_share",
+              "type": "quantitative",
+              "label": "占总差距比例",
+              "format": "percent"
+            }
+          ]
+        },
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "comparison_table",
+        "title": "同配置 E256 健康性对照",
+        "subtitle": "严格按两次 E256 共同后期 step 对齐；窗口 25250–30250",
+        "dataset": "comparison",
+        "sourceId": "comparison_detail",
+        "density": "spacious",
+        "defaultSort": {
+          "field": "metric",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "metric",
+            "label": "指标",
+            "type": "text"
+          },
+          {
+            "field": "current",
+            "label": "当前重启",
+            "type": "text"
+          },
+          {
+            "field": "first_e256",
+            "label": "首次 E256",
+            "type": "text"
+          },
+          {
+            "field": "delta",
+            "label": "差值",
+            "type": "text"
+          },
+          {
+            "field": "assessment",
+            "label": "判断",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "tokenizer_comparison_table",
+        "title": "两次训练使用的离散标签空间并不相同",
+        "subtitle": "Stage-2 数据规模相同；差异来自 Stage-1 tokenizer 表征与 checkpoint 选择",
+        "dataset": "tokenizer_comparison",
+        "sourceId": "tokenizer_config_evidence",
+        "density": "spacious",
+        "columns": [
+          {
+            "field": "item",
+            "label": "核对项",
+            "type": "text"
+          },
+          {
+            "field": "e128",
+            "label": "40.33% E128",
+            "type": "text"
+          },
+          {
+            "field": "e256",
+            "label": "当前 E256",
+            "type": "text"
+          },
+          {
+            "field": "implication",
+            "label": "含义",
+            "type": "text"
+          }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "current_snapshot",
+        "label": "当前 E256 run 快照",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r"
+      },
+      {
+        "id": "same_e256_metrics",
+        "label": "当前重启与首次 E256 同-step 对齐",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/urhbwkbq"
+      },
+      {
+        "id": "validation_mse",
+        "label": "Stage-2 validation MSE 对照",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/gmof9itw"
+      },
+      {
+        "id": "group_deltas",
+        "label": "E256 codebook group 末段趋势",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r"
+      },
+      {
+        "id": "comparison_detail",
+        "label": "E256 健康性审计明细",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r"
+      },
+      {
+        "id": "token_gap_diagnosis",
+        "label": "E256 与 40.33% E128 的同-step token 指标分解",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/gmof9itw"
+      },
+      {
+        "id": "tokenizer_config_evidence",
+        "label": "Stage-1 tokenizer 配置与 cache 审计",
+        "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# RoboCasa Stage-2 当前训练健康报告"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "body": "## Technical summary\n\n**结论：当前训练指标正常，建议让它按计划跑完。** 截至完整日志 step **95,500/100,000**，单点 action loss 为 **1.5551**，token accuracy 为 **49.46%**。最后 10k 的线性趋势是 loss **-0.0018/1k**、accuracy **+0.066 个百分点/1k**；后期进入平台期但仍在改善。完整指标未发现 NaN、Inf、OOM、NCCL error/timeout 或 traceback。\n\n最近吞吐约 **291.7 samples/s**，按当前速度还需约 **2.2 小时**。94k checkpoint 已正常写出，因此此前低步数 checkpoint 被旧 run 挤掉的恢复风险已经消失。\n\n与 40.33% 的 E128 基线相比，当前 exact-token accuracy 低约 **13.53 个百分点**，但该比较跨越不同 tokenizer，不能解释为策略变差；step 90k 时当前连续动作 MSE 反而低 **36.6%**。"
+      },
+      {
+        "id": "metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "step_card",
+          "loss_card",
+          "accuracy_card",
+          "throughput_card",
+          "critical_card"
+        ]
+      },
+      {
+        "id": "key_findings",
+        "type": "markdown",
+        "sourceId": "same_e256_metrics",
+        "body": "## 首次 E256 对照排除了重启后的数值偏移\n\n两次相同 E256 配置在共同后期 25,250–30,250 step 严格对齐：当前 loss 均值比首次低 **-0.12%**，token accuracy 高 **0.058 个百分点**，LR 逐点一致。首次 run 在 30.2k 结束，因此 30.2k 之后的健康性主要依据当前 run 自身的末段趋势、验证指标和异常日志判断。"
+      },
+      {
+        "id": "loss_chart",
+        "type": "chart",
+        "chartId": "loss_trend",
+        "layout": "full"
+      },
+      {
+        "id": "accuracy_chart",
+        "type": "chart",
+        "chartId": "accuracy_trend",
+        "layout": "full"
+      },
+      {
+        "id": "token_accuracy_diagnosis",
+        "type": "markdown",
+        "sourceId": "token_gap_diagnosis",
+        "body": "## 为什么当前 token accuracy 比 40.33% 那次低\n\n**主因是 tokenizer 变了，所以两次 accuracy 不是同一把尺子；这不是当前训练末段退化。** 在严格共同的末 10k step 中，当前 E256 为 **51.18%**，旧 E128 为 **64.71%**，差 **−13.53 个百分点**。但差距从早期就存在：2k 为 −9.65 个百分点，8k 为 −12.43 个百分点，90k 为 −13.41 个百分点；与此同时当前 run 自己的末 10k accuracy 斜率仍为正。\n\n代码中的 accuracy 是 496 个位置上 `argmax token ID == target token ID` 的精确命中率。E128 与 E256 虽然样本数、token 数、512-code ProductVQ、16 groups 和五个 scales 相同，但 latent 从 128 增至 256（每组 8→16 维），Stage-1 目标、action-type embedding 和 checkpoint 选择也改变；因此同一个 group 编号和 token ID 不再代表相同的动作区域，分类熵与难度基线也不可直接对齐。"
+      },
+      {
+        "id": "token_gap_chart_block",
+        "type": "chart",
+        "chartId": "token_accuracy_gap_by_scale",
+        "layout": "full"
+      },
+      {
+        "id": "token_accuracy_action_counterexample",
+        "type": "markdown",
+        "sourceId": "validation_mse",
+        "body": "### Exact-token 命中更低，不等于解码后的动作更差\n\n最直接的反例在 step 90k：当前 E256 token accuracy **50.52%**，旧 E128 **63.92%**；但共享连续动作空间的 validation MSE 是 **0.00010718 vs 0.00016909**，E256 反而低 **36.6%**。错误 token 可能对应邻近或功能相似的 codeword，多尺度、多 group 的误差经 decoder 合成后，对连续动作的影响也不同。分组结果同样呈交叉：有些 E256 group 低近 60 个百分点，有些却高 37 个百分点，这更像离散分区语义重排，而不是统一的学习能力下降。\n\n因此应使用三层判断：同 tokenizer 内看 loss/accuracy 趋势；跨 tokenizer 看连续动作 MSE；最终是否超过 **40.33%** 仍以相同协议的 24×50 RoboCasa 闭环仿真为准。"
+      },
+      {
+        "id": "tokenizer_comparison_table_block",
+        "type": "table",
+        "tableId": "tokenizer_comparison_table",
+        "layout": "full"
+      },
+      {
+        "id": "mse_interpretation",
+        "type": "markdown",
+        "sourceId": "validation_mse",
+        "body": "## 后期 validation MSE 改善，但单点锯齿明显\n\n当前最新 validation MSE 是 step 94,000 的 **0.00031782**，比 E128/40.33% 基线同 step 低 **7.8%**。更稳健地看 76k–94k 的 10 个共同点，当前均值 **0.00024212**，比基线均值低 **21.5%**。但 MSE 在约 1e-4 与 3.2e-4 间锯齿波动，且历史上更低 MSE 并不稳定对应更高仿真成功率。"
+      },
+      {
+        "id": "mse_chart_block",
+        "type": "chart",
+        "chartId": "mse_trend",
+        "layout": "full"
+      },
+      {
+        "id": "group_interpretation",
+        "type": "markdown",
+        "sourceId": "group_deltas",
+        "body": "## 16 个 codebook group 没有局部发散\n\n最后 10k 中 **15/16** 个 group 的 accuracy 斜率非负。最弱的是 **g11**，仅 **-0.039 个百分点/1k**，量级很小；所有 group 的 loss 均未出现持续上升。先前需要观察的 g12 目前已恢复为改善趋势。"
+      },
+      {
+        "id": "group_chart_block",
+        "type": "chart",
+        "chartId": "group_delta",
+        "layout": "full"
+      },
+      {
+        "id": "scope_method",
+        "type": "markdown",
+        "body": "## Scope, data, metric definitions, and methodology\n\n范围是当前 run 8c7uho0r 从 step 50 到 95,500 的完整 50-step 日志。末段趋势使用最后 10,000 optimizer steps 的普通最小二乘斜率；吞吐使用最近 5,000 steps、GBS 512 与日志墙钟。重启复现对照使用两次 E256 的共同后期 25,250–30,250 step。Validation MSE 每 2k step 记录一次，并与首次 E256 及 E128 基线在相同步数比较。"
+      },
+      {
+        "id": "comparison_table_block",
+        "type": "table",
+        "tableId": "comparison_table",
+        "layout": "full"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## Limitations, uncertainty, and robustness checks\n\n当前 E256 尚无同协议的 RoboCasa 仿真评估，因此不能从 token accuracy 或 MSE 换算成功率。旧 40.33% 是 E128 基线的 90k checkpoint（484/1200），不是其 100k 最终值；该基线 100k 为 39.17%。E128 与 E256 tokenizer、Stage-1 表征也不同，跨 tokenizer 的交叉熵和 token accuracy 不可直接判优。本次鲁棒性检查包括 5k/10k 趋势、16 group、5 scales、全部非有限值、错误日志、吞吐离群点和同配置重跑对齐。 Exact-token accuracy 要求离散 ID 完全相等；它不会反映错误 codeword 与目标 codeword 的距离，也不能控制两套 tokenizer 的标签熵与分区语义差异。"
+      },
+      {
+        "id": "operational_risk",
+        "type": "markdown",
+        "body": "## Checkpoint 与收尾状态\n\n当前仍是 is_resume: false 的从零重跑，但 checkpoint 保留已经恢复正常：目录中有 78k、80k、86k、90k、94k，符合 latest 1 + best 4 策略，最新恢复点为 94k。尚无 final_model，也没有当前 E256 的 RoboCasa sim summary；因此训练接近完成但还没有正式收尾。共享目录仍会让两个 run 的 provenance 混在一起，最终归档时应注明。"
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Recommended next steps\n\n- 继续运行到 100k；当前没有基于指标的停训或重启理由。\n- 到 100k 后确认 final model、100k checkpoint、W&B state=finished 与 summary.jsonl 的 96k/98k/100k MSE 都已写出。\n- 优先对 94k 和 100k 做与旧基线完全一致的 24×50 RoboCasa 仿真；不要只凭最低 MSE 选 checkpoint。\n- 若只能先评一个 checkpoint，建议先评 94k，因为它已落盘且当前 MSE 与训练曲线均健康。"
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## Further questions\n\nE256 最终是否超过 40.33%，只能由同任务、同 episode 数、同推理配置的 RoboCasa 仿真回答。尤其需要比较 94k 与 100k，因为旧 E128 基线的最佳成功率也出现在 90k 而不是最终 100k。"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-10T07:31:08Z",
+    "status": "partial",
+    "datasets": {
+      "summary": [
+        {
+          "latest_step": 95500,
+          "latest_loss": 1.555059552192688,
+          "latest_accuracy": 0.4946446418762207,
+          "samples_per_second": 291.7046490428441,
+          "critical_events": 0,
+          "late_loss_slope": -0.0018287466286520707,
+          "late_accuracy_slope": 0.0006630140806347226
+        }
+      ],
+      "training_trend": [
+        {
+          "step": 250,
+          "series": "当前重启 E256",
+          "action_loss": 5.293834972381592,
+          "token_accuracy": 0.03637852722313255
+        },
+        {
+          "step": 500,
+          "series": "当前重启 E256",
+          "action_loss": 4.56822636127472,
+          "token_accuracy": 0.07280745756579562
+        },
+        {
+          "step": 750,
+          "series": "当前重启 E256",
+          "action_loss": 3.556439984928478,
+          "token_accuracy": 0.16350118748166345
+        },
+        {
+          "step": 1000,
+          "series": "当前重启 E256",
+          "action_loss": 2.961488441987471,
+          "token_accuracy": 0.24172355641018262
+        },
+        {
+          "step": 1250,
+          "series": "当前重启 E256",
+          "action_loss": 2.6263392838564785,
+          "token_accuracy": 0.2656937268647281
+        },
+        {
+          "step": 1500,
+          "series": "当前重启 E256",
+          "action_loss": 2.51657358082858,
+          "token_accuracy": 0.2765075049617074
+        },
+        {
+          "step": 1750,
+          "series": "当前重启 E256",
+          "action_loss": 2.4482279257340864,
+          "token_accuracy": 0.2874759327281605
+        },
+        {
+          "step": 2000,
+          "series": "当前重启 E256",
+          "action_loss": 2.389849836176092,
+          "token_accuracy": 0.29473857988010754
+        },
+        {
+          "step": 2250,
+          "series": "当前重启 E256",
+          "action_loss": 2.346559849652377,
+          "token_accuracy": 0.3018408553166823
+        },
+        {
+          "step": 2500,
+          "series": "当前重启 E256",
+          "action_loss": 2.3036106499758633,
+          "token_accuracy": 0.30995119430802087
+        },
+        {
+          "step": 2750,
+          "series": "当前重启 E256",
+          "action_loss": 2.2754691297357734,
+          "token_accuracy": 0.3158506615595384
+        },
+        {
+          "step": 3000,
+          "series": "当前重启 E256",
+          "action_loss": 2.231346368789673,
+          "token_accuracy": 0.3261088593439622
+        },
+        {
+          "step": 3250,
+          "series": "当前重启 E256",
+          "action_loss": 2.2114561687816274,
+          "token_accuracy": 0.33090862089937384
+        },
+        {
+          "step": 3500,
+          "series": "当前重启 E256",
+          "action_loss": 2.1894276358864526,
+          "token_accuracy": 0.33525017174807464
+        },
+        {
+          "step": 3750,
+          "series": "当前重启 E256",
+          "action_loss": 2.142875454642556,
+          "token_accuracy": 0.34483250975608826
+        },
+        {
+          "step": 4000,
+          "series": "当前重启 E256",
+          "action_loss": 2.1241113272580234,
+          "token_accuracy": 0.3478624333034862
+        },
+        {
+          "step": 4250,
+          "series": "当前重启 E256",
+          "action_loss": 2.107111605730924,
+          "token_accuracy": 0.35036541657014325
+        },
+        {
+          "step": 4500,
+          "series": "当前重启 E256",
+          "action_loss": 2.0840884988958184,
+          "token_accuracy": 0.35566920854828576
+        },
+        {
+          "step": 4750,
+          "series": "当前重启 E256",
+          "action_loss": 2.071096181869507,
+          "token_accuracy": 0.3591115149584683
+        },
+        {
+          "step": 5000,
+          "series": "当前重启 E256",
+          "action_loss": 2.0521426634355024,
+          "token_accuracy": 0.3633556934920224
+        },
+        {
+          "step": 5250,
+          "series": "当前重启 E256",
+          "action_loss": 2.016716566952792,
+          "token_accuracy": 0.37066416306929156
+        },
+        {
+          "step": 5500,
+          "series": "当前重启 E256",
+          "action_loss": 2.007626316764138,
+          "token_accuracy": 0.3740320151502436
+        },
+        {
+          "step": 5750,
+          "series": "当前重启 E256",
+          "action_loss": 1.9967310428619385,
+          "token_accuracy": 0.37874013727361505
+        },
+        {
+          "step": 6000,
+          "series": "当前重启 E256",
+          "action_loss": 1.9730351621454412,
+          "token_accuracy": 0.3831046006896279
+        },
+        {
+          "step": 6250,
+          "series": "当前重启 E256",
+          "action_loss": 1.9670822837136008,
+          "token_accuracy": 0.38412412188269873
+        },
+        {
+          "step": 6500,
+          "series": "当前重启 E256",
+          "action_loss": 1.9499715566635132,
+          "token_accuracy": 0.3902355134487152
+        },
+        {
+          "step": 6750,
+          "series": "当前重启 E256",
+          "action_loss": 1.91763174533844,
+          "token_accuracy": 0.3979964635588906
+        },
+        {
+          "step": 7000,
+          "series": "当前重启 E256",
+          "action_loss": 1.927857063033364,
+          "token_accuracy": 0.39391837878660724
+        },
+        {
+          "step": 7250,
+          "series": "当前重启 E256",
+          "action_loss": 1.9241822524504228,
+          "token_accuracy": 0.39487489516084845
+        },
+        {
+          "step": 7500,
+          "series": "当前重启 E256",
+          "action_loss": 1.8969929001548074,
+          "token_accuracy": 0.4020401754162528
+        },
+        {
+          "step": 7750,
+          "series": "当前重启 E256",
+          "action_loss": 1.893297011202032,
+          "token_accuracy": 0.4031857035376809
+        },
+        {
+          "step": 8000,
+          "series": "当前重启 E256",
+          "action_loss": 1.8891173601150513,
+          "token_accuracy": 0.4027561274441806
+        },
+        {
+          "step": 8250,
+          "series": "当前重启 E256",
+          "action_loss": 1.873737400228327,
+          "token_accuracy": 0.407452791929245
+        },
+        {
+          "step": 8500,
+          "series": "当前重启 E256",
+          "action_loss": 1.8657685951753096,
+          "token_accuracy": 0.4105972647666931
+        },
+        {
+          "step": 8750,
+          "series": "当前重启 E256",
+          "action_loss": 1.857958035035567,
+          "token_accuracy": 0.41348972103812476
+        },
+        {
+          "step": 9000,
+          "series": "当前重启 E256",
+          "action_loss": 1.8577492453835227,
+          "token_accuracy": 0.41184588453986426
+        },
+        {
+          "step": 9250,
+          "series": "当前重启 E256",
+          "action_loss": 1.8608688983050259,
+          "token_accuracy": 0.4096693857149644
+        },
+        {
+          "step": 9500,
+          "series": "当前重启 E256",
+          "action_loss": 1.8520337559960105,
+          "token_accuracy": 0.4129455956545743
+        },
+        {
+          "step": 9750,
+          "series": "当前重启 E256",
+          "action_loss": 1.8407105640931563,
+          "token_accuracy": 0.4157292301004583
+        },
+        {
+          "step": 10000,
+          "series": "当前重启 E256",
+          "action_loss": 1.8191024390133945,
+          "token_accuracy": 0.4227914105762135
+        },
+        {
+          "step": 10250,
+          "series": "当前重启 E256",
+          "action_loss": 1.8201021714644,
+          "token_accuracy": 0.42219573530283844
+        },
+        {
+          "step": 10500,
+          "series": "当前重启 E256",
+          "action_loss": 1.8131958137858997,
+          "token_accuracy": 0.4228658676147461
+        },
+        {
+          "step": 10750,
+          "series": "当前重启 E256",
+          "action_loss": 1.8164881467819214,
+          "token_accuracy": 0.4218921715562994
+        },
+        {
+          "step": 11000,
+          "series": "当前重启 E256",
+          "action_loss": 1.8121966231953015,
+          "token_accuracy": 0.4231293418190696
+        },
+        {
+          "step": 11250,
+          "series": "当前重启 E256",
+          "action_loss": 1.8064496192065151,
+          "token_accuracy": 0.42503091421994293
+        },
+        {
+          "step": 11500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7969563765959307,
+          "token_accuracy": 0.42677784778855066
+        },
+        {
+          "step": 11750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7962520881132646,
+          "token_accuracy": 0.42664038051258435
+        },
+        {
+          "step": 12000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7889508984305642,
+          "token_accuracy": 0.4297504885630174
+        },
+        {
+          "step": 12250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7851945703679866,
+          "token_accuracy": 0.43025452169505035
+        },
+        {
+          "step": 12500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7864626537669788,
+          "token_accuracy": 0.4290058937939731
+        },
+        {
+          "step": 12750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7788716879757969,
+          "token_accuracy": 0.4316577911376953
+        },
+        {
+          "step": 13000,
+          "series": "当前重启 E256",
+          "action_loss": 1.781970826062289,
+          "token_accuracy": 0.4315260567448356
+        },
+        {
+          "step": 13250,
+          "series": "当前重启 E256",
+          "action_loss": 1.782296429980885,
+          "token_accuracy": 0.4309647462584756
+        },
+        {
+          "step": 13500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7765564376657659,
+          "token_accuracy": 0.4323909309777347
+        },
+        {
+          "step": 13750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7695965550162576,
+          "token_accuracy": 0.43420659682967444
+        },
+        {
+          "step": 14000,
+          "series": "当前重启 E256",
+          "action_loss": 1.76307504827326,
+          "token_accuracy": 0.4356213239106265
+        },
+        {
+          "step": 14250,
+          "series": "当前重启 E256",
+          "action_loss": 1.776111288504167,
+          "token_accuracy": 0.4323565661907196
+        },
+        {
+          "step": 14500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7667926766655662,
+          "token_accuracy": 0.4360795319080353
+        },
+        {
+          "step": 14750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7520603916861794,
+          "token_accuracy": 0.4399743242697282
+        },
+        {
+          "step": 15000,
+          "series": "当前重启 E256",
+          "action_loss": 1.760608597235246,
+          "token_accuracy": 0.43820448084311053
+        },
+        {
+          "step": 15250,
+          "series": "当前重启 E256",
+          "action_loss": 1.76615356315266,
+          "token_accuracy": 0.43719641728834674
+        },
+        {
+          "step": 15500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7593664689497515,
+          "token_accuracy": 0.43873715129765595
+        },
+        {
+          "step": 15750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7704384110190652,
+          "token_accuracy": 0.4344299706545743
+        },
+        {
+          "step": 16000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7635551257566973,
+          "token_accuracy": 0.4366923895749179
+        },
+        {
+          "step": 16250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7634328278628262,
+          "token_accuracy": 0.4375286264853044
+        },
+        {
+          "step": 16500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7621528126976707,
+          "token_accuracy": 0.437580176375129
+        },
+        {
+          "step": 16750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7417227680032903,
+          "token_accuracy": 0.44271786646409467
+        },
+        {
+          "step": 17000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7360383597287266,
+          "token_accuracy": 0.44305579499764874
+        },
+        {
+          "step": 17250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7340291846882214,
+          "token_accuracy": 0.44498028267513623
+        },
+        {
+          "step": 17500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7365273887460881,
+          "token_accuracy": 0.44517502188682556
+        },
+        {
+          "step": 17750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7375205538489602,
+          "token_accuracy": 0.4456275051290339
+        },
+        {
+          "step": 18000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7441237297925083,
+          "token_accuracy": 0.4429641528563066
+        },
+        {
+          "step": 18250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7502464922991665,
+          "token_accuracy": 0.44004305655306036
+        },
+        {
+          "step": 18500,
+          "series": "当前重启 E256",
+          "action_loss": 1.742333639751781,
+          "token_accuracy": 0.4418071752244776
+        },
+        {
+          "step": 18750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7389641349965876,
+          "token_accuracy": 0.4427178745920008
+        },
+        {
+          "step": 19000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7493779876015403,
+          "token_accuracy": 0.4405642774972049
+        },
+        {
+          "step": 19250,
+          "series": "当前重启 E256",
+          "action_loss": 1.747561433098533,
+          "token_accuracy": 0.4420935538682071
+        },
+        {
+          "step": 19500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7329730770804666,
+          "token_accuracy": 0.4445163472132249
+        },
+        {
+          "step": 19750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7228058143095537,
+          "token_accuracy": 0.44703078269958496
+        },
+        {
+          "step": 20000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7227489406412297,
+          "token_accuracy": 0.44715105945413763
+        },
+        {
+          "step": 20250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7306351553310046,
+          "token_accuracy": 0.4464121948588978
+        },
+        {
+          "step": 20500,
+          "series": "当前重启 E256",
+          "action_loss": 1.730028965256431,
+          "token_accuracy": 0.446795945817774
+        },
+        {
+          "step": 20750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7276608402078801,
+          "token_accuracy": 0.44735152613032947
+        },
+        {
+          "step": 21000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7223029245029797,
+          "token_accuracy": 0.44695059006864374
+        },
+        {
+          "step": 21250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7162052176215432,
+          "token_accuracy": 0.44857151129029016
+        },
+        {
+          "step": 21500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7102730816060847,
+          "token_accuracy": 0.4494421156969937
+        },
+        {
+          "step": 21750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7171549580313943,
+          "token_accuracy": 0.4488693529909307
+        },
+        {
+          "step": 22000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7207348455082287,
+          "token_accuracy": 0.44927028634331445
+        },
+        {
+          "step": 22250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7049926411021838,
+          "token_accuracy": 0.45302188938314264
+        },
+        {
+          "step": 22500,
+          "series": "当前重启 E256",
+          "action_loss": 1.698520226912065,
+          "token_accuracy": 0.4565672955729745
+        },
+        {
+          "step": 22750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7025014703924006,
+          "token_accuracy": 0.4555076848376881
+        },
+        {
+          "step": 23000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7000441009348088,
+          "token_accuracy": 0.45495210452513263
+        },
+        {
+          "step": 23250,
+          "series": "当前重启 E256",
+          "action_loss": 1.700926661491394,
+          "token_accuracy": 0.45411587032404815
+        },
+        {
+          "step": 23500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7055584950880571,
+          "token_accuracy": 0.45338273319331085
+        },
+        {
+          "step": 23750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6962959332899614,
+          "token_accuracy": 0.4549635567448356
+        },
+        {
+          "step": 24000,
+          "series": "当前重启 E256",
+          "action_loss": 1.7017697420987217,
+          "token_accuracy": 0.45311352610588074
+        },
+        {
+          "step": 24250,
+          "series": "当前重启 E256",
+          "action_loss": 1.7035073475404219,
+          "token_accuracy": 0.45232884179462085
+        },
+        {
+          "step": 24500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6932457360354336,
+          "token_accuracy": 0.456561568108472
+        },
+        {
+          "step": 24750,
+          "series": "当前重启 E256",
+          "action_loss": 1.690850940617648,
+          "token_accuracy": 0.45866361260414124
+        },
+        {
+          "step": 25000,
+          "series": "当前重启 E256",
+          "action_loss": 1.688313527540727,
+          "token_accuracy": 0.45823403921994293
+        },
+        {
+          "step": 25250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6969579241492532,
+          "token_accuracy": 0.4553816724907268
+        },
+        {
+          "step": 25500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6962116089734165,
+          "token_accuracy": 0.4555649594827132
+        },
+        {
+          "step": 25750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6935334422371604,
+          "token_accuracy": 0.45609763264656067
+        },
+        {
+          "step": 26000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6921982331709429,
+          "token_accuracy": 0.456584477966482
+        },
+        {
+          "step": 26250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6970154588872737,
+          "token_accuracy": 0.45585706559094513
+        },
+        {
+          "step": 26500,
+          "series": "当前重启 E256",
+          "action_loss": 1.7063458616083318,
+          "token_accuracy": 0.452935971997001
+        },
+        {
+          "step": 26750,
+          "series": "当前重启 E256",
+          "action_loss": 1.7080257589166814,
+          "token_accuracy": 0.45134941827167163
+        },
+        {
+          "step": 27000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6974594701420178,
+          "token_accuracy": 0.4551411135630174
+        },
+        {
+          "step": 27250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6891771880063144,
+          "token_accuracy": 0.45874952186237683
+        },
+        {
+          "step": 27500,
+          "series": "当前重启 E256",
+          "action_loss": 1.682543776252053,
+          "token_accuracy": 0.46108067306605255
+        },
+        {
+          "step": 27750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6853025501424617,
+          "token_accuracy": 0.45997523990544403
+        },
+        {
+          "step": 28000,
+          "series": "当前重启 E256",
+          "action_loss": 1.68958242373033,
+          "token_accuracy": 0.45859488303011114
+        },
+        {
+          "step": 28250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6794772364876487,
+          "token_accuracy": 0.4598606933246959
+        },
+        {
+          "step": 28500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6730400648984043,
+          "token_accuracy": 0.4614186097275127
+        },
+        {
+          "step": 28750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6790010062131016,
+          "token_accuracy": 0.459648769010197
+        },
+        {
+          "step": 29000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6781507296995684,
+          "token_accuracy": 0.45933947508985346
+        },
+        {
+          "step": 29250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6799896088513462,
+          "token_accuracy": 0.4585318782112815
+        },
+        {
+          "step": 29500,
+          "series": "当前重启 E256",
+          "action_loss": 1.68990328095176,
+          "token_accuracy": 0.4570541463114999
+        },
+        {
+          "step": 29750,
+          "series": "当前重启 E256",
+          "action_loss": 1.690197305245833,
+          "token_accuracy": 0.45909891345284204
+        },
+        {
+          "step": 30000,
+          "series": "当前重启 E256",
+          "action_loss": 1.678810011256825,
+          "token_accuracy": 0.4614529718052257
+        },
+        {
+          "step": 30250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6875039772553877,
+          "token_accuracy": 0.45917337049137463
+        },
+        {
+          "step": 30500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6845106861808083,
+          "token_accuracy": 0.458514693108472
+        },
+        {
+          "step": 30750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6726002584804187,
+          "token_accuracy": 0.460759929635308
+        },
+        {
+          "step": 31000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6715453212911433,
+          "token_accuracy": 0.4611665904521942
+        },
+        {
+          "step": 31250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6832799261266536,
+          "token_accuracy": 0.4584860557859594
+        },
+        {
+          "step": 31500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6803378083489158,
+          "token_accuracy": 0.46010124683380127
+        },
+        {
+          "step": 31750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6692781123248013,
+          "token_accuracy": 0.4633831869472157
+        },
+        {
+          "step": 32000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6659730130975896,
+          "token_accuracy": 0.46439124779267743
+        },
+        {
+          "step": 32250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6786205551841042,
+          "token_accuracy": 0.4616820758039301
+        },
+        {
+          "step": 32500,
+          "series": "当前重启 E256",
+          "action_loss": 1.676549337126992,
+          "token_accuracy": 0.4619799175045707
+        },
+        {
+          "step": 32750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6765373186631636,
+          "token_accuracy": 0.46047928116538306
+        },
+        {
+          "step": 33000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6707256165417759,
+          "token_accuracy": 0.46289634162729437
+        },
+        {
+          "step": 33250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6653448776765303,
+          "token_accuracy": 0.4630681655623696
+        },
+        {
+          "step": 33500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6492681828412143,
+          "token_accuracy": 0.46648756753314624
+        },
+        {
+          "step": 33750,
+          "series": "当前重启 E256",
+          "action_loss": 1.63713492046703,
+          "token_accuracy": 0.4718772768974304
+        },
+        {
+          "step": 34000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6532577601346103,
+          "token_accuracy": 0.4686125245961276
+        },
+        {
+          "step": 34250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6621609384363347,
+          "token_accuracy": 0.4660751792517575
+        },
+        {
+          "step": 34500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6639787392182783,
+          "token_accuracy": 0.46495256098833954
+        },
+        {
+          "step": 34750,
+          "series": "当前重启 E256",
+          "action_loss": 1.665452935478904,
+          "token_accuracy": 0.46499838070435956
+        },
+        {
+          "step": 35000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6633473851464011,
+          "token_accuracy": 0.46515876054763794
+        },
+        {
+          "step": 35250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6775425564159046,
+          "token_accuracy": 0.4604277285662564
+        },
+        {
+          "step": 35500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6737163175236096,
+          "token_accuracy": 0.4607541994615035
+        },
+        {
+          "step": 35750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6653503504666416,
+          "token_accuracy": 0.46439124779267743
+        },
+        {
+          "step": 36000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6503297740762883,
+          "token_accuracy": 0.4693055667660453
+        },
+        {
+          "step": 36250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6487936540083452,
+          "token_accuracy": 0.4689905480905013
+        },
+        {
+          "step": 36500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6575541496276855,
+          "token_accuracy": 0.46607517383315344
+        },
+        {
+          "step": 36750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6653747016733342,
+          "token_accuracy": 0.464139231226661
+        },
+        {
+          "step": 37000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6628905751488425,
+          "token_accuracy": 0.463858580047434
+        },
+        {
+          "step": 37250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6615896983580156,
+          "token_accuracy": 0.4642423310063102
+        },
+        {
+          "step": 37500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6519719362258911,
+          "token_accuracy": 0.46749563108791004
+        },
+        {
+          "step": 37750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6562865539030596,
+          "token_accuracy": 0.4663901979273016
+        },
+        {
+          "step": 38000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6620035713369197,
+          "token_accuracy": 0.4650900255550038
+        },
+        {
+          "step": 38250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6605491963299839,
+          "token_accuracy": 0.4661152715032751
+        },
+        {
+          "step": 38500,
+          "series": "当前重启 E256",
+          "action_loss": 1.660415454344316,
+          "token_accuracy": 0.46616681868379767
+        },
+        {
+          "step": 38750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6568936759775335,
+          "token_accuracy": 0.4680053916844455
+        },
+        {
+          "step": 39000,
+          "series": "当前重启 E256",
+          "action_loss": 1.643813740123402,
+          "token_accuracy": 0.47113268212838605
+        },
+        {
+          "step": 39250,
+          "series": "当前重启 E256",
+          "action_loss": 1.632265947081826,
+          "token_accuracy": 0.47436879710717633
+        },
+        {
+          "step": 39500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6505276506597346,
+          "token_accuracy": 0.46795956925912335
+        },
+        {
+          "step": 39750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6602547818964177,
+          "token_accuracy": 0.4647921919822693
+        },
+        {
+          "step": 40000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6491053754633123,
+          "token_accuracy": 0.468538067557595
+        },
+        {
+          "step": 40250,
+          "series": "当前重启 E256",
+          "action_loss": 1.651267864487388,
+          "token_accuracy": 0.468314682895487
+        },
+        {
+          "step": 40500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6546060171994297,
+          "token_accuracy": 0.46751853823661804
+        },
+        {
+          "step": 40750,
+          "series": "当前重启 E256",
+          "action_loss": 1.655277598987926,
+          "token_accuracy": 0.465811702338132
+        },
+        {
+          "step": 41000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6540044004266912,
+          "token_accuracy": 0.46761018579656427
+        },
+        {
+          "step": 41250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6529808803038164,
+          "token_accuracy": 0.4673753570426594
+        },
+        {
+          "step": 41500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6421093507246538,
+          "token_accuracy": 0.4692769321528348
+        },
+        {
+          "step": 41750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6463173302737149,
+          "token_accuracy": 0.4682631384242665
+        },
+        {
+          "step": 42000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6503946347670122,
+          "token_accuracy": 0.46718061512166803
+        },
+        {
+          "step": 42250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6393775398080999,
+          "token_accuracy": 0.46939148144288495
+        },
+        {
+          "step": 42500,
+          "series": "当前重启 E256",
+          "action_loss": 1.638715473088351,
+          "token_accuracy": 0.4697351401502436
+        },
+        {
+          "step": 42750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6445248885588213,
+          "token_accuracy": 0.46975805271755566
+        },
+        {
+          "step": 43000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6398611502213911,
+          "token_accuracy": 0.47106395255435596
+        },
+        {
+          "step": 43250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6355784697966143,
+          "token_accuracy": 0.47336646101691504
+        },
+        {
+          "step": 43500,
+          "series": "当前重启 E256",
+          "action_loss": 1.642011371525851,
+          "token_accuracy": 0.4716538976539265
+        },
+        {
+          "step": 43750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6395292715592817,
+          "token_accuracy": 0.4729827073487369
+        },
+        {
+          "step": 44000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6279386498711326,
+          "token_accuracy": 0.47504465959288855
+        },
+        {
+          "step": 44250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6286055174740879,
+          "token_accuracy": 0.47472964091734454
+        },
+        {
+          "step": 44500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6266831701452082,
+          "token_accuracy": 0.4745692664926702
+        },
+        {
+          "step": 44750,
+          "series": "当前重启 E256",
+          "action_loss": 1.63488629731265,
+          "token_accuracy": 0.4725817767056552
+        },
+        {
+          "step": 45000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6319674470207908,
+          "token_accuracy": 0.4743458899584683
+        },
+        {
+          "step": 45250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6299353079362349,
+          "token_accuracy": 0.47504465959288855
+        },
+        {
+          "step": 45500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6373407949100842,
+          "token_accuracy": 0.47364711490544403
+        },
+        {
+          "step": 45750,
+          "series": "当前重启 E256",
+          "action_loss": 1.634797529740767,
+          "token_accuracy": 0.4726161442019723
+        },
+        {
+          "step": 46000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6225226250561802,
+          "token_accuracy": 0.4765853990208019
+        },
+        {
+          "step": 46250,
+          "series": "当前重启 E256",
+          "action_loss": 1.620197827165777,
+          "token_accuracy": 0.477519002827731
+        },
+        {
+          "step": 46500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6247795061631636,
+          "token_accuracy": 0.4754914180798964
+        },
+        {
+          "step": 46750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6172421953894875,
+          "token_accuracy": 0.47739299589937384
+        },
+        {
+          "step": 47000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6272253339940852,
+          "token_accuracy": 0.4746036339889873
+        },
+        {
+          "step": 47250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6196881857785312,
+          "token_accuracy": 0.47560023990544403
+        },
+        {
+          "step": 47500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6161501732739536,
+          "token_accuracy": 0.47698632966388355
+        },
+        {
+          "step": 47750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6202485019510442,
+          "token_accuracy": 0.47696914727037604
+        },
+        {
+          "step": 48000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6188246228478171,
+          "token_accuracy": 0.4770836965604262
+        },
+        {
+          "step": 48250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6250131346962668,
+          "token_accuracy": 0.47448334910652856
+        },
+        {
+          "step": 48500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6314625848423352,
+          "token_accuracy": 0.47376167232340033
+        },
+        {
+          "step": 48750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6173286004499956,
+          "token_accuracy": 0.47706651958552276
+        },
+        {
+          "step": 49000,
+          "series": "当前重启 E256",
+          "action_loss": 1.613363807851618,
+          "token_accuracy": 0.47797720811583777
+        },
+        {
+          "step": 49250,
+          "series": "当前重启 E256",
+          "action_loss": 1.620633526281877,
+          "token_accuracy": 0.47583506865934894
+        },
+        {
+          "step": 49500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6350064277648926,
+          "token_accuracy": 0.4722266576506875
+        },
+        {
+          "step": 49750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6231598962437024,
+          "token_accuracy": 0.47682022777470673
+        },
+        {
+          "step": 50000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5982039299878208,
+          "token_accuracy": 0.4824504987760024
+        },
+        {
+          "step": 50250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6011792854829268,
+          "token_accuracy": 0.4810415045781569
+        },
+        {
+          "step": 50500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6035403338345615,
+          "token_accuracy": 0.4794950376857411
+        },
+        {
+          "step": 50750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5990829251029275,
+          "token_accuracy": 0.4826681478457017
+        },
+        {
+          "step": 51000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6059381745078347,
+          "token_accuracy": 0.4814424352212386
+        },
+        {
+          "step": 51250,
+          "series": "当前重启 E256",
+          "action_loss": 1.600751887668263,
+          "token_accuracy": 0.48198083584958856
+        },
+        {
+          "step": 51500,
+          "series": "当前重启 E256",
+          "action_loss": 1.609642971645702,
+          "token_accuracy": 0.47887072508985346
+        },
+        {
+          "step": 51750,
+          "series": "当前重启 E256",
+          "action_loss": 1.624228997664018,
+          "token_accuracy": 0.4757606197487224
+        },
+        {
+          "step": 52000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6127213673158125,
+          "token_accuracy": 0.4781662307002328
+        },
+        {
+          "step": 52250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6139143813740124,
+          "token_accuracy": 0.4784010648727417
+        },
+        {
+          "step": 52500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6103086254813455,
+          "token_accuracy": 0.47934612360867584
+        },
+        {
+          "step": 52750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6092917702414773,
+          "token_accuracy": 0.47938048297708685
+        },
+        {
+          "step": 53000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6091485890475186,
+          "token_accuracy": 0.4807551150972193
+        },
+        {
+          "step": 53250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6022954420609907,
+          "token_accuracy": 0.4817918213930997
+        },
+        {
+          "step": 53500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5958860028873791,
+          "token_accuracy": 0.4833382855762135
+        },
+        {
+          "step": 53750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5971367250789295,
+          "token_accuracy": 0.48343565518205817
+        },
+        {
+          "step": 54000,
+          "series": "当前重启 E256",
+          "action_loss": 1.602794354612177,
+          "token_accuracy": 0.4811675087972121
+        },
+        {
+          "step": 54250,
+          "series": "当前重启 E256",
+          "action_loss": 1.6090522029183127,
+          "token_accuracy": 0.47766791690479626
+        },
+        {
+          "step": 54500,
+          "series": "当前重启 E256",
+          "action_loss": 1.6091240861199119,
+          "token_accuracy": 0.47816622257232666
+        },
+        {
+          "step": 54750,
+          "series": "当前重启 E256",
+          "action_loss": 1.6020594401793047,
+          "token_accuracy": 0.48084103248336096
+        },
+        {
+          "step": 55000,
+          "series": "当前重启 E256",
+          "action_loss": 1.6016105521808972,
+          "token_accuracy": 0.48145962032404815
+        },
+        {
+          "step": 55250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5993431589820168,
+          "token_accuracy": 0.4828972572630102
+        },
+        {
+          "step": 55500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5805172595110806,
+          "token_accuracy": 0.48786884817210113
+        },
+        {
+          "step": 55750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5784202272241765,
+          "token_accuracy": 0.48811513456431305
+        },
+        {
+          "step": 56000,
+          "series": "当前重启 E256",
+          "action_loss": 1.588840289549394,
+          "token_accuracy": 0.4865686676718972
+        },
+        {
+          "step": 56250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5881511623209172,
+          "token_accuracy": 0.4871700704097748
+        },
+        {
+          "step": 56500,
+          "series": "当前重启 E256",
+          "action_loss": 1.584673198786649,
+          "token_accuracy": 0.48710706559094513
+        },
+        {
+          "step": 56750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5959417386488481,
+          "token_accuracy": 0.4836074791171334
+        },
+        {
+          "step": 57000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5932896462353794,
+          "token_accuracy": 0.48379076610911975
+        },
+        {
+          "step": 57250,
+          "series": "当前重启 E256",
+          "action_loss": 1.586581826210022,
+          "token_accuracy": 0.48596154017881915
+        },
+        {
+          "step": 57500,
+          "series": "当前重启 E256",
+          "action_loss": 1.590556870807301,
+          "token_accuracy": 0.484758737412366
+        },
+        {
+          "step": 57750,
+          "series": "当前重启 E256",
+          "action_loss": 1.585459514097734,
+          "token_accuracy": 0.4868378693407232
+        },
+        {
+          "step": 58000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5906796238639138,
+          "token_accuracy": 0.48629946871237323
+        },
+        {
+          "step": 58250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5822090994228015,
+          "token_accuracy": 0.4878172955729745
+        },
+        {
+          "step": 58500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5825311162255027,
+          "token_accuracy": 0.4864598431370475
+        },
+        {
+          "step": 58750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5894076065583662,
+          "token_accuracy": 0.4848561015996066
+        },
+        {
+          "step": 59000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5790393460880627,
+          "token_accuracy": 0.4883900555697354
+        },
+        {
+          "step": 59250,
+          "series": "当前重启 E256",
+          "action_loss": 1.580855055288835,
+          "token_accuracy": 0.48885399915955285
+        },
+        {
+          "step": 59500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5816099535335193,
+          "token_accuracy": 0.48743927478790283
+        },
+        {
+          "step": 59750,
+          "series": "当前重启 E256",
+          "action_loss": 1.574137200008739,
+          "token_accuracy": 0.48746218193661084
+        },
+        {
+          "step": 60000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5669016729701648,
+          "token_accuracy": 0.490583750334653
+        },
+        {
+          "step": 60250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5780417160554365,
+          "token_accuracy": 0.4877943857149644
+        },
+        {
+          "step": 60500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5770352320237593,
+          "token_accuracy": 0.48871080712838605
+        },
+        {
+          "step": 60750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5788204995068638,
+          "token_accuracy": 0.48917474529959937
+        },
+        {
+          "step": 61000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5763385512612083,
+          "token_accuracy": 0.4895126765424555
+        },
+        {
+          "step": 61250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5666064674204045,
+          "token_accuracy": 0.4921244816346602
+        },
+        {
+          "step": 61500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5687986395575784,
+          "token_accuracy": 0.49032027613032947
+        },
+        {
+          "step": 61750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5709863684394143,
+          "token_accuracy": 0.49094458330761304
+        },
+        {
+          "step": 62000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5721867192875256,
+          "token_accuracy": 0.49226193807341834
+        },
+        {
+          "step": 62250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5648523460734973,
+          "token_accuracy": 0.49481073834679346
+        },
+        {
+          "step": 62500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5746757225556807,
+          "token_accuracy": 0.49031454595652496
+        },
+        {
+          "step": 62750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5798163522373547,
+          "token_accuracy": 0.48691805655306036
+        },
+        {
+          "step": 63000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5830788178877397,
+          "token_accuracy": 0.4861562793905085
+        },
+        {
+          "step": 63250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5795535932887683,
+          "token_accuracy": 0.4885561628775163
+        },
+        {
+          "step": 63500,
+          "series": "当前重启 E256",
+          "action_loss": 1.577263669534163,
+          "token_accuracy": 0.48939239707860077
+        },
+        {
+          "step": 63750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5733859105543657,
+          "token_accuracy": 0.489552766084671
+        },
+        {
+          "step": 64000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5648585666309704,
+          "token_accuracy": 0.4938542273911563
+        },
+        {
+          "step": 64250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5667297731746326,
+          "token_accuracy": 0.49314400824633514
+        },
+        {
+          "step": 64500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5740104588595303,
+          "token_accuracy": 0.4901541769504547
+        },
+        {
+          "step": 64750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5754405585202305,
+          "token_accuracy": 0.4896157736128027
+        },
+        {
+          "step": 65000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5690165974877097,
+          "token_accuracy": 0.4919698346744884
+        },
+        {
+          "step": 65250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5621661056171765,
+          "token_accuracy": 0.4936079409989444
+        },
+        {
+          "step": 65500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5785162015394731,
+          "token_accuracy": 0.487553826787255
+        },
+        {
+          "step": 65750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5918724103407427,
+          "token_accuracy": 0.48499357158487494
+        },
+        {
+          "step": 66000,
+          "series": "当前重启 E256",
+          "action_loss": 1.574458273974332,
+          "token_accuracy": 0.4911851503632285
+        },
+        {
+          "step": 66250,
+          "series": "当前重启 E256",
+          "action_loss": 1.561455867507241,
+          "token_accuracy": 0.49282325397838245
+        },
+        {
+          "step": 66500,
+          "series": "当前重启 E256",
+          "action_loss": 1.550146688114513,
+          "token_accuracy": 0.4953777844255621
+        },
+        {
+          "step": 66750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5483853816986084,
+          "token_accuracy": 0.4956183406439694
+        },
+        {
+          "step": 67000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5499672347849065,
+          "token_accuracy": 0.4953835064714605
+        },
+        {
+          "step": 67250,
+          "series": "当前重启 E256",
+          "action_loss": 1.54801682992415,
+          "token_accuracy": 0.4968326037580317
+        },
+        {
+          "step": 67500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5516706054860896,
+          "token_accuracy": 0.4972679073160345
+        },
+        {
+          "step": 67750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5532106702977961,
+          "token_accuracy": 0.4970731653950431
+        },
+        {
+          "step": 68000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5438297336751765,
+          "token_accuracy": 0.4982587857679887
+        },
+        {
+          "step": 68250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5372886766086926,
+          "token_accuracy": 0.5014891705729745
+        },
+        {
+          "step": 68500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5471696745265613,
+          "token_accuracy": 0.498711266300895
+        },
+        {
+          "step": 68750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5501645478335293,
+          "token_accuracy": 0.49789794195782056
+        },
+        {
+          "step": 69000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5559554967013272,
+          "token_accuracy": 0.4965633993799036
+        },
+        {
+          "step": 69250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5438478101383557,
+          "token_accuracy": 0.499226757071235
+        },
+        {
+          "step": 69500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5561179898001931,
+          "token_accuracy": 0.49481647393920203
+        },
+        {
+          "step": 69750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5560783798044378,
+          "token_accuracy": 0.49546942114830017
+        },
+        {
+          "step": 70000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5478103811090642,
+          "token_accuracy": 0.4973538165742701
+        },
+        {
+          "step": 70250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5405113263563677,
+          "token_accuracy": 0.4977604801004583
+        },
+        {
+          "step": 70500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5408444946462458,
+          "token_accuracy": 0.49824160066517914
+        },
+        {
+          "step": 70750,
+          "series": "当前重启 E256",
+          "action_loss": 1.551257068460638,
+          "token_accuracy": 0.4956297982822765
+        },
+        {
+          "step": 71000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5497699867595325,
+          "token_accuracy": 0.4962655712257732
+        },
+        {
+          "step": 71250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5465726418928667,
+          "token_accuracy": 0.49688415093855426
+        },
+        {
+          "step": 71500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5404481345956975,
+          "token_accuracy": 0.49880290031433105
+        },
+        {
+          "step": 71750,
+          "series": "当前重启 E256",
+          "action_loss": 1.530615589835427,
+          "token_accuracy": 0.5020218356089159
+        },
+        {
+          "step": 72000,
+          "series": "当前重启 E256",
+          "action_loss": 1.536232124675404,
+          "token_accuracy": 0.5001546225764535
+        },
+        {
+          "step": 72250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5427064570513638,
+          "token_accuracy": 0.49762873487039044
+        },
+        {
+          "step": 72500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5342040928927334,
+          "token_accuracy": 0.5003092776645314
+        },
+        {
+          "step": 72750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5469273220409046,
+          "token_accuracy": 0.49810413880781695
+        },
+        {
+          "step": 73000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5544344186782837,
+          "token_accuracy": 0.49479356137188996
+        },
+        {
+          "step": 73250,
+          "series": "当前重启 E256",
+          "action_loss": 1.545214598829096,
+          "token_accuracy": 0.4982072358781641
+        },
+        {
+          "step": 73500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5440804091366855,
+          "token_accuracy": 0.49928976459936664
+        },
+        {
+          "step": 73750,
+          "series": "当前重启 E256",
+          "action_loss": 1.531332167712125,
+          "token_accuracy": 0.5035282237963243
+        },
+        {
+          "step": 74000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5360644080422141,
+          "token_accuracy": 0.5030184631997888
+        },
+        {
+          "step": 74250,
+          "series": "当前重启 E256",
+          "action_loss": 1.531015482815829,
+          "token_accuracy": 0.5030929148197174
+        },
+        {
+          "step": 74500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5271868922493674,
+          "token_accuracy": 0.5029898096214641
+        },
+        {
+          "step": 74750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5507412607019597,
+          "token_accuracy": 0.4969242377714677
+        },
+        {
+          "step": 75000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5531587925824253,
+          "token_accuracy": 0.4961051913824948
+        },
+        {
+          "step": 75250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5415198802947998,
+          "token_accuracy": 0.5006930286234076
+        },
+        {
+          "step": 75500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5421600125052712,
+          "token_accuracy": 0.49954177845608105
+        },
+        {
+          "step": 75750,
+          "series": "当前重启 E256",
+          "action_loss": 1.542488932609558,
+          "token_accuracy": 0.49774330312555487
+        },
+        {
+          "step": 76000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5398710640993984,
+          "token_accuracy": 0.4987456337972121
+        },
+        {
+          "step": 76250,
+          "series": "当前重启 E256",
+          "action_loss": 1.538406177000566,
+          "token_accuracy": 0.4990262876857411
+        },
+        {
+          "step": 76500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5276410146193071,
+          "token_accuracy": 0.5046851933002472
+        },
+        {
+          "step": 76750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5247858654369006,
+          "token_accuracy": 0.505704714493318
+        },
+        {
+          "step": 77000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5297398458827625,
+          "token_accuracy": 0.5028752603314139
+        },
+        {
+          "step": 77250,
+          "series": "当前重启 E256",
+          "action_loss": 1.527036027474837,
+          "token_accuracy": 0.5046393735842272
+        },
+        {
+          "step": 77500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5331052975221113,
+          "token_accuracy": 0.5039692412723195
+        },
+        {
+          "step": 77750,
+          "series": "当前重启 E256",
+          "action_loss": 1.540116472677751,
+          "token_accuracy": 0.5005555613474413
+        },
+        {
+          "step": 78000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5363790663805874,
+          "token_accuracy": 0.5005784766240553
+        },
+        {
+          "step": 78250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5233062288977883,
+          "token_accuracy": 0.5035224909132178
+        },
+        {
+          "step": 78500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5231888619336216,
+          "token_accuracy": 0.5050918676636436
+        },
+        {
+          "step": 78750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5219194130464033,
+          "token_accuracy": 0.5072053616697138
+        },
+        {
+          "step": 79000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5259627320549705,
+          "token_accuracy": 0.5045649138363925
+        },
+        {
+          "step": 79250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5420056689869275,
+          "token_accuracy": 0.4997136078097604
+        },
+        {
+          "step": 79500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5305808565833352,
+          "token_accuracy": 0.5041296156969938
+        },
+        {
+          "step": 79750,
+          "series": "当前重启 E256",
+          "action_loss": 1.522065747867931,
+          "token_accuracy": 0.5064321187409487
+        },
+        {
+          "step": 80000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5115347450429744,
+          "token_accuracy": 0.5091470209035006
+        },
+        {
+          "step": 80250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5176705447110264,
+          "token_accuracy": 0.5080988678065214
+        },
+        {
+          "step": 80500,
+          "series": "当前重启 E256",
+          "action_loss": 1.513884338465604,
+          "token_accuracy": 0.5088262720541521
+        },
+        {
+          "step": 80750,
+          "series": "当前重启 E256",
+          "action_loss": 1.52172542702068,
+          "token_accuracy": 0.5040952427820726
+        },
+        {
+          "step": 81000,
+          "series": "当前重启 E256",
+          "action_loss": 1.515704794363542,
+          "token_accuracy": 0.5072397237474268
+        },
+        {
+          "step": 81250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5132436535575173,
+          "token_accuracy": 0.5089064728129994
+        },
+        {
+          "step": 81500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5137007995085283,
+          "token_accuracy": 0.507342820817774
+        },
+        {
+          "step": 81750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5172392888502642,
+          "token_accuracy": 0.5064722191203724
+        },
+        {
+          "step": 82000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5233534357764504,
+          "token_accuracy": 0.5061514675617218
+        },
+        {
+          "step": 82250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5136487809094517,
+          "token_accuracy": 0.5089179114861921
+        },
+        {
+          "step": 82500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5106994997371326,
+          "token_accuracy": 0.5084940682757985
+        },
+        {
+          "step": 82750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5097269144925205,
+          "token_accuracy": 0.5079614086584612
+        },
+        {
+          "step": 83000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5047968951138584,
+          "token_accuracy": 0.5090439373796637
+        },
+        {
+          "step": 83250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5115117918361316,
+          "token_accuracy": 0.5059166388078169
+        },
+        {
+          "step": 83500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5091862136667424,
+          "token_accuracy": 0.5075719248164784
+        },
+        {
+          "step": 83750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5072173205288975,
+          "token_accuracy": 0.509038204496557
+        },
+        {
+          "step": 84000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5241464376449585,
+          "token_accuracy": 0.5042155330831354
+        },
+        {
+          "step": 84250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5310417847199873,
+          "token_accuracy": 0.5030241798270833
+        },
+        {
+          "step": 84500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5229280320080845,
+          "token_accuracy": 0.5049486675045707
+        },
+        {
+          "step": 84750,
+          "series": "当前重启 E256",
+          "action_loss": 1.51743868264285,
+          "token_accuracy": 0.505647439848293
+        },
+        {
+          "step": 85000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5107310576872393,
+          "token_accuracy": 0.5091756609353152
+        },
+        {
+          "step": 85250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5055047273635864,
+          "token_accuracy": 0.5107278525829315
+        },
+        {
+          "step": 85500,
+          "series": "当前重启 E256",
+          "action_loss": 1.507426847111095,
+          "token_accuracy": 0.5097885186021979
+        },
+        {
+          "step": 85750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5156528407877141,
+          "token_accuracy": 0.507600570266897
+        },
+        {
+          "step": 86000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5127652558413418,
+          "token_accuracy": 0.5069189830259844
+        },
+        {
+          "step": 86250,
+          "series": "当前重启 E256",
+          "action_loss": 1.511560472575101,
+          "token_accuracy": 0.5072970011017539
+        },
+        {
+          "step": 86500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5080267732793635,
+          "token_accuracy": 0.5087117227641019
+        },
+        {
+          "step": 86750,
+          "series": "当前重启 E256",
+          "action_loss": 1.512372461232272,
+          "token_accuracy": 0.5078754885630175
+        },
+        {
+          "step": 87000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5092106515711003,
+          "token_accuracy": 0.5095078647136688
+        },
+        {
+          "step": 87250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5175847140225498,
+          "token_accuracy": 0.5069132420149717
+        },
+        {
+          "step": 87500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5149406303058972,
+          "token_accuracy": 0.5062259191816504
+        },
+        {
+          "step": 87750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5163172483444214,
+          "token_accuracy": 0.5058364380489696
+        },
+        {
+          "step": 88000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5163487195968628,
+          "token_accuracy": 0.5070678862658414
+        },
+        {
+          "step": 88250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5054703192277388,
+          "token_accuracy": 0.5115125341848894
+        },
+        {
+          "step": 88500,
+          "series": "当前重启 E256",
+          "action_loss": 1.497321291403337,
+          "token_accuracy": 0.5138952298597856
+        },
+        {
+          "step": 88750,
+          "series": "当前重启 E256",
+          "action_loss": 1.486295223236084,
+          "token_accuracy": 0.5172860026359558
+        },
+        {
+          "step": 89000,
+          "series": "当前重启 E256",
+          "action_loss": 1.490279663692821,
+          "token_accuracy": 0.5138265084136616
+        },
+        {
+          "step": 89250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5015419396487149,
+          "token_accuracy": 0.5110199614004656
+        },
+        {
+          "step": 89500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5073754462328823,
+          "token_accuracy": 0.5108195001428778
+        },
+        {
+          "step": 89750,
+          "series": "当前重启 E256",
+          "action_loss": 1.4987865686416626,
+          "token_accuracy": 0.5139124312184074
+        },
+        {
+          "step": 90000,
+          "series": "当前重启 E256",
+          "action_loss": 1.4916581457311457,
+          "token_accuracy": 0.5155276222662493
+        },
+        {
+          "step": 90250,
+          "series": "当前重启 E256",
+          "action_loss": 1.4885441173206677,
+          "token_accuracy": 0.5152068679982965
+        },
+        {
+          "step": 90500,
+          "series": "当前重启 E256",
+          "action_loss": 1.498465440490029,
+          "token_accuracy": 0.5127382549372587
+        },
+        {
+          "step": 90750,
+          "series": "当前重启 E256",
+          "action_loss": 1.51194044676694,
+          "token_accuracy": 0.5092787634242665
+        },
+        {
+          "step": 91000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5069957429712468,
+          "token_accuracy": 0.5118046457117255
+        },
+        {
+          "step": 91250,
+          "series": "当前重启 E256",
+          "action_loss": 1.4979655959389426,
+          "token_accuracy": 0.5139926021749323
+        },
+        {
+          "step": 91500,
+          "series": "当前重启 E256",
+          "action_loss": 1.4961589249697598,
+          "token_accuracy": 0.512675241990523
+        },
+        {
+          "step": 91750,
+          "series": "当前重启 E256",
+          "action_loss": 1.5062467943538318,
+          "token_accuracy": 0.5087059871716932
+        },
+        {
+          "step": 92000,
+          "series": "当前重启 E256",
+          "action_loss": 1.5013713511553677,
+          "token_accuracy": 0.5101894492452795
+        },
+        {
+          "step": 92250,
+          "series": "当前重启 E256",
+          "action_loss": 1.505720929665999,
+          "token_accuracy": 0.510756481777538
+        },
+        {
+          "step": 92500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5074119026010686,
+          "token_accuracy": 0.5118275501511313
+        },
+        {
+          "step": 92750,
+          "series": "当前重启 E256",
+          "action_loss": 1.496591026132757,
+          "token_accuracy": 0.5138551430268721
+        },
+        {
+          "step": 93000,
+          "series": "当前重启 E256",
+          "action_loss": 1.4926297447898171,
+          "token_accuracy": 0.5154073346744884
+        },
+        {
+          "step": 93250,
+          "series": "当前重启 E256",
+          "action_loss": 1.4953679279847578,
+          "token_accuracy": 0.513786413452842
+        },
+        {
+          "step": 93500,
+          "series": "当前重启 E256",
+          "action_loss": 1.48659301887859,
+          "token_accuracy": 0.5154531543905084
+        },
+        {
+          "step": 93750,
+          "series": "当前重启 E256",
+          "action_loss": 1.4896467924118042,
+          "token_accuracy": 0.5153844193978743
+        },
+        {
+          "step": 94000,
+          "series": "当前重启 E256",
+          "action_loss": 1.494176203554327,
+          "token_accuracy": 0.5142732533541593
+        },
+        {
+          "step": 94250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5039554834365845,
+          "token_accuracy": 0.512451870874925
+        },
+        {
+          "step": 94500,
+          "series": "当前重启 E256",
+          "action_loss": 1.4945094368674539,
+          "token_accuracy": 0.5146570151502435
+        },
+        {
+          "step": 94750,
+          "series": "当前重启 E256",
+          "action_loss": 1.4895372499119153,
+          "token_accuracy": 0.5149262141097676
+        },
+        {
+          "step": 95000,
+          "series": "当前重启 E256",
+          "action_loss": 1.496527823534879,
+          "token_accuracy": 0.5135859440673481
+        },
+        {
+          "step": 95250,
+          "series": "当前重启 E256",
+          "action_loss": 1.5002651539715854,
+          "token_accuracy": 0.5116557289253582
+        },
+        {
+          "step": 95500,
+          "series": "当前重启 E256",
+          "action_loss": 1.5052642605521462,
+          "token_accuracy": 0.5103555565530603
+        },
+        {
+          "step": 250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 5.325823402404785,
+          "token_accuracy": 0.03626511986367405
+        },
+        {
+          "step": 500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 4.593337988853454,
+          "token_accuracy": 0.06838457507546991
+        },
+        {
+          "step": 750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 3.572824629870328,
+          "token_accuracy": 0.15952047841115433
+        },
+        {
+          "step": 1000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.960396571592851,
+          "token_accuracy": 0.23919193988496606
+        },
+        {
+          "step": 1250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.619810039346868,
+          "token_accuracy": 0.26728027923540637
+        },
+        {
+          "step": 1500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.5143651962280273,
+          "token_accuracy": 0.27535625208507886
+        },
+        {
+          "step": 1750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.4416036389090796,
+          "token_accuracy": 0.2859924787824804
+        },
+        {
+          "step": 2000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.3887629725716333,
+          "token_accuracy": 0.29541444236581976
+        },
+        {
+          "step": 2250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.341910947452892,
+          "token_accuracy": 0.30357059836387634
+        },
+        {
+          "step": 2500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.2972782958637583,
+          "token_accuracy": 0.3110050748695027
+        },
+        {
+          "step": 2750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.2675989974628794,
+          "token_accuracy": 0.3158105638894168
+        },
+        {
+          "step": 3000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.216475660150701,
+          "token_accuracy": 0.3265899826179851
+        },
+        {
+          "step": 3250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.1923079057173296,
+          "token_accuracy": 0.3309945382855155
+        },
+        {
+          "step": 3500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.1684159365567295,
+          "token_accuracy": 0.3351470773870295
+        },
+        {
+          "step": 3750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.1247224374250933,
+          "token_accuracy": 0.344672140750018
+        },
+        {
+          "step": 4000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.1077063517137007,
+          "token_accuracy": 0.3508408042517575
+        },
+        {
+          "step": 4250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.094756668264216,
+          "token_accuracy": 0.3537389906969937
+        },
+        {
+          "step": 4500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.0696786533702505,
+          "token_accuracy": 0.358028997074474
+        },
+        {
+          "step": 4750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.056023532694036,
+          "token_accuracy": 0.36162595586343244
+        },
+        {
+          "step": 5000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.0465171987360176,
+          "token_accuracy": 0.36445541002533655
+        },
+        {
+          "step": 5250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 2.0118344480341133,
+          "token_accuracy": 0.3721877228129994
+        },
+        {
+          "step": 5500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9982793656262485,
+          "token_accuracy": 0.37600232525305316
+        },
+        {
+          "step": 5750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9869174307042903,
+          "token_accuracy": 0.3793358098376881
+        },
+        {
+          "step": 6000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9646009640260176,
+          "token_accuracy": 0.3845536871389909
+        },
+        {
+          "step": 6250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9630039063366977,
+          "token_accuracy": 0.3857450376857411
+        },
+        {
+          "step": 6500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9445091702721335,
+          "token_accuracy": 0.3915929577567361
+        },
+        {
+          "step": 6750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9140743125568738,
+          "token_accuracy": 0.3986665931614963
+        },
+        {
+          "step": 7000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.920246037569913,
+          "token_accuracy": 0.39508109472014685
+        },
+        {
+          "step": 7250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.9173447543924504,
+          "token_accuracy": 0.395722589709542
+        },
+        {
+          "step": 7500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8908544020219282,
+          "token_accuracy": 0.4025556580586867
+        },
+        {
+          "step": 7750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8867990537123247,
+          "token_accuracy": 0.4035179018974304
+        },
+        {
+          "step": 8000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8844468268481167,
+          "token_accuracy": 0.4040448475967754
+        },
+        {
+          "step": 8250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8710250421003862,
+          "token_accuracy": 0.40870142524892633
+        },
+        {
+          "step": 8500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8632067983800715,
+          "token_accuracy": 0.4107920121062886
+        },
+        {
+          "step": 8750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8575523116371848,
+          "token_accuracy": 0.41212082451040094
+        },
+        {
+          "step": 9000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8572129661386663,
+          "token_accuracy": 0.4100989672270688
+        },
+        {
+          "step": 9250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.858563173900951,
+          "token_accuracy": 0.40885606137188996
+        },
+        {
+          "step": 9500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8518036820671775,
+          "token_accuracy": 0.4113647666844455
+        },
+        {
+          "step": 9750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8411809531125156,
+          "token_accuracy": 0.41492163051258435
+        },
+        {
+          "step": 10000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8192781426689841,
+          "token_accuracy": 0.4225336638363925
+        },
+        {
+          "step": 10250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8232907381924717,
+          "token_accuracy": 0.4206836386160417
+        },
+        {
+          "step": 10500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8170867508107966,
+          "token_accuracy": 0.42200672084634955
+        },
+        {
+          "step": 10750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.817837812683799,
+          "token_accuracy": 0.42221291769634595
+        },
+        {
+          "step": 11000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8127835338765925,
+          "token_accuracy": 0.4240743978457017
+        },
+        {
+          "step": 11250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8086934848265215,
+          "token_accuracy": 0.4236963770606301
+        },
+        {
+          "step": 11500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.8020357218655674,
+          "token_accuracy": 0.4244123345071619
+        },
+        {
+          "step": 11750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.802971363067627,
+          "token_accuracy": 0.425288663669066
+        },
+        {
+          "step": 12000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7955636761405251,
+          "token_accuracy": 0.4284274090420116
+        },
+        {
+          "step": 12250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7919317375529895,
+          "token_accuracy": 0.4277744564143094
+        },
+        {
+          "step": 12500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7942499030720105,
+          "token_accuracy": 0.4279691956259988
+        },
+        {
+          "step": 12750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7847317457199097,
+          "token_accuracy": 0.430867384780537
+        },
+        {
+          "step": 13000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7879031896591187,
+          "token_accuracy": 0.430586730892008
+        },
+        {
+          "step": 13250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7864637483250012,
+          "token_accuracy": 0.4300998774441806
+        },
+        {
+          "step": 13500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7794581326571377,
+          "token_accuracy": 0.430890291929245
+        },
+        {
+          "step": 13750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.774676344611428,
+          "token_accuracy": 0.4324768456545743
+        },
+        {
+          "step": 14000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7691847085952759,
+          "token_accuracy": 0.43317561799829657
+        },
+        {
+          "step": 14250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7807357527992942,
+          "token_accuracy": 0.4310621212829243
+        },
+        {
+          "step": 14500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7716524059122258,
+          "token_accuracy": 0.4354609494859522
+        },
+        {
+          "step": 14750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7593011097474531,
+          "token_accuracy": 0.4389376233924519
+        },
+        {
+          "step": 15000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7668504498221658,
+          "token_accuracy": 0.43661792982708325
+        },
+        {
+          "step": 15250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7727040594274348,
+          "token_accuracy": 0.43441851843487134
+        },
+        {
+          "step": 15500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7666570273312656,
+          "token_accuracy": 0.4368413117798892
+        },
+        {
+          "step": 15750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7770320610566572,
+          "token_accuracy": 0.4339374005794525
+        },
+        {
+          "step": 16000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7654581720178777,
+          "token_accuracy": 0.436434650963003
+        },
+        {
+          "step": 16250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7641036076979204,
+          "token_accuracy": 0.436749666929245
+        },
+        {
+          "step": 16500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7628628557378596,
+          "token_accuracy": 0.43644610047340393
+        },
+        {
+          "step": 16750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7425534833561291,
+          "token_accuracy": 0.4429068782112815
+        },
+        {
+          "step": 17000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7379496097564697,
+          "token_accuracy": 0.44373738494786347
+        },
+        {
+          "step": 17250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7385039654645054,
+          "token_accuracy": 0.44395503401756287
+        },
+        {
+          "step": 17500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7423214262182063,
+          "token_accuracy": 0.4431245272809809
+        },
+        {
+          "step": 17750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7411162636496804,
+          "token_accuracy": 0.4435712857679887
+        },
+        {
+          "step": 18000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7452263723720203,
+          "token_accuracy": 0.4433994564143094
+        },
+        {
+          "step": 18250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.752398046580228,
+          "token_accuracy": 0.44203627651387994
+        },
+        {
+          "step": 18500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7458150495182385,
+          "token_accuracy": 0.4425861293619329
+        },
+        {
+          "step": 18750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7420927611264316,
+          "token_accuracy": 0.44270068407058716
+        },
+        {
+          "step": 19000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7534002499146895,
+          "token_accuracy": 0.44010033390738745
+        },
+        {
+          "step": 19250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7525203336368909,
+          "token_accuracy": 0.44118285991928796
+        },
+        {
+          "step": 19500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7358670993284746,
+          "token_accuracy": 0.4453239413824948
+        },
+        {
+          "step": 19750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7246580990878018,
+          "token_accuracy": 0.44842831925912335
+        },
+        {
+          "step": 20000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.72590772672133,
+          "token_accuracy": 0.44762644984505395
+        },
+        {
+          "step": 20250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7351853847503662,
+          "token_accuracy": 0.4452093920924447
+        },
+        {
+          "step": 20500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7346723513169722,
+          "token_accuracy": 0.44459080696105957
+        },
+        {
+          "step": 20750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7309759313409978,
+          "token_accuracy": 0.4460055340420116
+        },
+        {
+          "step": 21000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7251995260065252,
+          "token_accuracy": 0.44731716405261646
+        },
+        {
+          "step": 21250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7193100235678933,
+          "token_accuracy": 0.4479242915456945
+        },
+        {
+          "step": 21500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7122761444611982,
+          "token_accuracy": 0.4494936628775163
+        },
+        {
+          "step": 21750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7197370745918967,
+          "token_accuracy": 0.44979150186885486
+        },
+        {
+          "step": 22000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7217193408445879,
+          "token_accuracy": 0.4493161060593345
+        },
+        {
+          "step": 22250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7062985030087559,
+          "token_accuracy": 0.45298752188682556
+        },
+        {
+          "step": 22500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.702105771411549,
+          "token_accuracy": 0.4550895636731928
+        },
+        {
+          "step": 22750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7054937102577903,
+          "token_accuracy": 0.45401276783509686
+        },
+        {
+          "step": 23000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7025278589942239,
+          "token_accuracy": 0.4541273225437511
+        },
+        {
+          "step": 23250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7035618912089954,
+          "token_accuracy": 0.45389822125434875
+        },
+        {
+          "step": 23500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7084033597599377,
+          "token_accuracy": 0.45272405310110614
+        },
+        {
+          "step": 23750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6994748332283713,
+          "token_accuracy": 0.45545613494786347
+        },
+        {
+          "step": 24000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7026929638602517,
+          "token_accuracy": 0.45475736260414124
+        },
+        {
+          "step": 24250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.704427253116261,
+          "token_accuracy": 0.4538065736944025
+        },
+        {
+          "step": 24500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6951542875983499,
+          "token_accuracy": 0.45628663897514343
+        },
+        {
+          "step": 24750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.690274184400385,
+          "token_accuracy": 0.4585834199732
+        },
+        {
+          "step": 25000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6889057809656316,
+          "token_accuracy": 0.45775291323661804
+        },
+        {
+          "step": 25250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6997108892960981,
+          "token_accuracy": 0.4535831944508986
+        },
+        {
+          "step": 25500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7007649378343062,
+          "token_accuracy": 0.4527297751470046
+        },
+        {
+          "step": 25750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6976942907680164,
+          "token_accuracy": 0.4533655453811992
+        },
+        {
+          "step": 26000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.695872339335355,
+          "token_accuracy": 0.45614917982708325
+        },
+        {
+          "step": 26250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7010451771996238,
+          "token_accuracy": 0.45613772489807825
+        },
+        {
+          "step": 26500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7090916633605957,
+          "token_accuracy": 0.4540986825119365
+        },
+        {
+          "step": 26750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.7088312669233843,
+          "token_accuracy": 0.4523517516526309
+        },
+        {
+          "step": 27000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6983635967428035,
+          "token_accuracy": 0.45493491942232306
+        },
+        {
+          "step": 27250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.69195125319741,
+          "token_accuracy": 0.45759827169505035
+        },
+        {
+          "step": 27500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6868089437484741,
+          "token_accuracy": 0.4600668820467862
+        },
+        {
+          "step": 27750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6881883144378662,
+          "token_accuracy": 0.4584860557859594
+        },
+        {
+          "step": 28000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6931482770226218,
+          "token_accuracy": 0.45641265132210473
+        },
+        {
+          "step": 28250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6805932955308394,
+          "token_accuracy": 0.4594654847275127
+        },
+        {
+          "step": 28500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.673545783216303,
+          "token_accuracy": 0.4619741900400682
+        },
+        {
+          "step": 28750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6803721514615146,
+          "token_accuracy": 0.46051936799829657
+        },
+        {
+          "step": 29000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.680059400471774,
+          "token_accuracy": 0.4592134654521942
+        },
+        {
+          "step": 29250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6803450692783704,
+          "token_accuracy": 0.45911037109114905
+        },
+        {
+          "step": 29500,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6896574063734575,
+          "token_accuracy": 0.4570656039498069
+        },
+        {
+          "step": 29750,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.69087722084739,
+          "token_accuracy": 0.4582397693937475
+        },
+        {
+          "step": 30000,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.6793674230575562,
+          "token_accuracy": 0.4609661264853044
+        },
+        {
+          "step": 30250,
+          "series": "首次 E256（止于 30.2k）",
+          "action_loss": 1.688941392031583,
+          "token_accuracy": 0.4581080295822837
+        }
+      ],
+      "mse_trend": [
+        {
+          "step": 2000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 2.8656227835293473
+        },
+        {
+          "step": 4000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 2.019437736478345
+        },
+        {
+          "step": 6000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 2.499558545392135
+        },
+        {
+          "step": 8000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 1.240593349111491
+        },
+        {
+          "step": 10000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 1.2999712650118203
+        },
+        {
+          "step": 12000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 1.38728230677802
+        },
+        {
+          "step": 14000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.7544248525438638
+        },
+        {
+          "step": 16000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.949423695946562
+        },
+        {
+          "step": 18000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 1.0972202851854522
+        },
+        {
+          "step": 20000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 1.0105699043849419
+        },
+        {
+          "step": 22000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.9544179614247946
+        },
+        {
+          "step": 24000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.9252452130975394
+        },
+        {
+          "step": 26000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.9611211717128754
+        },
+        {
+          "step": 28000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.7508605847070957
+        },
+        {
+          "step": 30000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.6215982781401995
+        },
+        {
+          "step": 32000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.614109545432288
+        },
+        {
+          "step": 34000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.44403655518745555
+        },
+        {
+          "step": 36000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 1.0083389051001646
+        },
+        {
+          "step": 38000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.7522420893455374
+        },
+        {
+          "step": 40000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.9841644044580131
+        },
+        {
+          "step": 42000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.7011068920636999
+        },
+        {
+          "step": 44000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.5378282532609742
+        },
+        {
+          "step": 46000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.4435836112704771
+        },
+        {
+          "step": 48000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.44192518268165915
+        },
+        {
+          "step": 50000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.5680438901843695
+        },
+        {
+          "step": 52000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.806056733789115
+        },
+        {
+          "step": 54000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.1131585349553618
+        },
+        {
+          "step": 56000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.3259212164015605
+        },
+        {
+          "step": 58000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.44009449153110897
+        },
+        {
+          "step": 60000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.32118280771477464
+        },
+        {
+          "step": 62000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.3227149296937318
+        },
+        {
+          "step": 64000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.5326973081662737
+        },
+        {
+          "step": 66000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.31976295827791607
+        },
+        {
+          "step": 68000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.43783886036996184
+        },
+        {
+          "step": 70000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.5335910888067606
+        },
+        {
+          "step": 72000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.682578582702012
+        },
+        {
+          "step": 74000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.534838675681887
+        },
+        {
+          "step": 76000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.11106431163076698
+        },
+        {
+          "step": 78000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.10342032905539562
+        },
+        {
+          "step": 80000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.10428222795498783
+        },
+        {
+          "step": 82000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.32056328551522617
+        },
+        {
+          "step": 84000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.6123139555084294
+        },
+        {
+          "step": 86000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.10186382408799796
+        },
+        {
+          "step": 88000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.32123878341296624
+        },
+        {
+          "step": 90000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.10717944402633042
+        },
+        {
+          "step": 92000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.3214581259365739
+        },
+        {
+          "step": 94000,
+          "series": "当前重启 E256",
+          "mse_x1e3": 0.31781774656525974
+        },
+        {
+          "step": 2000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 2.50701811806909
+        },
+        {
+          "step": 4000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.586778667466394
+        },
+        {
+          "step": 6000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 2.297588206570724
+        },
+        {
+          "step": 8000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.3478301979344465
+        },
+        {
+          "step": 10000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.5594907875718742
+        },
+        {
+          "step": 12000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.2245630395823512
+        },
+        {
+          "step": 14000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.0118209596337944
+        },
+        {
+          "step": 16000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.0005008300830578
+        },
+        {
+          "step": 18000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 0.9662277097332066
+        },
+        {
+          "step": 20000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.1379884491706718
+        },
+        {
+          "step": 22000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 0.7565943845387163
+        },
+        {
+          "step": 24000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 0.7772604966985768
+        },
+        {
+          "step": 26000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 1.0027345912209873
+        },
+        {
+          "step": 28000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 0.5382398978389542
+        },
+        {
+          "step": 30000,
+          "series": "首次 E256（止于 30k）",
+          "mse_x1e3": 0.872299139355791
+        },
+        {
+          "step": 2000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 2.710438237108033
+        },
+        {
+          "step": 4000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.4347048669025817
+        },
+        {
+          "step": 6000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.3073337232244424
+        },
+        {
+          "step": 8000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.1058308441063454
+        },
+        {
+          "step": 10000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.5107764509217494
+        },
+        {
+          "step": 12000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.2751068791438793
+        },
+        {
+          "step": 14000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.5106307437707638
+        },
+        {
+          "step": 16000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.199099781184361
+        },
+        {
+          "step": 18000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.9814778920905344
+        },
+        {
+          "step": 20000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.2627353185209735
+        },
+        {
+          "step": 22000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.7960205448084865
+        },
+        {
+          "step": 24000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.2554825636847264
+        },
+        {
+          "step": 26000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 1.0123721099105374
+        },
+        {
+          "step": 28000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.5825576854163204
+        },
+        {
+          "step": 30000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.7578804446705457
+        },
+        {
+          "step": 32000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.8019223038492532
+        },
+        {
+          "step": 34000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.49475092312385294
+        },
+        {
+          "step": 36000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.8817389607429504
+        },
+        {
+          "step": 38000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.6313063846579913
+        },
+        {
+          "step": 40000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.7652664107495342
+        },
+        {
+          "step": 42000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.8958792635079088
+        },
+        {
+          "step": 44000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.4904865576275464
+        },
+        {
+          "step": 46000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.379617871909306
+        },
+        {
+          "step": 48000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.45701941667959606
+        },
+        {
+          "step": 50000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.3664844573057931
+        },
+        {
+          "step": 52000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.5486907501672876
+        },
+        {
+          "step": 54000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.15587973055140725
+        },
+        {
+          "step": 56000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.35115909473649387
+        },
+        {
+          "step": 58000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.35392785252168263
+        },
+        {
+          "step": 60000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.6563114323492708
+        },
+        {
+          "step": 62000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.33944324943526033
+        },
+        {
+          "step": 64000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.41454751044511795
+        },
+        {
+          "step": 66000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.2418560586098967
+        },
+        {
+          "step": 68000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.360238847547564
+        },
+        {
+          "step": 70000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.8930258838267162
+        },
+        {
+          "step": 72000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.5399007992497805
+        },
+        {
+          "step": 74000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.47051591862892284
+        },
+        {
+          "step": 76000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.3625321491011258
+        },
+        {
+          "step": 78000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.39829602786179247
+        },
+        {
+          "step": 80000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.3339530065141875
+        },
+        {
+          "step": 82000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.4602448757866333
+        },
+        {
+          "step": 84000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.4599914275880517
+        },
+        {
+          "step": 86000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.16685904421169181
+        },
+        {
+          "step": 88000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.17064628351865144
+        },
+        {
+          "step": 90000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.16908565985745397
+        },
+        {
+          "step": 92000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.2162986081735841
+        },
+        {
+          "step": 94000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.34469131637236167
+        },
+        {
+          "step": 96000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.15905035402754256
+        },
+        {
+          "step": 98000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.34961634283435755
+        },
+        {
+          "step": 100000,
+          "series": "40.33% 基线 E128",
+          "mse_x1e3": 0.32533120749325584
+        }
+      ],
+      "group_delta": [
+        {
+          "group": "g0",
+          "accuracy_slope_per_1k": 0.0011001270983901595,
+          "mean_accuracy": 0.5893215184188008,
+          "latest_accuracy": 0.5665322542190552
+        },
+        {
+          "group": "g1",
+          "accuracy_slope_per_1k": 0.0004300397520881298,
+          "mean_accuracy": 0.6576442166940489,
+          "latest_accuracy": 0.6401209235191345
+        },
+        {
+          "group": "g2",
+          "accuracy_slope_per_1k": 0.000283038427686346,
+          "mean_accuracy": 0.6425784191681971,
+          "latest_accuracy": 0.6300402879714966
+        },
+        {
+          "group": "g3",
+          "accuracy_slope_per_1k": 0.0006039743341017779,
+          "mean_accuracy": 0.4380065273882738,
+          "latest_accuracy": 0.4072580635547638
+        },
+        {
+          "group": "g4",
+          "accuracy_slope_per_1k": 0.0009329845123317794,
+          "mean_accuracy": 0.2929605918737193,
+          "latest_accuracy": 0.248991921544075
+        },
+        {
+          "group": "g5",
+          "accuracy_slope_per_1k": 0.0008927334618036408,
+          "mean_accuracy": 0.24773811626790174,
+          "latest_accuracy": 0.23185482621192932
+        },
+        {
+          "group": "g6",
+          "accuracy_slope_per_1k": 0.0016808920972752786,
+          "mean_accuracy": 0.31707891065682936,
+          "latest_accuracy": 0.2973790168762207
+        },
+        {
+          "group": "g7",
+          "accuracy_slope_per_1k": 0.00039747563566893096,
+          "mean_accuracy": 0.5855149499219449,
+          "latest_accuracy": 0.5826612710952759
+        },
+        {
+          "group": "g8",
+          "accuracy_slope_per_1k": 0.0007176375290448018,
+          "mean_accuracy": 0.7299490224069624,
+          "latest_accuracy": 0.7046370506286621
+        },
+        {
+          "group": "g9",
+          "accuracy_slope_per_1k": 0.000746328138047313,
+          "mean_accuracy": 0.6933928911958761,
+          "latest_accuracy": 0.6754031777381897
+        },
+        {
+          "group": "g10",
+          "accuracy_slope_per_1k": 0.00074874115110025,
+          "mean_accuracy": 0.4306240846861654,
+          "latest_accuracy": 0.4364919364452362
+        },
+        {
+          "group": "g11",
+          "accuracy_slope_per_1k": -0.00039255969612817226,
+          "mean_accuracy": 0.5621940535099352,
+          "latest_accuracy": 0.5524193644523621
+        },
+        {
+          "group": "g12",
+          "accuracy_slope_per_1k": 0.0007253835586883547,
+          "mean_accuracy": 0.3022989797503201,
+          "latest_accuracy": 0.28729838132858276
+        },
+        {
+          "group": "g13",
+          "accuracy_slope_per_1k": 0.0006868603439332461,
+          "mean_accuracy": 0.19793672133144455,
+          "latest_accuracy": 0.20161288976669312
+        },
+        {
+          "group": "g14",
+          "accuracy_slope_per_1k": 0.0002763352454703971,
+          "mean_accuracy": 0.7852722032746272,
+          "latest_accuracy": 0.7651209235191345
+        },
+        {
+          "group": "g15",
+          "accuracy_slope_per_1k": 0.0007782375916466505,
+          "mean_accuracy": 0.7147879351430865,
+          "latest_accuracy": 0.6864919066429138
+        }
+      ],
+      "comparison": [
+        {
+          "metric": "Action loss（共同后期 25250–30250）",
+          "current": "1.689070",
+          "first_e256": "1.691147",
+          "delta": "-0.002077 (-0.12%)",
+          "assessment": "统计等价"
+        },
+        {
+          "metric": "Token accuracy（共同后期 25250–30250）",
+          "current": "45.78%",
+          "first_e256": "45.72%",
+          "delta": "+0.058 pp",
+          "assessment": "统计等价"
+        },
+        {
+          "metric": "Base LR（共同后期 5k 均值）",
+          "current": "8.65979481e-05",
+          "first_e256": "8.65979481e-05",
+          "delta": "+0.00e+00",
+          "assessment": "逐点一致"
+        },
+        {
+          "metric": "Model time（秒，共同后期 5k 均值）",
+          "current": "0.8712",
+          "first_e256": "0.8799",
+          "delta": "-0.0087",
+          "assessment": "当前略快"
+        },
+        {
+          "metric": "Data time（秒，共同后期 5k 均值）",
+          "current": "0.0173",
+          "first_e256": "0.0166",
+          "delta": "+0.0007",
+          "assessment": "无持续卡顿"
+        },
+        {
+          "metric": "Validation MSE（共同 step 30000）",
+          "current": "0.00062160",
+          "first_e256": "0.00087230",
+          "delta": "-28.74%",
+          "assessment": "单点仅作补充"
+        }
+      ],
+      "token_accuracy_gap_by_scale": [
+        {
+          "scale": "s1",
+          "e256_accuracy": 0.606742,
+          "e128_accuracy": 0.837084,
+          "raw_gap": -0.230342,
+          "gap_contribution": -0.00743,
+          "gap_share": 0.055
+        },
+        {
+          "scale": "s2",
+          "e256_accuracy": 0.364894,
+          "e128_accuracy": 0.630043,
+          "raw_gap": -0.265149,
+          "gap_contribution": -0.01711,
+          "gap_share": 0.126
+        },
+        {
+          "scale": "s4",
+          "e256_accuracy": 0.397264,
+          "e128_accuracy": 0.639984,
+          "raw_gap": -0.24272,
+          "gap_contribution": -0.03132,
+          "gap_share": 0.231
+        },
+        {
+          "scale": "s8",
+          "e256_accuracy": 0.49184,
+          "e128_accuracy": 0.663794,
+          "raw_gap": -0.171954,
+          "gap_contribution": -0.04438,
+          "gap_share": 0.328
+        },
+        {
+          "scale": "s16",
+          "e256_accuracy": 0.562896,
+          "e128_accuracy": 0.630862,
+          "raw_gap": -0.067966,
+          "gap_contribution": -0.03508,
+          "gap_share": 0.259
+        }
+      ],
+      "tokenizer_comparison": [
+        {
+          "item": "Stage-2 数据与优化超参数",
+          "e128": "相同 RoboCasa 数据、GBS 512、100k steps",
+          "e256": "相同 RoboCasa 数据、GBS 512、100k steps",
+          "implication": "排除数据量与 Stage-2 训练配方差异"
+        },
+        {
+          "item": "token cache 形状",
+          "e128": "5,660,058 × 496",
+          "e256": "5,660,058 × 496",
+          "implication": "样本数和每样本 token 位置数相同"
+        },
+        {
+          "item": "VQ 拓扑",
+          "e128": "ProductVQ；512 codes；16 groups；scales 1/2/4/8/16",
+          "e256": "ProductVQ；512 codes；16 groups；scales 1/2/4/8/16",
+          "implication": "拓扑相同，但 code ID 的含义并不固定"
+        },
+        {
+          "item": "latent 维度",
+          "e128": "128（每 group 8 维）",
+          "e256": "256（每 group 16 维）",
+          "implication": "每组表征空间翻倍，分类难度与分区语义改变"
+        },
+        {
+          "item": "Stage-1 表征目标",
+          "e128": "标准重建；best_recon checkpoint",
+          "e256": "close/late/task-balanced + adaptive worst-task；best_worst_task_mae",
+          "implication": "tokenizer 被优化成不同的离散标签空间"
+        },
+        {
+          "item": "action-type embedding",
+          "e128": "关闭",
+          "e256": "开启",
+          "implication": "token 条件与分配方式进一步不同"
+        },
+        {
+          "item": "Stage-1 code 使用",
+          "e128": "511 / 512",
+          "e256": "512 / 512",
+          "implication": "两者都无明显 codebook collapse"
+        }
+      ]
+    },
+    "accessIssues": [
+      {
+        "id": "current_sim_eval_unavailable",
+        "dataset": "current_robocasa_sim_eval",
+        "message": "Current run has not yet reached a checkpoint with a comparable 24-task × 50-episode RoboCasa evaluation."
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "current_snapshot",
+      "label": "当前 E256 run 快照",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads the latest complete step and health counters from the active run.",
+        "sql": "SELECT * FROM read_csv_auto('summary.csv')",
+        "executed_at": "2026-08-10T03:03:31Z",
+        "tables_used": [
+          "summary.csv"
+        ],
+        "filters": [
+          "Only complete logged optimizer steps are included."
+        ],
+        "metric_definitions": [
+          "latest_step is the largest complete optimizer step in output.log.",
+          "samples_per_second is the last 2,000 optimizer steps times GBS 512 divided by elapsed wall time.",
+          "critical_events counts Traceback, CUDA OOM, NCCL error/timeout, NaN, or Inf markers."
+        ]
+      }
+    },
+    {
+      "id": "same_e256_metrics",
+      "label": "当前重启与首次 E256 同-step 对齐",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/urhbwkbq",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads 500-step rolling means for two runs with identical E256 Stage-2 configuration.",
+        "sql": "SELECT * FROM read_csv_auto('training_trend.csv')",
+        "executed_at": "2026-08-10T03:03:31Z",
+        "tables_used": [
+          "training_trend.csv"
+        ],
+        "filters": [
+          "Current E256 complete steps 50–95500",
+          "First E256 complete steps 50–30250",
+          "500-step rolling means; strict common-step comparisons"
+        ],
+        "metric_definitions": [
+          "Each curve point is the arithmetic mean of complete 50-step logs in [step-500, step].",
+          "Recent comparison window uses the exact common discrete steps in [latest_step-1000, latest_step]."
+        ]
+      }
+    },
+    {
+      "id": "validation_mse",
+      "label": "Stage-2 validation MSE 对照",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/gmof9itw",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads validation MSE for the current E256 restart, first E256 run, and E128 baseline.",
+        "sql": "SELECT * FROM read_csv_auto('mse_trend.csv')",
+        "executed_at": "2026-08-10T03:03:31Z",
+        "tables_used": [
+          "mse_trend.csv"
+        ],
+        "filters": [
+          "Only complete logged optimizer steps are included."
+        ],
+        "metric_definitions": [
+          "MSE is measured in the shared continuous action space; lower is better.",
+          "mse_x1e3 equals raw mse_score multiplied by 1,000 for chart readability."
+        ]
+      }
+    },
+    {
+      "id": "group_deltas",
+      "label": "E256 codebook group 末段趋势",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads last-10k accuracy slopes and levels for 16 codebook groups.",
+        "sql": "SELECT * FROM read_csv_auto('group_delta.csv')",
+        "executed_at": "2026-08-10T03:03:31Z",
+        "tables_used": [
+          "group_delta.csv"
+        ],
+        "filters": [
+          "Only complete logged optimizer steps are included."
+        ],
+        "metric_definitions": [
+          "accuracy_slope_per_1k is the OLS slope over the final 10,000 optimizer steps, scaled to one thousand steps.",
+          "mean_accuracy is the arithmetic mean over the same window."
+        ]
+      }
+    },
+    {
+      "id": "comparison_detail",
+      "label": "E256 健康性审计明细",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads the exact reviewed comparison values used in the report conclusion.",
+        "sql": "SELECT * FROM read_csv_auto('comparison.csv')",
+        "executed_at": "2026-08-10T03:03:31Z",
+        "tables_used": [
+          "comparison.csv"
+        ],
+        "filters": [
+          "Only complete logged optimizer steps are included."
+        ],
+        "metric_definitions": [
+          "Deltas compare current restart with first E256 at exact common steps 25250–30250."
+        ]
+      }
+    },
+    {
+      "id": "token_gap_diagnosis",
+      "label": "E256 与 40.33% E128 的同-step token 指标分解",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/gmof9itw",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads exact common-step late-window token accuracy decomposed by multiscale token position weights.",
+        "sql": "SELECT * FROM read_csv_auto('token_accuracy_gap_by_scale.csv')",
+        "executed_at": "2026-08-10T07:31:08Z",
+        "tables_used": [
+          "token_accuracy_gap_by_scale.csv"
+        ],
+        "filters": [
+          "Exact common logged steps 85,750–95,750 (201 points)",
+          "E256 run 8c7uho0r versus E128 run gmof9itw"
+        ],
+        "metric_definitions": [
+          "raw_gap is E256 accuracy minus E128 accuracy within each scale.",
+          "gap_contribution is raw_gap multiplied by the scale token-position weight 1/31, 2/31, 4/31, 8/31, or 16/31.",
+          "The five contributions sum to the overall −13.531 percentage-point gap."
+        ]
+      }
+    },
+    {
+      "id": "tokenizer_config_evidence",
+      "label": "Stage-1 tokenizer 配置与 cache 审计",
+      "href": "https://wandb.ai/smap/starVLA_RoboCasa/runs/8c7uho0r",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "description": "Loads audited Stage-1 tokenizer and Stage-2 cache configuration differences.",
+        "sql": "SELECT * FROM read_csv_auto('tokenizer_comparison.csv')",
+        "executed_at": "2026-08-10T07:31:08Z",
+        "tables_used": [
+          "tokenizer_comparison.csv"
+        ],
+        "filters": [
+          "Only fields that materially affect token-label comparability are included."
+        ],
+        "metric_definitions": [
+          "Cache shape is samples by token positions; 496 equals 16 groups times (1+2+4+8+16) scale positions.",
+          "Dimensions per group equal tokenizer embed_dim divided by 16 product-quantization groups."
+        ]
+      }
+    }
+  ],
+  "package_info": {
+    "originUrl": "artifact://robocasa-stage2-health-20260808",
+    "controls": {
+      "edit": false,
+      "refresh": false
+    },
+    "generatedAt": "2026-08-10T07:31:08Z"
+  }
+}

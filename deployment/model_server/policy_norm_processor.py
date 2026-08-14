@@ -367,7 +367,9 @@ class PolicyNormProcessor:
         Returns:
             ``(T, D)`` un-normalized actions in env coordinates.
         """
-        normalized_actions = np.asarray(normalized_actions)
+        # Match the legacy FrameworkTools.unnormalize_actions path: model
+        # logits/actions are normalized to [-1, 1] before inverse q99 scaling.
+        normalized_actions = np.clip(np.asarray(normalized_actions, dtype=np.float32), -1.0, 1.0)
         assert normalized_actions.ndim == 2, (
             f"Expected (T, D); got shape {normalized_actions.shape}"
         )
@@ -393,6 +395,47 @@ class PolicyNormProcessor:
 
         parts: List[np.ndarray] = []
         for full_key in self._action_keys:
+            v = out[full_key]
+            if isinstance(v, torch.Tensor):
+                v = v.detach().cpu().numpy()
+            parts.append(np.asarray(v))
+        return np.concatenate(parts, axis=-1)
+
+    # ------------------------------------------------------------------
+    # Forward path (env state -> model state)
+    # ------------------------------------------------------------------
+    def apply_state(self, raw_state: np.ndarray) -> np.ndarray:
+        """Normalize proprio state using the training-time pipeline.
+
+        Args:
+            raw_state: shape ``(T, D)`` where
+                ``D == sum(state_key_dims.values())``.
+
+        Returns:
+            ``(T, D)`` normalized state in the same convention used by training.
+        """
+        raw_state = np.asarray(raw_state)
+        assert raw_state.ndim == 2, f"Expected (T, D); got shape {raw_state.shape}"
+        if not self._state_keys:
+            return raw_state.astype(np.float32, copy=False)
+
+        data: Dict[str, np.ndarray] = {}
+        cursor = 0
+        for full_key in self._state_keys:
+            dim_k = self._state_key_dims.get(full_key, 1)
+            slice_ = raw_state[..., cursor : cursor + dim_k]
+            data[full_key] = np.asarray(slice_, dtype=np.float32).copy()
+            cursor += dim_k
+
+        if cursor != raw_state.shape[-1]:
+            raise ValueError(
+                f"Sum of per-key dims ({cursor}) != state_dim ({raw_state.shape[-1]}). "
+                f"state_keys={self._state_keys}, state_key_dims={self._state_key_dims}"
+            )
+
+        out = self._transform.apply(data)
+        parts: List[np.ndarray] = []
+        for full_key in self._state_keys:
             v = out[full_key]
             if isinstance(v, torch.Tensor):
                 v = v.detach().cpu().numpy()

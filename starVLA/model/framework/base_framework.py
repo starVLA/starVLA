@@ -24,6 +24,29 @@ logger = initialize_overwatch(__name__)
 _FRAMEWORKS_IMPORTED = False
 
 
+def _resize_qwen_embeddings_to_checkpoint(model, checkpoint_state: Dict[str, torch.Tensor]) -> None:
+    """Match Qwen token embeddings to checkpoints saved with added action tokens."""
+    embed_key = "qwen_vl_interface.model.model.language_model.embed_tokens.weight"
+    if embed_key not in checkpoint_state:
+        return
+    if not hasattr(model, "qwen_vl_interface") or not hasattr(model.qwen_vl_interface, "model"):
+        return
+    qwen_model = model.qwen_vl_interface.model
+    input_embeddings = qwen_model.get_input_embeddings()
+    if input_embeddings is None:
+        return
+    current_vocab = int(input_embeddings.weight.shape[0])
+    target_vocab = int(checkpoint_state[embed_key].shape[0])
+    if current_vocab == target_vocab:
+        return
+    logger.info(
+        "[*] Resizing Qwen token embeddings before checkpoint load: %s -> %s",
+        current_vocab,
+        target_vocab,
+    )
+    qwen_model.resize_token_embeddings(target_vocab)
+
+
 def merge_config_overrides(model_config: dict, config_overrides: Sequence[str] | None = None) -> dict:
     """Merge optional OmegaConf dotlist overrides into a checkpoint config.
 
@@ -299,6 +322,7 @@ class baseframework(PreTrainedModel):
             model_state_dict = load_file(str(pretrained_checkpoint))
         else:
             model_state_dict = torch.load(pretrained_checkpoint, map_location="cpu")
+        _resize_qwen_embeddings_to_checkpoint(FrameworkModel, model_state_dict)
         # logger.info(f"Loading model weights from `{pretrained_checkpoint}`")
         model_keys = set(FrameworkModel.state_dict().keys())
         checkpoint_keys = set(model_state_dict.keys())

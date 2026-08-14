@@ -34,7 +34,7 @@ For training, the Calvin dataset must be converted into **LeRobot format**.
 
 1. Convert the original Calvin dataset to LeRobot format.
    Please refer to **RoboTron-Mani (ICCV 2025)** for detailed instructions:
-   👉 [https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/calvin](https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/simBenchmarks/calvin)
+   👉 [https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/simBenchmarks/calvin](https://github.com/EmbodiedAI-RoboTron/RoboTron-Mani/tree/lerobot/examples/simBenchmarks/calvin)
 
 2. Copy the modality definition file:
 
