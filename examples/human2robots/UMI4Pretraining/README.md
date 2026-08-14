@@ -1,4 +1,6 @@
-# UMI datasets for StarVLA
+# UMI4Pretraining: human demonstrations for StarVLA
+
+中文的完整变更说明、设计边界和验证记录见 `CHANGES_ZH.md`。
 
 This integration uses StarVLA's external `data_registry` discovery. It does not
 modify the core `mixtures.py`, `data_config.py`, or `embodiment_tags.py` files.
@@ -49,8 +51,8 @@ existing `hf auth login` session. Tokens are never saved in this repository.
 Inspect the plan, then download and verify all currently available sources:
 
 ```bash
-python3 examples/realRobots/UMI/tools/umi_pipeline.py doctor
-bash examples/realRobots/UMI/tools/download_umi.sh
+python3 examples/human2robots/UMI4Pretraining/tools/umi_pipeline.py doctor
+bash examples/human2robots/UMI4Pretraining/tools/download_umi.sh
 ```
 
 This resolves 30 physical sources into 27 independent UMI families. UMI-3D
@@ -67,14 +69,14 @@ Useful targeted commands:
 
 ```bash
 # Show every destination without transferring data.
-bash examples/realRobots/UMI/tools/download_umi.sh --dry-run
+bash examples/human2robots/UMI4Pretraining/tools/download_umi.sh --dry-run
 
 # Download one family (repeat --families or use a comma-separated list).
-python3 examples/realRobots/UMI/tools/umi_pipeline.py download \
+python3 examples/human2robots/UMI4Pretraining/tools/umi_pipeline.py download \
   --families VISTA-UMI-5K,UMI-3D
 
 # Offline size/file check, optionally testing every ZIP member.
-python3 examples/realRobots/UMI/tools/umi_pipeline.py verify --deep
+python3 examples/human2robots/UMI4Pretraining/tools/umi_pipeline.py verify --deep
 ```
 
 The lock files deliberately select complete archives or complete LeRobot
@@ -95,9 +97,9 @@ Example:
 
 ```bash
 STARVLA_DISABLE_DEEPSPEED=1 accelerate launch \
-  --config_file examples/realRobots/UMI/train_files/accelerate_single_gpu.yaml \
+  --config_file examples/human2robots/UMI4Pretraining/train_files/accelerate_single_gpu.yaml \
   starVLA/training/train_starvla.py \
-  --config_yaml examples/realRobots/UMI/train_files/starvla_dexwild_smoke.yaml
+  --config_yaml examples/human2robots/UMI4Pretraining/train_files/starvla_dexwild_smoke.yaml
 ```
 
 ## Optional UMI-specific dataloader
