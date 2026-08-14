@@ -47,9 +47,22 @@ from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
 
-deepspeed_plugin = DeepSpeedPlugin()
+deepspeed_plugin = None if os.environ.get("STARVLA_DISABLE_DEEPSPEED") == "1" else DeepSpeedPlugin()
 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
 accelerator.print(accelerator.state)
+
+
+def _unwrap_model(accelerator, model):
+    """Avoid importing a broken optional DeepSpeed install in single-GPU mode."""
+    if os.environ.get("STARVLA_DISABLE_DEEPSPEED") == "1":
+        return model.module if hasattr(model, "module") else model
+    return accelerator.unwrap_model(model)
+
+
+def _get_state_dict(accelerator, model):
+    if os.environ.get("STARVLA_DISABLE_DEEPSPEED") == "1":
+        return _unwrap_model(accelerator, model).state_dict()
+    return accelerator.get_state_dict(model)
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -266,7 +279,7 @@ class VLATrainer(TrainerUtils):
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
 
-            state_dict = self.accelerator.get_state_dict(self.model)
+            state_dict = _get_state_dict(self.accelerator, self.model)
             if save_format == "safetensors":
                 from safetensors.torch import save_file
 
@@ -374,7 +387,7 @@ class VLATrainer(TrainerUtils):
         """Run simple action-eval on current batch and attach score to metrics."""
         examples = self._get_next_batch()
         actions = [example["action"] for example in examples]
-        output_dict = self.accelerator.unwrap_model(self.model).predict_action(
+        output_dict = _unwrap_model(self.accelerator, self.model).predict_action(
             examples=examples, use_ddim=True, num_ddim_steps=20
         )
 
@@ -433,7 +446,7 @@ class VLATrainer(TrainerUtils):
             save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)
-            state_dict = self.accelerator.get_state_dict(self.model)
+            state_dict = _get_state_dict(self.accelerator, self.model)
             if save_format == "safetensors":
                 from safetensors.torch import save_file
 

@@ -1,0 +1,45 @@
+{
+  "VISTA-UMI-5K": {
+    "repo": "TeleEmbodied/VISTA-UMI-5K",
+    "files": [
+      ".gitattributes",
+      "README.md",
+      "task_001_press_the_power_button_of_the_power_strip/**",
+      "task_002_transfer_the_calculator_and_then_place_it_on_the_table_to_align/**",
+      "task_003_the_plug_is_inserted_into_the_power_strip/**"
+    ],
+    "case_basis": "three complete LeRobot v3 tasks (498 episodes); converter deterministically keeps the first 400",
+    "target_cases": 400
+  },
+  "MV-UMI": {
+    "repo": "omarrayyann/mv-umi",
+    "files": [
+      ".gitattributes",
+      "README.md",
+      "markers_placement_data.zarr.zip"
+    ],
+    "case_basis": "complete markers-placement archive; converter deterministically keeps the first 400",
+    "target_cases": 400
+  },
+  "UMI-3D-cup": {
+    "repo": "ZIMBOT/umi-3d-dataset-cup",
+    "files": [".gitattributes", "README.md", "dataset_cup_umi_3d.zarr.zip"],
+    "family": "UMI-3D",
+    "case_basis": "combined with the other UMI-3D task archives",
+    "target_cases": 400
+  },
+  "UMI-3D-curtain": {
+    "repo": "ZIMBOT/umi-3d-dataset-curtain",
+    "files": [".gitattributes", "README.md", "dataset_curtain_umi_3d.zarr.zip"],
+    "family": "UMI-3D",
+    "case_basis": "combined with the other UMI-3D task archives",
+    "target_cases": 400
+  },
+  "UMI-3D-door-cup": {
+    "repo": "ZIMBOT/umi-3d-dataset-door-cup",
+    "files": [".gitattributes", "README.md", "dataset_door_cup.zarr.zip"],
+    "family": "UMI-3D",
+    "case_basis": "combined with the other UMI-3D task archives; converter keeps 400 total",
+    "target_cases": 400
+  }
+}

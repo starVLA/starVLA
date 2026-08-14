@@ -1,0 +1,212 @@
+{
+  "Data-Scaling-Laws": {
+    "repo": "Fanqi-Lin/Processed-Task-Dataset",
+    "bytes": 110442322059,
+    "existing_bytes": 21895557299,
+    "incremental_bytes": 88546764760,
+    "selected_files": 13,
+    "sized_files": 13,
+    "target_cases": 400,
+    "ok": true
+  },
+  "FastUMI-Data": {
+    "repo": "IPEC-COMMUNITY/FastUMI-Data",
+    "bytes": 39086710386,
+    "existing_bytes": 3437761381,
+    "incremental_bytes": 35648949005,
+    "selected_files": 4,
+    "sized_files": 4,
+    "target_cases": 400,
+    "ok": true
+  },
+  "FastUMI-100K": {
+    "repo": "IPEC-COMMUNITY/FastUMI_100k_lerobot",
+    "bytes": 10698720440,
+    "existing_bytes": 2705940430,
+    "incremental_bytes": 7992780010,
+    "selected_files": 1206,
+    "sized_files": 1206,
+    "target_cases": 400,
+    "ok": true
+  },
+  "GenRobot": {
+    "repo": "genrobot2025/10Kh-RealOmin-OpenData",
+    "bytes": 20984323710,
+    "existing_bytes": 5193029188,
+    "incremental_bytes": 15791294522,
+    "selected_files": 402,
+    "sized_files": 402,
+    "target_cases": 400,
+    "ok": true
+  },
+  "HiFi-UMI-2K": {
+    "repo": "simple-world-lab/HiFi-UMI-2K",
+    "bytes": 40549601844,
+    "existing_bytes": 40549603573,
+    "incremental_bytes": 0,
+    "selected_files": 15,
+    "sized_files": 15,
+    "target_cases": 400,
+    "ok": true
+  },
+  "TAMEn": {
+    "repo": "OpenDriveLab-org/TAMEn",
+    "bytes": 1442953724,
+    "existing_bytes": 373032330,
+    "incremental_bytes": 1069921394,
+    "selected_files": 2002,
+    "sized_files": 2002,
+    "target_cases": 400,
+    "ok": true
+  },
+  "exUMI": {
+    "repo": "silicx/exUMI",
+    "bytes": 24028125602,
+    "existing_bytes": 14884236869,
+    "incremental_bytes": 9143888733,
+    "selected_files": 5,
+    "sized_files": 5,
+    "target_cases": 400,
+    "ok": true
+  },
+  "ViTaMIn": {
+    "repo": "chuanyune/ViTaMIn_dataset",
+    "bytes": 26162914396,
+    "existing_bytes": 1910502563,
+    "incremental_bytes": 24252411833,
+    "selected_files": 8,
+    "sized_files": 8,
+    "target_cases": 400,
+    "ok": true
+  },
+  "ViTaMIn-B": {
+    "repo": "chuanyune/ViTaMIn-B_data_and_ckpt",
+    "bytes": 26984092434,
+    "existing_bytes": 8565729553,
+    "incremental_bytes": 18418362881,
+    "selected_files": 5,
+    "sized_files": 5,
+    "target_cases": 400,
+    "ok": true
+  },
+  "DexWild": {
+    "repo": "boardd/dexwild-dataset",
+    "bytes": 174525649711,
+    "existing_bytes": 101738542824,
+    "incremental_bytes": 72787106887,
+    "selected_files": 12,
+    "sized_files": 12,
+    "target_cases": 400,
+    "ok": true
+  },
+  "TacThru-UMI": {
+    "repo": "aidenli/tacthru_umi_tasks",
+    "bytes": 25252151143,
+    "existing_bytes": 2531971326,
+    "incremental_bytes": 22720179817,
+    "selected_files": 6,
+    "sized_files": 6,
+    "target_cases": 400,
+    "ok": true
+  },
+  "ToucHD-Mani": {
+    "repo": "BAAI/ToucHD-Mani",
+    "bytes": 14776055639,
+    "existing_bytes": 6808217359,
+    "incremental_bytes": 7967838280,
+    "selected_files": 7,
+    "sized_files": 7,
+    "target_cases": 400,
+    "ok": true
+  },
+  "LivUMI-Grip": {
+    "repo": "livsynrobotics/LivUMI-Grip-Sample",
+    "bytes": 109396175,
+    "existing_bytes": 109499783,
+    "incremental_bytes": 0,
+    "selected_files": 832,
+    "sized_files": 832,
+    "target_cases": 400,
+    "ok": true
+  },
+  "LivUMI-Ego": {
+    "repo": "livsynrobotics/LivUMI-Ego-Both-Sample",
+    "bytes": 2265699805,
+    "existing_bytes": 2265780111,
+    "incremental_bytes": 0,
+    "selected_files": 653,
+    "sized_files": 653,
+    "target_cases": 400,
+    "ok": true
+  },
+  "SenseXperience-UMI": {
+    "repo": "ICRA-WBCD/IO-AI-SenseXperience-UMI",
+    "bytes": 26333799276,
+    "existing_bytes": 26333816393,
+    "incremental_bytes": 0,
+    "selected_files": 138,
+    "sized_files": 138,
+    "target_cases": 400,
+    "ok": true
+  },
+  "UMI-VQA-8M": {
+    "repo": "TeleEmbodied/UMI-VQA-8M",
+    "bytes": 297422930,
+    "existing_bytes": 297423381,
+    "incremental_bytes": 0,
+    "selected_files": 4,
+    "sized_files": 4,
+    "target_cases": 400,
+    "ok": true
+  },
+  "LEAP": {
+    "repo": "XiaomiRoboticsLab/LEAP",
+    "bytes": 17008665618,
+    "existing_bytes": 17008665943,
+    "incremental_bytes": 0,
+    "selected_files": 3,
+    "sized_files": 3,
+    "target_cases": 400,
+    "ok": true
+  },
+  "OpenEAI-UMI": {
+    "repo": "OpenEAI/OpenEAI-Dataset",
+    "bytes": 213216898649,
+    "existing_bytes": 65532568684,
+    "incremental_bytes": 147684329965,
+    "selected_files": 278,
+    "sized_files": 278,
+    "target_cases": 275,
+    "ok": true
+  },
+  "Touch-in-the-Wild": {
+    "repo": "binghaohuang-robot/touch_in_the_wild-dataset",
+    "bytes": 7537541206,
+    "existing_bytes": 7537541533,
+    "incremental_bytes": 0,
+    "selected_files": 3,
+    "sized_files": 3,
+    "target_cases": 400,
+    "ok": true
+  },
+  "UMI-Benchmark-v1": {
+    "repo": "UMIbenchmark/UMI-Benchmark-v1",
+    "bytes": 33713061393,
+    "existing_bytes": 16803127191,
+    "incremental_bytes": 16909934202,
+    "selected_files": 330,
+    "sized_files": 330,
+    "target_cases": 400,
+    "ok": true
+  },
+  "NONHUMAN-DexUMI-Sample": {
+    "repo": "NONHUMAN-RESEARCH/dexumi-dataset",
+    "bytes": 6513573,
+    "existing_bytes": 6514626,
+    "incremental_bytes": 0,
+    "selected_files": 9,
+    "sized_files": 9,
+    "target_cases": 400,
+    "ok": true
+  }
+}

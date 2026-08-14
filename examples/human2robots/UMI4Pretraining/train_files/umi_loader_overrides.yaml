@@ -1,0 +1,19 @@
+# Merge these fields into a normal StarVLA training config to enable the UMI
+# safety adapter. This is an override fragment, not a standalone training YAML.
+datasets:
+  vla_data:
+    dataset_py: umi_datasets
+
+    # action_horizon/action_dim/state_dim are inferred from
+    # framework.action_model. If repeated here, values must match exactly.
+    strict_dimensions: true
+
+    max_views: 2
+    max_abs_action: 20.0
+    reject_static_actions: false
+    retry_bad_samples: 20
+
+    num_workers: 4
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
