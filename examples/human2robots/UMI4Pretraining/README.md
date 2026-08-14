@@ -1,6 +1,7 @@
 # UMI4Pretraining: human demonstrations for StarVLA
 
-中文的完整变更说明、设计边界和验证记录见 `CHANGES_ZH.md`。
+See `CHANGES.md` for the complete change guide, design boundaries, validation
+record, and known limitations.
 
 This integration uses StarVLA's external `data_registry` discovery. It does not
 modify the core `mixtures.py`, `data_config.py`, or `embodiment_tags.py` files.
