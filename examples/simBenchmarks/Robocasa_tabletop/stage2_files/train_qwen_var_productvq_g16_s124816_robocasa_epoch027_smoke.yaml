@@ -13,7 +13,7 @@ framework:
     attn_implementation: flash_attention_2
   stage1_tokenizer:
     artifact: playground/Checkpoints/var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun/epoch_027.ckpt
-    stage1_config: examples/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun.yaml
+    stage1_config: examples/simBenchmarks/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun.yaml
     freeze: true
     token_cache: playground/Checkpoints/var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun/stage2_token_cache_epoch027.pt
   action_token_text:
@@ -31,7 +31,8 @@ framework:
 datasets:
   vla_data:
     dataset_py: var_stage2_token_dataset
-    data_mix: fourier_gr1_unified_local_1000
+    data_root_dir: /root/tianyi/LDA-1B/playground/Datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
+    data_mix: fourier_gr1_unified_1000
     per_device_batch_size: 2
     num_workers: 2
     shuffle: true

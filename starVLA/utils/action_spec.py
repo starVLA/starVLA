@@ -26,7 +26,13 @@ def _default_dim_groups(action_keys: Sequence[str]) -> dict[str, list[int]]:
     groups: dict[str, list[int]] = {"position": [], "rotation": [], "gripper": []}
     for dim_idx, key in enumerate(action_keys):
         short = _strip_prefix(str(key), "action.").lower()
-        if short in {"x", "y", "z"} or "position" in short or "pos" in short:
+        axis_suffix = short.rsplit("_", 1)[-1] if "_" in short else short
+        if (
+            short in {"x", "y", "z"}
+            or axis_suffix in {"x", "y", "z"}
+            or "position" in short
+            or "pos" in short
+        ):
             groups["position"].append(dim_idx)
         elif short in {"roll", "pitch", "yaw", "rx", "ry", "rz"} or "rot" in short:
             groups["rotation"].append(dim_idx)

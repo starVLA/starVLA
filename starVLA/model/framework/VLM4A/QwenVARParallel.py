@@ -33,7 +33,7 @@ class QwenVARParallelDefaultConfig:
     stage1_tokenizer: dict = field(
         default_factory=lambda: {
             "artifact": "playground/Checkpoints/var_stage1_pi05_libero/best_recon.ckpt",
-            "stage1_config": "examples/LIBERO/train_files/train_var_stage1_pi05_libero.yaml",
+            "stage1_config": "examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero.yaml",
             "freeze": True,
             "token_cache": None,
         }
@@ -93,18 +93,23 @@ class ActionCodeQueryBlock(nn.Module):
         *,
         key_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        norm_queries = self.query_norm(queries)
-        norm_context = self.context_norm(context)
-        attn_out, _ = self.cross_attn(
-            norm_queries,
-            norm_context,
-            norm_context,
-            key_padding_mask=key_padding_mask,
-            need_weights=False,
-        )
-        queries = queries + self.dropout(attn_out)
-        queries = queries + self.dropout(self.ffn(self.ffn_norm(queries)))
-        return queries
+        original_dtype = queries.dtype
+        module_dtype = self.query_norm.weight.dtype
+        with torch.autocast("cuda", enabled=False):
+            queries = queries.to(dtype=module_dtype)
+            context = context.to(dtype=module_dtype)
+            norm_queries = self.query_norm(queries)
+            norm_context = self.context_norm(context)
+            attn_out, _ = self.cross_attn(
+                norm_queries,
+                norm_context,
+                norm_context,
+                key_padding_mask=key_padding_mask,
+                need_weights=False,
+            )
+            queries = queries + self.dropout(attn_out)
+            queries = queries + self.dropout(self.ffn(self.ffn_norm(queries)))
+        return queries.to(dtype=original_dtype)
 
 
 @FRAMEWORK_REGISTRY.register("QwenVARParallel")
@@ -225,30 +230,30 @@ class QwenVARParallel(QwenVAR):
         return ~attention_mask.bool()
 
     def _classify_queries(self, query_states: torch.Tensor, slot_indices: torch.Tensor | None = None) -> torch.Tensor:
-        query_states = self.action_token_dropout(self.action_token_norm(query_states.float()))
-        if self.parallel_classifier_type == "shared":
-            return self.action_token_classifier(query_states)
+        module_dtype = self.action_token_norm.weight.dtype
+        with torch.autocast("cuda", enabled=False):
+            query_states = query_states.to(dtype=module_dtype)
+            query_states = self.action_token_dropout(self.action_token_norm(query_states))
+            if self.parallel_classifier_type == "shared":
+                return self.action_token_classifier(query_states)
 
-        logits = query_states.new_empty(
-            query_states.shape[0],
-            query_states.shape[1],
-            int(self.stage1_tokenizer.codebook_size),
-        )
-        factor_indices = self.slot_factor_indices.to(query_states.device)
-        if slot_indices is not None:
-            factor_indices = factor_indices.index_select(0, slot_indices.to(query_states.device))
-        if factor_indices.numel() != query_states.shape[1]:
-            raise ValueError(
-                f"factor index count {factor_indices.numel()} does not match query count {query_states.shape[1]}"
+            logits = query_states.new_empty(
+                query_states.shape[0],
+                query_states.shape[1],
+                int(self.stage1_tokenizer.codebook_size),
             )
-        for factor_idx, classifier in enumerate(self.action_factor_classifiers):
-            mask = factor_indices == factor_idx
-            if mask.any():
-                factor_logits = classifier(query_states[:, mask, :])
-                if logits.dtype != factor_logits.dtype:
-                    logits = logits.to(dtype=factor_logits.dtype)
-                logits[:, mask, :] = factor_logits
-        return logits
+            factor_indices = self.slot_factor_indices.to(query_states.device)
+            if slot_indices is not None:
+                factor_indices = factor_indices.index_select(0, slot_indices.to(query_states.device))
+            if factor_indices.numel() != query_states.shape[1]:
+                raise ValueError(
+                    f"factor index count {factor_indices.numel()} does not match query count {query_states.shape[1]}"
+                )
+            for factor_idx, classifier in enumerate(self.action_factor_classifiers):
+                mask = factor_indices == factor_idx
+                if mask.any():
+                    logits[:, mask, :] = classifier(query_states[:, mask, :])
+            return logits
 
     def _postprocess_decoded_actions(self, normalized_actions: torch.Tensor) -> torch.Tensor:
         reorder = self.config.framework.stage1_tokenizer.get("decoded_action_reorder", None)

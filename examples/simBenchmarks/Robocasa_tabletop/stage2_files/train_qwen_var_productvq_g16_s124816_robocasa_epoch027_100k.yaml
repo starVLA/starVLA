@@ -1,5 +1,5 @@
 run_id: qwen_var_productvq_g16_s124816_robocasa_epoch027_100k_fullcache
-run_root_dir: playground/Checkpoints
+run_root_dir: /root/nas/feihong/starVLA/Checkpoints
 seed: 42
 wandb_entity: smap
 wandb_project: starVLA_RoboCasa
@@ -13,7 +13,7 @@ framework:
     attn_implementation: flash_attention_2
   stage1_tokenizer:
     artifact: playground/Checkpoints/var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun/epoch_027.ckpt
-    stage1_config: examples/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun.yaml
+    stage1_config: examples/simBenchmarks/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun.yaml
     freeze: true
     token_cache: playground/Checkpoints/var_stage1_robocasa_gr1_e64_aeinit_productvq_g16_s1_2_4_8_16_batch256_rerun/stage2_token_cache_epoch027.pt
   action_token_text:
@@ -36,7 +36,8 @@ framework:
 datasets:
   vla_data:
     dataset_py: var_stage2_token_dataset
-    data_mix: fourier_gr1_unified_local_1000
+    data_root_dir: /root/tianyi/LDA-1B/playground/Datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
+    data_mix: fourier_gr1_unified_1000
     include_state: true
     per_device_batch_size: 32
     num_workers: 4
@@ -48,10 +49,10 @@ datasets:
 
 trainer:
   pretrained_checkpoint: null
-  is_resume: true
+  is_resume: false
   max_train_steps: 100000
   num_warmup_steps: 5000
-  save_interval: 10000
+  save_interval: 2000
   eval_interval: 2000
   checkpoint_retention_policy: latest_and_best
   checkpoint_keep_best: 4
@@ -72,7 +73,7 @@ trainer:
   logging_frequency: 50
   metric_ema_beta: 0.98
   gradient_clipping: 1.0
-  gradient_accumulation_steps: 2
+  gradient_accumulation_steps: 1
   gradient_checkpointing: true
   optimizer:
     name: AdamW

@@ -75,27 +75,30 @@ class QwenVARScaleParallel(QwenVARParallel):
     def _code_condition_embeddings(self, tokens: torch.Tensor, slot_indices: torch.Tensor) -> torch.Tensor:
         """Embed flat Stage 1 code slots as conditioning memory tokens."""
         factor_indices = self.slot_factor_indices.to(tokens.device).index_select(0, slot_indices)
-        pieces = tokens.new_zeros(
-            tokens.shape[0],
-            slot_indices.numel(),
-            int(self.qwen_vl_interface.model.config.hidden_size),
-            dtype=torch.float32,
-        )
+        module_dtype = self.code_condition_norm.weight.dtype
+        with torch.autocast("cuda", enabled=False):
+            pieces = torch.zeros(
+                tokens.shape[0],
+                slot_indices.numel(),
+                int(self.qwen_vl_interface.model.config.hidden_size),
+                device=tokens.device,
+                dtype=module_dtype,
+            )
 
-        if self.stage1_tokenizer.quantization_mode == "product_vq":
-            codebooks = list(self.stage1_tokenizer.product_codebooks)
-        else:
-            codebooks = [self.stage1_tokenizer.shared_codebook]
+            if self.stage1_tokenizer.quantization_mode == "product_vq":
+                codebooks = list(self.stage1_tokenizer.product_codebooks)
+            else:
+                codebooks = [self.stage1_tokenizer.shared_codebook]
 
-        for factor_idx, (codebook, projector) in enumerate(zip(codebooks, self.code_condition_projectors, strict=True)):
-            mask = factor_indices == factor_idx
-            if mask.any():
-                code_vectors = codebook(tokens[:, mask].long()).float()
-                pieces[:, mask, :] = projector(code_vectors).float()
+            for factor_idx, (codebook, projector) in enumerate(zip(codebooks, self.code_condition_projectors, strict=True)):
+                mask = factor_indices == factor_idx
+                if mask.any():
+                    code_vectors = codebook(tokens[:, mask].long()).to(dtype=module_dtype)
+                    pieces[:, mask, :] = projector(code_vectors)
 
-        query_pos = self.action_token_queries.index_select(0, slot_indices).float()
-        pieces = pieces + query_pos.unsqueeze(0)
-        return self.code_condition_dropout(self.code_condition_norm(pieces))
+            query_pos = self.action_token_queries.index_select(0, slot_indices).to(dtype=module_dtype)
+            pieces = pieces + query_pos.unsqueeze(0)
+            return self.code_condition_dropout(self.code_condition_norm(pieces))
 
     def _state_tensor(self, examples: List[dict], *, device: torch.device) -> torch.Tensor | None:
         if not self.use_proprio_state:
@@ -170,7 +173,10 @@ class QwenVARScaleParallel(QwenVARParallel):
         key_padding_mask = self._key_padding_mask(qwen_inputs.get("attention_mask", None))
         if self.proprio_state_encoder is not None:
             state_tensor = self._state_tensor(examples, device=context_states.device)
-            state_embedding = self.proprio_state_encoder(state_tensor).to(context_states.dtype)
+            encoder_dtype = next(self.proprio_state_encoder.parameters()).dtype
+            with torch.autocast("cuda", enabled=False):
+                state_embedding = self.proprio_state_encoder(state_tensor.to(dtype=encoder_dtype))
+            state_embedding = state_embedding.to(context_states.dtype)
             if self.proprio_add_to_pooled:
                 pooled_context = pooled_context + state_embedding
             if self.proprio_add_context_token:

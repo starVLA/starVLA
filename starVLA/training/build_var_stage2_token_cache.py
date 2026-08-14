@@ -109,7 +109,7 @@ def build_cache(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build LIBERO VAR Stage 2 action-token label cache.")
-    parser.add_argument("--config_yaml", type=Path, default=Path("examples/LIBERO/train_files/train_var_stage1_pi05_libero.yaml"))
+    parser.add_argument("--config_yaml", type=Path, default=Path("examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero.yaml"))
     parser.add_argument("--stage1_artifact", type=Path, default=Path("playground/Checkpoints/var_stage1_pi05_libero/best_recon.ckpt"))
     parser.add_argument("--output", type=Path, default=Path("playground/Checkpoints/var_stage1_pi05_libero/stage2_token_cache.pt"))
     parser.add_argument("--mode", type=str, default="train")

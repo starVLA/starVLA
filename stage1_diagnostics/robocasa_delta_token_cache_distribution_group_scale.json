@@ -1,0 +1,1035 @@
+{
+  "metadata": {
+    "stage1_artifact_id": "best_recon",
+    "stage1_checkpoint": "/root/feihong/starVLA/Checkpoints/var_stage1_robocasa_gr1_delta_productvq_g16_s124816_e128_weighted/best_recon.ckpt",
+    "stage1_checkpoint_sha256": "0592a9327ced6b93be2e943c7137f623e9713089195743af2563fefc745ccc6e",
+    "action_spec": {
+      "action_dim": 29,
+      "horizon": 16,
+      "action_keys": [
+        "action.left_arm",
+        "action.right_arm",
+        "action.left_hand",
+        "action.right_hand",
+        "action.waist"
+      ],
+      "state_keys": [
+        "state.left_arm",
+        "state.right_arm",
+        "state.left_hand",
+        "state.right_hand",
+        "state.waist"
+      ],
+      "action_key_dims": {
+        "action.left_arm": 7,
+        "action.right_arm": 7,
+        "action.left_hand": 6,
+        "action.right_hand": 6,
+        "action.waist": 3
+      },
+      "state_key_dims": {
+        "state.left_arm": 7,
+        "state.right_arm": 7,
+        "state.left_hand": 6,
+        "state.right_hand": 6,
+        "state.waist": 3
+      },
+      "dim_groups": {},
+      "normalization_modes": {
+        "action.left_arm": "min_max",
+        "action.right_arm": "min_max",
+        "action.left_hand": "min_max",
+        "action.right_hand": "min_max",
+        "action.waist": "min_max"
+      },
+      "token_order": "scale_major",
+      "source": "starvla_lerobot",
+      "metadata": {
+        "data_root_dir": "/root/tianyi/LDA-1B/playground/Datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim",
+        "data_mix": "fourier_gr1_unified_1000",
+        "robot_type": "fourier_gr1_arms_waist",
+        "mode": "train",
+        "expected_action_horizon": 16,
+        "expected_action_dim": 29,
+        "action_mode": "delta",
+        "action_mode_apply_keys": null,
+        "action_mode_state_map": {}
+      }
+    },
+    "token_dim": 496,
+    "codebook_size": 512,
+    "source_dataset_len": 5660058,
+    "cached_len": 5660058,
+    "window_mode": "full",
+    "config_yaml": "examples/simBenchmarks/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_delta_productvq_g16_s1_2_4_8_16_weighted.yaml",
+    "mode": "train"
+  },
+  "shape": [
+    5660058,
+    496
+  ],
+  "by_group": {
+    "0": {
+      "total": 175461798,
+      "used": 2,
+      "usage_ratio": 0.00390625,
+      "entropy_bits": 0.205592508185083,
+      "perplexity": 1.1531598469792317,
+      "top1_frac": 0.967741935483871,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "1": {
+      "total": 175461798,
+      "used": 296,
+      "usage_ratio": 0.578125,
+      "entropy_bits": 7.144524169038794,
+      "perplexity": 141.48685060967404,
+      "top1_frac": 0.012385396848606327,
+      "top5_frac": 0.061567755050589416,
+      "top20_frac": 0.2376721911854568
+    },
+    "2": {
+      "total": 175461798,
+      "used": 314,
+      "usage_ratio": 0.61328125,
+      "entropy_bits": 7.691100635842343,
+      "perplexity": 206.65789008464927,
+      "top1_frac": 0.008180293467641315,
+      "top5_frac": 0.040521396002108676,
+      "top20_frac": 0.15413666854137673
+    },
+    "3": {
+      "total": 175461798,
+      "used": 286,
+      "usage_ratio": 0.55859375,
+      "entropy_bits": 7.496985383556065,
+      "perplexity": 180.64147780556488,
+      "top1_frac": 0.009940517080532823,
+      "top5_frac": 0.0481725771441143,
+      "top20_frac": 0.18364058368990382
+    },
+    "4": {
+      "total": 175461798,
+      "used": 292,
+      "usage_ratio": 0.5703125,
+      "entropy_bits": 7.574358120961158,
+      "perplexity": 190.59389801493919,
+      "top1_frac": 0.012791963980672305,
+      "top5_frac": 0.06210340441171132,
+      "top20_frac": 0.22097606682452894
+    },
+    "5": {
+      "total": 175461798,
+      "used": 306,
+      "usage_ratio": 0.59765625,
+      "entropy_bits": 7.382859260150802,
+      "perplexity": 166.90221143574905,
+      "top1_frac": 0.01286841367030788,
+      "top5_frac": 0.06272156176126725,
+      "top20_frac": 0.24080738646027097
+    },
+    "6": {
+      "total": 175461798,
+      "used": 252,
+      "usage_ratio": 0.4921875,
+      "entropy_bits": 6.559086991253082,
+      "perplexity": 94.29353740821385,
+      "top1_frac": 0.021992439630648262,
+      "top5_frac": 0.10888343911761351,
+      "top20_frac": 0.402364080413675
+    },
+    "7": {
+      "total": 175461798,
+      "used": 50,
+      "usage_ratio": 0.09765625,
+      "entropy_bits": 3.6373395432224758,
+      "perplexity": 12.443664888693172,
+      "top1_frac": 0.13492627038963775,
+      "top5_frac": 0.6105661700787998,
+      "top20_frac": 0.9805145049294434
+    },
+    "8": {
+      "total": 175461798,
+      "used": 318,
+      "usage_ratio": 0.62109375,
+      "entropy_bits": 7.663634686364694,
+      "perplexity": 202.7607628029938,
+      "top1_frac": 0.008325555856893704,
+      "top5_frac": 0.04117704299371194,
+      "top20_frac": 0.15856189961076314
+    },
+    "9": {
+      "total": 175461798,
+      "used": 5,
+      "usage_ratio": 0.009765625,
+      "entropy_bits": 1.1640072418331553,
+      "perplexity": 2.2407896763539887,
+      "top1_frac": 0.6102707439484919,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "10": {
+      "total": 175461798,
+      "used": 310,
+      "usage_ratio": 0.60546875,
+      "entropy_bits": 7.491427150744445,
+      "perplexity": 179.94686410772033,
+      "top1_frac": 0.013504808607968329,
+      "top5_frac": 0.06406378555404978,
+      "top20_frac": 0.22371081595778472
+    },
+    "11": {
+      "total": 175461798,
+      "used": 261,
+      "usage_ratio": 0.509765625,
+      "entropy_bits": 7.5171151846272215,
+      "perplexity": 183.17961902150927,
+      "top1_frac": 0.009158551994320724,
+      "top5_frac": 0.0451255948032631,
+      "top20_frac": 0.17642068731109206
+    },
+    "12": {
+      "total": 175461798,
+      "used": 315,
+      "usage_ratio": 0.615234375,
+      "entropy_bits": 7.008644804926391,
+      "perplexity": 128.76929418718495,
+      "top1_frac": 0.02094843459885211,
+      "top5_frac": 0.1015250396556406,
+      "top20_frac": 0.35770296848320227
+    },
+    "13": {
+      "total": 175461798,
+      "used": 296,
+      "usage_ratio": 0.578125,
+      "entropy_bits": 7.356765777540884,
+      "perplexity": 163.91064909162012,
+      "top1_frac": 0.012499250691594988,
+      "top5_frac": 0.061015150431776605,
+      "top20_frac": 0.2287288883247395
+    },
+    "14": {
+      "total": 175461798,
+      "used": 350,
+      "usage_ratio": 0.68359375,
+      "entropy_bits": 7.752894921757291,
+      "perplexity": 215.7018772017992,
+      "top1_frac": 0.009999812038857598,
+      "top5_frac": 0.04728821939918797,
+      "top20_frac": 0.17389905009408374
+    },
+    "15": {
+      "total": 175461798,
+      "used": 3,
+      "usage_ratio": 0.005859375,
+      "entropy_bits": 0.23585098687062842,
+      "perplexity": 1.1776011512095834,
+      "top1_frac": 0.967741935483871,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    }
+  },
+  "by_scale_group": {
+    "s1_g0": {
+      "total": 5660058,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s1_g1": {
+      "total": 5660058,
+      "used": 269,
+      "usage_ratio": 0.525390625,
+      "entropy_bits": 6.682355965564454,
+      "perplexity": 102.70452712547426,
+      "top1_frac": 0.015636588883011445,
+      "top5_frac": 0.077203802505204,
+      "top20_frac": 0.30033119801952557
+    },
+    "s1_g2": {
+      "total": 5660058,
+      "used": 297,
+      "usage_ratio": 0.580078125,
+      "entropy_bits": 7.189740768392818,
+      "perplexity": 145.99152069180374,
+      "top1_frac": 0.015172106010221096,
+      "top5_frac": 0.07197399743960221,
+      "top20_frac": 0.26157117117881123
+    },
+    "s1_g3": {
+      "total": 5660058,
+      "used": 258,
+      "usage_ratio": 0.50390625,
+      "entropy_bits": 7.080258854269463,
+      "perplexity": 135.32258714812954,
+      "top1_frac": 0.015458675511805709,
+      "top5_frac": 0.07537714277839555,
+      "top20_frac": 0.2790589778408631
+    },
+    "s1_g4": {
+      "total": 5660058,
+      "used": 72,
+      "usage_ratio": 0.140625,
+      "entropy_bits": 4.498448796363575,
+      "perplexity": 22.603100792906538,
+      "top1_frac": 0.07129414574903649,
+      "top5_frac": 0.3426530258170499,
+      "top20_frac": 0.9365545370736483
+    },
+    "s1_g5": {
+      "total": 5660058,
+      "used": 256,
+      "usage_ratio": 0.5,
+      "entropy_bits": 6.44696088296492,
+      "perplexity": 87.24260135010755,
+      "top1_frac": 0.019091323799155416,
+      "top5_frac": 0.0948700525683659,
+      "top20_frac": 0.36368072553320124
+    },
+    "s1_g6": {
+      "total": 5660058,
+      "used": 147,
+      "usage_ratio": 0.287109375,
+      "entropy_bits": 6.175811854471328,
+      "perplexity": 72.2943930220708,
+      "top1_frac": 0.021685820180641257,
+      "top5_frac": 0.10740932336735771,
+      "top20_frac": 0.408555707379677
+    },
+    "s1_g7": {
+      "total": 5660058,
+      "used": 36,
+      "usage_ratio": 0.0703125,
+      "entropy_bits": 4.479180317418981,
+      "perplexity": 22.30322324684859,
+      "top1_frac": 0.06913250712271853,
+      "top5_frac": 0.33402820253785387,
+      "top20_frac": 0.9369833312662167
+    },
+    "s1_g8": {
+      "total": 5660058,
+      "used": 299,
+      "usage_ratio": 0.583984375,
+      "entropy_bits": 7.194213532773121,
+      "perplexity": 146.44483821382576,
+      "top1_frac": 0.014750202206408486,
+      "top5_frac": 0.07239855139293626,
+      "top20_frac": 0.26558491096734343
+    },
+    "s1_g9": {
+      "total": 5660058,
+      "used": 3,
+      "usage_ratio": 0.005859375,
+      "entropy_bits": 1.2048515493201843,
+      "perplexity": 2.3051354871702685,
+      "top1_frac": 0.6254799862474908,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s1_g10": {
+      "total": 5660058,
+      "used": 284,
+      "usage_ratio": 0.5546875,
+      "entropy_bits": 6.785939498878736,
+      "perplexity": 110.3497460182267,
+      "top1_frac": 0.020479825471753116,
+      "top5_frac": 0.09506916713574314,
+      "top20_frac": 0.3343357965589752
+    },
+    "s1_g11": {
+      "total": 5660058,
+      "used": 249,
+      "usage_ratio": 0.486328125,
+      "entropy_bits": 7.165587915963726,
+      "perplexity": 143.5677516920323,
+      "top1_frac": 0.011724261482832862,
+      "top5_frac": 0.058529612240722624,
+      "top20_frac": 0.22929676692358983
+    },
+    "s1_g12": {
+      "total": 5660058,
+      "used": 209,
+      "usage_ratio": 0.408203125,
+      "entropy_bits": 6.332640437907701,
+      "perplexity": 80.59622925936358,
+      "top1_frac": 0.027288412945591724,
+      "top5_frac": 0.12466038333882798,
+      "top20_frac": 0.4263526981525631
+    },
+    "s1_g13": {
+      "total": 5660058,
+      "used": 266,
+      "usage_ratio": 0.51953125,
+      "entropy_bits": 6.6476948692939635,
+      "perplexity": 100.26643128756896,
+      "top1_frac": 0.019331957375701803,
+      "top5_frac": 0.09519708101931111,
+      "top20_frac": 0.35335521296778233
+    },
+    "s1_g14": {
+      "total": 5660058,
+      "used": 316,
+      "usage_ratio": 0.6171875,
+      "entropy_bits": 7.306413730337367,
+      "perplexity": 158.28862026967244,
+      "top1_frac": 0.013749505747114253,
+      "top5_frac": 0.06687016281458599,
+      "top20_frac": 0.2421862108126807
+    },
+    "s1_g15": {
+      "total": 5660058,
+      "used": 2,
+      "usage_ratio": 0.00390625,
+      "entropy_bits": 0.9380128392519067,
+      "perplexity": 1.9158874867934663,
+      "top1_frac": 0.6455115830968516,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s2_g0": {
+      "total": 11320116,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s2_g1": {
+      "total": 11320116,
+      "used": 291,
+      "usage_ratio": 0.568359375,
+      "entropy_bits": 6.953653399969005,
+      "perplexity": 123.95334549263363,
+      "top1_frac": 0.012687414157240085,
+      "top5_frac": 0.06292144002764637,
+      "top20_frac": 0.2441693176995713
+    },
+    "s2_g2": {
+      "total": 11320116,
+      "used": 303,
+      "usage_ratio": 0.591796875,
+      "entropy_bits": 7.54227798012133,
+      "perplexity": 186.40257507208256,
+      "top1_frac": 0.00915785668627424,
+      "top5_frac": 0.045495293511126564,
+      "top20_frac": 0.17299743218179037
+    },
+    "s2_g3": {
+      "total": 11320116,
+      "used": 265,
+      "usage_ratio": 0.517578125,
+      "entropy_bits": 7.392485263420269,
+      "perplexity": 168.01954596588067,
+      "top1_frac": 0.010454309832160731,
+      "top5_frac": 0.051337459792814844,
+      "top20_frac": 0.19573244655796812
+    },
+    "s2_g4": {
+      "total": 11320116,
+      "used": 273,
+      "usage_ratio": 0.533203125,
+      "entropy_bits": 6.8777223296447,
+      "perplexity": 117.5982131995126,
+      "top1_frac": 0.018500252117557806,
+      "top5_frac": 0.09177114439463341,
+      "top20_frac": 0.3441522154013263
+    },
+    "s2_g5": {
+      "total": 11320116,
+      "used": 278,
+      "usage_ratio": 0.54296875,
+      "entropy_bits": 7.051621172251598,
+      "perplexity": 132.66290128278945,
+      "top1_frac": 0.013302867214434905,
+      "top5_frac": 0.06487566028475326,
+      "top20_frac": 0.2494093700099893
+    },
+    "s2_g6": {
+      "total": 11320116,
+      "used": 193,
+      "usage_ratio": 0.376953125,
+      "entropy_bits": 6.294979266702095,
+      "perplexity": 78.51951011443228,
+      "top1_frac": 0.020821076391796693,
+      "top5_frac": 0.10293790275647352,
+      "top20_frac": 0.3913153363446099
+    },
+    "s2_g7": {
+      "total": 11320116,
+      "used": 14,
+      "usage_ratio": 0.02734375,
+      "entropy_bits": 3.358680332128064,
+      "perplexity": 10.258019630236701,
+      "top1_frac": 0.13954123791664325,
+      "top5_frac": 0.6422577295144325,
+      "top20_frac": 1.0
+    },
+    "s2_g8": {
+      "total": 11320116,
+      "used": 306,
+      "usage_ratio": 0.59765625,
+      "entropy_bits": 7.515144421406832,
+      "perplexity": 182.92956118726312,
+      "top1_frac": 0.009341777063061898,
+      "top5_frac": 0.045986101202496514,
+      "top20_frac": 0.1780527690705643
+    },
+    "s2_g9": {
+      "total": 11320116,
+      "used": 2,
+      "usage_ratio": 0.00390625,
+      "entropy_bits": 0.9790377607185781,
+      "perplexity": 1.97115026556948,
+      "top1_frac": 0.5850276622607048,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s2_g10": {
+      "total": 11320116,
+      "used": 293,
+      "usage_ratio": 0.572265625,
+      "entropy_bits": 7.049059619722737,
+      "perplexity": 132.42756292252434,
+      "top1_frac": 0.01655115548285901,
+      "top5_frac": 0.07888435065506395,
+      "top20_frac": 0.2768816149940513
+    },
+    "s2_g11": {
+      "total": 11320116,
+      "used": 256,
+      "usage_ratio": 0.5,
+      "entropy_bits": 7.40438869583085,
+      "perplexity": 169.4115816076618,
+      "top1_frac": 0.009658204915921356,
+      "top5_frac": 0.04749359458860669,
+      "top20_frac": 0.18518052288510117
+    },
+    "s2_g12": {
+      "total": 11320116,
+      "used": 238,
+      "usage_ratio": 0.46484375,
+      "entropy_bits": 6.591877668058911,
+      "perplexity": 96.46125452546663,
+      "top1_frac": 0.02136859728292537,
+      "top5_frac": 0.1033077752913486,
+      "top20_frac": 0.36903968121881436
+    },
+    "s2_g13": {
+      "total": 11320116,
+      "used": 279,
+      "usage_ratio": 0.544921875,
+      "entropy_bits": 7.0533875205924845,
+      "perplexity": 132.82542516797687,
+      "top1_frac": 0.014120703356750055,
+      "top5_frac": 0.06964919794108117,
+      "top20_frac": 0.2601657968875937
+    },
+    "s2_g14": {
+      "total": 11320116,
+      "used": 322,
+      "usage_ratio": 0.62890625,
+      "entropy_bits": 7.567942062449196,
+      "perplexity": 189.74815695808118,
+      "top1_frac": 0.010092741099119479,
+      "top5_frac": 0.04796408446697896,
+      "top20_frac": 0.17854781700116854
+    },
+    "s2_g15": {
+      "total": 11320116,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s4_g0": {
+      "total": 22640232,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s4_g1": {
+      "total": 22640232,
+      "used": 294,
+      "usage_ratio": 0.57421875,
+      "entropy_bits": 7.058419276460364,
+      "perplexity": 133.28949550797404,
+      "top1_frac": 0.01221144730319018,
+      "top5_frac": 0.06010455193215335,
+      "top20_frac": 0.23169250209096798
+    },
+    "s4_g2": {
+      "total": 22640232,
+      "used": 308,
+      "usage_ratio": 0.6015625,
+      "entropy_bits": 7.603962481296845,
+      "perplexity": 194.5453222112044,
+      "top1_frac": 0.008752913839398819,
+      "top5_frac": 0.04234682754134322,
+      "top20_frac": 0.16345274200370385
+    },
+    "s4_g3": {
+      "total": 22640232,
+      "used": 273,
+      "usage_ratio": 0.533203125,
+      "entropy_bits": 7.465285850400656,
+      "perplexity": 176.71563156517786,
+      "top1_frac": 0.009594336312454748,
+      "top5_frac": 0.046988255244027534,
+      "top20_frac": 0.17899056864788312
+    },
+    "s4_g4": {
+      "total": 22640232,
+      "used": 283,
+      "usage_ratio": 0.552734375,
+      "entropy_bits": 7.432908256149275,
+      "perplexity": 172.7938734397952,
+      "top1_frac": 0.01598208004228932,
+      "top5_frac": 0.07553332492352552,
+      "top20_frac": 0.23915898918350306
+    },
+    "s4_g5": {
+      "total": 22640232,
+      "used": 291,
+      "usage_ratio": 0.568359375,
+      "entropy_bits": 7.098858512551857,
+      "perplexity": 137.07850119780124,
+      "top1_frac": 0.013422565634486431,
+      "top5_frac": 0.06605166413489048,
+      "top20_frac": 0.25614158900845185
+    },
+    "s4_g6": {
+      "total": 22640232,
+      "used": 234,
+      "usage_ratio": 0.45703125,
+      "entropy_bits": 6.421076369604521,
+      "perplexity": 85.6912724262928,
+      "top1_frac": 0.020127664769512964,
+      "top5_frac": 0.09950949265890915,
+      "top20_frac": 0.37662542503981405
+    },
+    "s4_g7": {
+      "total": 22640232,
+      "used": 14,
+      "usage_ratio": 0.02734375,
+      "entropy_bits": 3.3935762372214358,
+      "perplexity": 10.509165706817054,
+      "top1_frac": 0.13846854572868333,
+      "top5_frac": 0.6301917312508105,
+      "top20_frac": 1.0
+    },
+    "s4_g8": {
+      "total": 22640232,
+      "used": 310,
+      "usage_ratio": 0.60546875,
+      "entropy_bits": 7.608750832216398,
+      "perplexity": 195.19209708878842,
+      "top1_frac": 0.008737852156285324,
+      "top5_frac": 0.04116786435757372,
+      "top20_frac": 0.15846061118101618
+    },
+    "s4_g9": {
+      "total": 22640232,
+      "used": 2,
+      "usage_ratio": 0.00390625,
+      "entropy_bits": 0.932153287665363,
+      "perplexity": 1.9081218300115297,
+      "top1_frac": 0.6521279022229101,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s4_g10": {
+      "total": 22640232,
+      "used": 296,
+      "usage_ratio": 0.578125,
+      "entropy_bits": 7.3170342448015155,
+      "perplexity": 159.45817415683953,
+      "top1_frac": 0.014208025783481371,
+      "top5_frac": 0.06537486011627443,
+      "top20_frac": 0.23283732251506964
+    },
+    "s4_g11": {
+      "total": 22640232,
+      "used": 257,
+      "usage_ratio": 0.501953125,
+      "entropy_bits": 7.562223341987613,
+      "perplexity": 188.99750015202775,
+      "top1_frac": 0.008631669498793121,
+      "top5_frac": 0.04292707777906163,
+      "top20_frac": 0.16532471928732886
+    },
+    "s4_g12": {
+      "total": 22640232,
+      "used": 292,
+      "usage_ratio": 0.5703125,
+      "entropy_bits": 6.7718383931126045,
+      "perplexity": 109.27642589989951,
+      "top1_frac": 0.020202310647700075,
+      "top5_frac": 0.09883092187394546,
+      "top20_frac": 0.3560707328440804
+    },
+    "s4_g13": {
+      "total": 22640232,
+      "used": 282,
+      "usage_ratio": 0.55078125,
+      "entropy_bits": 7.29421621683104,
+      "perplexity": 156.95598333104402,
+      "top1_frac": 0.012125803304489107,
+      "top5_frac": 0.059891877433058106,
+      "top20_frac": 0.22583257980748608
+    },
+    "s4_g14": {
+      "total": 22640232,
+      "used": 327,
+      "usage_ratio": 0.638671875,
+      "entropy_bits": 7.696086604308517,
+      "perplexity": 207.37333740062172,
+      "top1_frac": 0.009865755792608486,
+      "top5_frac": 0.04766996203925825,
+      "top20_frac": 0.17793470490938432
+    },
+    "s4_g15": {
+      "total": 22640232,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s8_g0": {
+      "total": 45280464,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s8_g1": {
+      "total": 45280464,
+      "used": 294,
+      "usage_ratio": 0.57421875,
+      "entropy_bits": 6.909339011481036,
+      "perplexity": 120.20382641632874,
+      "top1_frac": 0.01500086218197764,
+      "top5_frac": 0.07469687148082228,
+      "top20_frac": 0.2850641945718577
+    },
+    "s8_g2": {
+      "total": 45280464,
+      "used": 308,
+      "usage_ratio": 0.6015625,
+      "entropy_bits": 7.386143612754632,
+      "perplexity": 167.2826037788545,
+      "top1_frac": 0.012341878828803521,
+      "top5_frac": 0.06085968995370719,
+      "top20_frac": 0.22336515809555307
+    },
+    "s8_g3": {
+      "total": 45280464,
+      "used": 282,
+      "usage_ratio": 0.55078125,
+      "entropy_bits": 7.19152991513129,
+      "perplexity": 146.17268322120884,
+      "top1_frac": 0.014464251073045541,
+      "top5_frac": 0.0694262761971697,
+      "top20_frac": 0.25742536560579415
+    },
+    "s8_g4": {
+      "total": 45280464,
+      "used": 284,
+      "usage_ratio": 0.5546875,
+      "entropy_bits": 7.151676589888332,
+      "perplexity": 142.19003883911546,
+      "top1_frac": 0.01745774954956292,
+      "top5_frac": 0.08371758292936221,
+      "top20_frac": 0.2865781808242954
+    },
+    "s8_g5": {
+      "total": 45280464,
+      "used": 299,
+      "usage_ratio": 0.583984375,
+      "entropy_bits": 7.202632336317624,
+      "perplexity": 147.30191094411396,
+      "top1_frac": 0.015388534887805037,
+      "top5_frac": 0.0751046853230126,
+      "top20_frac": 0.282998955134382
+    },
+    "s8_g6": {
+      "total": 45280464,
+      "used": 247,
+      "usage_ratio": 0.482421875,
+      "entropy_bits": 6.284264121866564,
+      "perplexity": 77.93849250340647,
+      "top1_frac": 0.025756538183884334,
+      "top5_frac": 0.12737462230952404,
+      "top20_frac": 0.46726438138973136
+    },
+    "s8_g7": {
+      "total": 45280464,
+      "used": 14,
+      "usage_ratio": 0.02734375,
+      "entropy_bits": 3.2010314326000455,
+      "perplexity": 9.19615914265891,
+      "top1_frac": 0.17193547309939228,
+      "top5_frac": 0.7223562903419011,
+      "top20_frac": 1.0
+    },
+    "s8_g8": {
+      "total": 45280464,
+      "used": 309,
+      "usage_ratio": 0.603515625,
+      "entropy_bits": 7.378012186454895,
+      "perplexity": 166.34240508379736,
+      "top1_frac": 0.012152348968862156,
+      "top5_frac": 0.059527835227130184,
+      "top20_frac": 0.22417228321688576
+    },
+    "s8_g9": {
+      "total": 45280464,
+      "used": 2,
+      "usage_ratio": 0.00390625,
+      "entropy_bits": 0.9355804516834163,
+      "perplexity": 1.9126600170636068,
+      "top1_frac": 0.6482962497910799,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s8_g10": {
+      "total": 45280464,
+      "used": 300,
+      "usage_ratio": 0.5859375,
+      "entropy_bits": 7.254515244422136,
+      "perplexity": 152.69565968264385,
+      "top1_frac": 0.0180214584373517,
+      "top5_frac": 0.08291010445476,
+      "top20_frac": 0.27861174302454145
+    },
+    "s8_g11": {
+      "total": 45280464,
+      "used": 256,
+      "usage_ratio": 0.5,
+      "entropy_bits": 7.309818775694424,
+      "perplexity": 158.66265391260745,
+      "top1_frac": 0.01100967074895699,
+      "top5_frac": 0.05437466365185657,
+      "top20_frac": 0.2115892628662109
+    },
+    "s8_g12": {
+      "total": 45280464,
+      "used": 297,
+      "usage_ratio": 0.580078125,
+      "entropy_bits": 6.867952732879865,
+      "perplexity": 116.80455559491658,
+      "top1_frac": 0.02405463424579748,
+      "top5_frac": 0.11470185022838988,
+      "top20_frac": 0.3936994108540937
+    },
+    "s8_g13": {
+      "total": 45280464,
+      "used": 282,
+      "usage_ratio": 0.55078125,
+      "entropy_bits": 7.151140336061992,
+      "perplexity": 142.1371962210788,
+      "top1_frac": 0.015411480765744803,
+      "top5_frac": 0.07540618400023463,
+      "top20_frac": 0.27581523899578414
+    },
+    "s8_g14": {
+      "total": 45280464,
+      "used": 336,
+      "usage_ratio": 0.65625,
+      "entropy_bits": 7.501125467122179,
+      "perplexity": 181.16060686421352,
+      "top1_frac": 0.015043551673852105,
+      "top5_frac": 0.06944442972139155,
+      "top20_frac": 0.24323394742598045
+    },
+    "s8_g15": {
+      "total": 45280464,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s16_g0": {
+      "total": 90560928,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s16_g1": {
+      "total": 90560928,
+      "used": 296,
+      "usage_ratio": 0.578125,
+      "entropy_bits": 7.28555365581987,
+      "perplexity": 156.01637588309006,
+      "top1_frac": 0.010963006032800371,
+      "top5_frac": 0.05454059613876748,
+      "top20_frac": 0.21154753405353796
+    },
+    "s16_g2": {
+      "total": 90560928,
+      "used": 314,
+      "usage_ratio": 0.61328125,
+      "entropy_bits": 7.806241583124075,
+      "perplexity": 223.82720414814045,
+      "top1_frac": 0.006430643025212816,
+      "top5_frac": 0.0317738130952015,
+      "top20_frac": 0.12327953397297342
+    },
+    "s16_g3": {
+      "total": 90560928,
+      "used": 281,
+      "usage_ratio": 0.548828125,
+      "entropy_bits": 7.616256315054761,
+      "perplexity": 196.21021131241235,
+      "top1_frac": 0.00742442701117197,
+      "top5_frac": 0.036878895498950716,
+      "top20_frac": 0.14419599366296246
+    },
+    "s16_g4": {
+      "total": 90560928,
+      "used": 292,
+      "usage_ratio": 0.5703125,
+      "entropy_bits": 7.390039914142604,
+      "perplexity": 167.73499624905224,
+      "top1_frac": 0.013429709995904636,
+      "top5_frac": 0.0639778890074978,
+      "top20_frac": 0.23813879204064695
+    },
+    "s16_g5": {
+      "total": 90560928,
+      "used": 306,
+      "usage_ratio": 0.59765625,
+      "entropy_bits": 7.534043509296665,
+      "perplexity": 185.3416755787359,
+      "top1_frac": 0.01103701145818647,
+      "top5_frac": 0.053738660893580946,
+      "top20_frac": 0.20726818302921984
+    },
+    "s16_g6": {
+      "total": 90560928,
+      "used": 252,
+      "usage_ratio": 0.4921875,
+      "entropy_bits": 6.684939404802899,
+      "perplexity": 102.88860525992958,
+      "top1_frac": 0.02080114505893756,
+      "top5_frac": 0.10306293460243694,
+      "top20_frac": 0.38053566544724454
+    },
+    "s16_g7": {
+      "total": 90560928,
+      "used": 14,
+      "usage_ratio": 0.02734375,
+      "entropy_bits": 3.469467135629839,
+      "perplexity": 11.076783741103723,
+      "top1_frac": 0.12349978348278409,
+      "top5_frac": 0.5839636603547173,
+      "top20_frac": 1.0
+    },
+    "s16_g8": {
+      "total": 90560928,
+      "used": 318,
+      "usage_ratio": 0.62109375,
+      "entropy_bits": 7.776949908787483,
+      "perplexity": 219.32856507296194,
+      "top1_frac": 0.006399459599177253,
+      "top5_frac": 0.03134589124351729,
+      "top20_frac": 0.12164763815141116
+    },
+    "s16_g9": {
+      "total": 90560928,
+      "used": 2,
+      "usage_ratio": 0.00390625,
+      "entropy_bits": 0.9565518119261789,
+      "perplexity": 1.94066595801454,
+      "top1_frac": 0.6220910081663474,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    },
+    "s16_g10": {
+      "total": 90560928,
+      "used": 305,
+      "usage_ratio": 0.595703125,
+      "entropy_bits": 7.648865504554701,
+      "perplexity": 200.6956454918575,
+      "top1_frac": 0.01069486611267941,
+      "top5_frac": 0.050914484886903984,
+      "top20_frac": 0.1833245569215015
+    },
+    "s16_g11": {
+      "total": 90560928,
+      "used": 261,
+      "usage_ratio": 0.509765625,
+      "entropy_bits": 7.6034964219375265,
+      "perplexity": 194.48248493657567,
+      "top1_frac": 0.00814842577584894,
+      "top5_frac": 0.040163987718853766,
+      "top20_frac": 0.1575880715356627
+    },
+    "s16_g12": {
+      "total": 90560928,
+      "used": 311,
+      "usage_ratio": 0.607421875,
+      "entropy_bits": 7.105468665975958,
+      "perplexity": 137.708009779781,
+      "top1_frac": 0.019960826814848894,
+      "top5_frac": 0.0959193351022198,
+      "top20_frac": 0.34217587743800504
+    },
+    "s16_g13": {
+      "total": 90560928,
+      "used": 296,
+      "usage_ratio": 0.578125,
+      "entropy_bits": 7.49203380437757,
+      "perplexity": 180.02254772140614,
+      "top1_frac": 0.01051889618445606,
+      "top5_frac": 0.05137499253541218,
+      "top20_frac": 0.19496009360681463
+    },
+    "s16_g14": {
+      "total": 90560928,
+      "used": 345,
+      "usage_ratio": 0.673828125,
+      "entropy_bits": 7.865640965278212,
+      "perplexity": 233.23507682797384,
+      "top1_frac": 0.007268012977958883,
+      "top5_frac": 0.0352952323986786,
+      "top20_frac": 0.13538085652125825
+    },
+    "s16_g15": {
+      "total": 90560928,
+      "used": 1,
+      "usage_ratio": 0.001953125,
+      "entropy_bits": -0.0,
+      "perplexity": 1.0,
+      "top1_frac": 1.0,
+      "top5_frac": 1.0,
+      "top20_frac": 1.0
+    }
+  }
+}

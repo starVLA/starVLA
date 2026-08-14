@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 from typing import Any
 import warnings
@@ -105,6 +106,10 @@ class VARStage2TokenDataset(Dataset):
             raise ValueError(f"Action horizon mismatch: dataset={dataset_spec.horizon}, artifact={artifact_spec.horizon}")
         if dataset_spec.action_keys != artifact_spec.action_keys:
             raise ValueError(f"Action key mismatch: dataset={dataset_spec.action_keys}, artifact={artifact_spec.action_keys}")
+        dataset_mode = str((dataset_spec.metadata or {}).get("action_mode", "abs") or "abs")
+        artifact_mode = str((artifact_spec.metadata or {}).get("action_mode", "abs") or "abs")
+        if dataset_mode != artifact_mode:
+            raise ValueError(f"Action mode mismatch: dataset={dataset_mode}, artifact={artifact_mode}")
 
     @property
     def action_spec(self):
@@ -129,11 +134,20 @@ class VARStage2TokenDataset(Dataset):
         if not cache_path.exists():
             raise FileNotFoundError(f"Stage 2 token cache not found: {cache_path}")
         try:
-            cache = torch.load(cache_path, map_location="cpu", weights_only=False)
+            # Token caches can be tens of GiB. Mapping their tensor storages keeps
+            # multi-rank jobs from materializing one full private copy per rank.
+            cache = torch.load(cache_path, map_location="cpu", weights_only=False, mmap=True)
         except TypeError:
             cache = torch.load(cache_path, map_location="cpu")
         if not isinstance(cache, dict):
             raise ValueError(f"Expected token cache to be a dict, got {type(cache).__name__}.")
+        # The cache builder records one metadata dict per source window, but the
+        # Stage 2 dataset resolves sample metadata from the source dataset and
+        # never consumes this list. Release it immediately after deserialization.
+        sample_metadata = cache.pop("sample_metadata", None)
+        if sample_metadata is not None:
+            del sample_metadata
+            gc.collect()
         cache["path"] = str(cache_path)
         return cache
 

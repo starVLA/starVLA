@@ -8,6 +8,7 @@ StarVLA data config and transform stack.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,14 @@ def _as_data_cfg(config_or_data_cfg: Any) -> Any:
     if hasattr(config_or_data_cfg, "datasets"):
         return config_or_data_cfg.datasets.vla_data
     return config_or_data_cfg
+
+
+def _to_plain_container(value: Any) -> Any:
+    if value is None:
+        return None
+    if OmegaConf.is_config(value):
+        return OmegaConf.to_container(value, resolve=True)
+    return value
 
 
 def _get_expected_action_horizon(config_or_data_cfg: Any) -> int | None:
@@ -60,6 +69,66 @@ def _to_numpy_action(action: Any) -> np.ndarray:
 
 def _is_abs_action_mode(dataset: Any) -> bool:
     return getattr(dataset, "_action_mode", "abs") in (None, "abs")
+
+
+def _trajectory_data_exists(dataset: Any, trajectory_id: int) -> bool:
+    """Return whether an eagerly enumerated LeRobot v2.0 trajectory file exists.
+
+    For dataset versions or implementations we do not recognize, return True so
+    the normal dataset reader remains the source of truth.
+    """
+
+    if getattr(dataset, "_lerobot_version", None) != "v2.0":
+        return True
+
+    dataset_path = getattr(dataset, "dataset_path", None)
+    data_path_pattern = getattr(dataset, "data_path_pattern", None)
+    get_episode_chunk = getattr(dataset, "get_episode_chunk", None)
+    if dataset_path is None or data_path_pattern is None or get_episode_chunk is None:
+        return True
+
+    try:
+        trajectory_id = int(trajectory_id)
+        chunk_index = get_episode_chunk(trajectory_id)
+        parquet_path = Path(dataset_path) / str(data_path_pattern).format(
+            episode_chunk=chunk_index,
+            episode_index=trajectory_id,
+        )
+    except Exception:
+        return True
+    return parquet_path.exists()
+
+
+def _libero_task_metadata(dataset: Any, base_index: int) -> dict[str, Any]:
+    """Extract stable task-level identifiers from the already loaded trajectory."""
+
+    trajectory_data = getattr(dataset, "curr_traj_data", None)
+    if trajectory_data is None or "task_index" not in trajectory_data.columns:
+        return {}
+
+    row_index = min(max(int(base_index), 0), len(trajectory_data) - 1)
+    task_index = int(trajectory_data["task_index"].iloc[row_index])
+    dataset_name = str(getattr(dataset, "dataset_name", "unknown"))
+    suite_name = dataset_name.rsplit("/", 1)[-1]
+    for suffix in ("_no_noops_1.0.0_lerobot", "_1.0.0_lerobot", "_lerobot"):
+        if suite_name.endswith(suffix):
+            suite_name = suite_name[: -len(suffix)]
+            break
+
+    result: dict[str, Any] = {
+        "suite_name": suite_name,
+        "task_index": task_index,
+        "task_name": f"{suite_name}::task_{task_index:02d}",
+    }
+    tasks = getattr(dataset, "tasks", None)
+    try:
+        task_row = tasks.loc[task_index]
+        description = task_row["task"] if hasattr(task_row, "__getitem__") else None
+        if description is not None:
+            result["task_description"] = str(description)
+    except Exception:
+        pass
+    return result
 
 
 class VARStage1ActionDataset(Dataset):
@@ -123,6 +192,11 @@ class VARStage1ActionDataset(Dataset):
     def _build_action_spec(self) -> ActionSpec:
         robot_type = self._first_robot_type()
         data_config = ROBOT_TYPE_CONFIG_MAP[robot_type]
+        action_mode = self.data_cfg.get("action_mode", "abs")
+        if action_mode is None:
+            action_mode = "abs"
+        action_mode_apply_keys = _to_plain_container(self.data_cfg.get("action_mode_apply_keys", None))
+        action_mode_state_map = _to_plain_container(self.data_cfg.get("action_mode_state_map", None)) or {}
         return ActionSpec.from_data_config(
             data_config,
             action_dim=self.expected_action_dim,
@@ -135,6 +209,9 @@ class VARStage1ActionDataset(Dataset):
                 "mode": self.mode,
                 "expected_action_horizon": self.expected_action_horizon,
                 "expected_action_dim": self.expected_action_dim,
+                "action_mode": str(action_mode),
+                "action_mode_apply_keys": action_mode_apply_keys,
+                "action_mode_state_map": action_mode_state_map,
             },
         )
 
@@ -147,14 +224,28 @@ class VARStage1ActionDataset(Dataset):
         """Enumerate every non-padded action window in the source mixture."""
 
         windows: list[tuple[int, int, int]] = []
+        skipped_missing: dict[str, int] = {}
         horizon = int(self.action_spec.horizon)
         for dataset_index, dataset in enumerate(self.source_dataset.datasets):
             for trajectory_id, trajectory_length in zip(dataset.trajectory_ids, dataset.trajectory_lengths):
+                if not _trajectory_data_exists(dataset, int(trajectory_id)):
+                    dataset_name = str(getattr(dataset, "dataset_name", dataset_index))
+                    skipped_missing[dataset_name] = skipped_missing.get(dataset_name, 0) + 1
+                    continue
                 max_start = int(trajectory_length) - horizon + 1
                 if max_start <= 0:
                     continue
                 for base_index in range(max_start):
                     windows.append((dataset_index, int(trajectory_id), base_index))
+        if skipped_missing:
+            skipped_summary = ", ".join(
+                f"{dataset_name}: {count}" for dataset_name, count in sorted(skipped_missing.items())
+            )
+            warnings.warn(
+                "Skipped missing trajectory parquet files while building full windows: "
+                f"{skipped_summary}.",
+                RuntimeWarning,
+            )
         if not windows:
             raise RuntimeError(
                 f"No complete action windows found for horizon={horizon}. "
@@ -172,6 +263,7 @@ class VARStage1ActionDataset(Dataset):
 
     def _get_action_only_data(self, dataset: Any, trajectory_id: int, base_index: int) -> dict[str, Any]:
         dataset.curr_traj_data = dataset.get_trajectory_data(trajectory_id)
+        dataset.curr_traj_id = trajectory_id
         data: dict[str, Any] = {}
 
         for action_key in dataset.modality_keys["action"]:
@@ -215,6 +307,7 @@ class VARStage1ActionDataset(Dataset):
             "base_index": int(base_index),
             "window_mode": self.window_mode,
         }
+        metadata.update(_libero_task_metadata(dataset, base_index))
         if dataset_index is not None:
             metadata["dataset_index"] = int(dataset_index)
         return action, raw_action, metadata

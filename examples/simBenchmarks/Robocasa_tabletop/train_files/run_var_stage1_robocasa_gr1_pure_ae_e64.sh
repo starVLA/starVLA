@@ -8,4 +8,4 @@ export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 
 "${PYTHON_BIN}" starVLA/training/train_var_stage1.py \
-  --config_yaml examples/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_pure_ae_e64.yaml
+  --config_yaml examples/simBenchmarks/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_pure_ae_e64.yaml

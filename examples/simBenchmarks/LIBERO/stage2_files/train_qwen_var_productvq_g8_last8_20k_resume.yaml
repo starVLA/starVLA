@@ -1,0 +1,67 @@
+run_id: qwen_var_productvq_g8_stage2_last8_20k_fullcache
+run_root_dir: playground/Checkpoints
+seed: 42
+wandb_entity: smap
+wandb_project: starVLA_Libero
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: QwenVAR
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct-VARAction
+    attn_implementation: flash_attention_2
+  stage1_tokenizer:
+    artifact: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g8/best_recon.ckpt
+    stage1_config: examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero_q99_e32_aeinit_productvq_g8.yaml
+    freeze: true
+    token_cache: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g8/stage2_token_cache_full.pt
+  action_token_text:
+    prefix: "<var_action_"
+    suffix: ">"
+  labeling:
+    mask_strategy: qwenfast
+  generation:
+    constrain_to_action_tokens: false
+    do_sample: false
+    max_length: 2048
+
+datasets:
+  vla_data:
+    dataset_py: var_stage2_token_dataset
+    data_mix: libero_all_q99
+    per_device_batch_size: 1
+    num_workers: 4
+    shuffle: true
+    mode: train
+    window_mode: full
+    skip_bad_samples: true
+    max_read_retries: 16
+
+trainer:
+  pretrained_checkpoint: playground/Checkpoints/qwen_var_productvq_g8_stage2_warmup_2k_fullcache/checkpoints/steps_2000_pytorch_model.pt
+  is_resume: true
+  max_train_steps: 20000
+  num_warmup_steps: 1000
+  save_interval: 2000
+  eval_interval: 100000
+  learning_rate:
+    base: 5.0e-06
+    qwen_vl_interface: 5.0e-06
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 5.0e-07
+  freeze_modules: qwen_vl_interface.model.model.visual,qwen_vl_interface.model.model.language_model.layers.0,qwen_vl_interface.model.model.language_model.layers.1,qwen_vl_interface.model.model.language_model.layers.2,qwen_vl_interface.model.model.language_model.layers.3,qwen_vl_interface.model.model.language_model.layers.4,qwen_vl_interface.model.model.language_model.layers.5,qwen_vl_interface.model.model.language_model.layers.6,qwen_vl_interface.model.model.language_model.layers.7,qwen_vl_interface.model.model.language_model.layers.8,qwen_vl_interface.model.model.language_model.layers.9,qwen_vl_interface.model.model.language_model.layers.10,qwen_vl_interface.model.model.language_model.layers.11,qwen_vl_interface.model.model.language_model.layers.12,qwen_vl_interface.model.model.language_model.layers.13,qwen_vl_interface.model.model.language_model.layers.14,qwen_vl_interface.model.model.language_model.layers.15,qwen_vl_interface.model.model.language_model.layers.16,qwen_vl_interface.model.model.language_model.layers.17,qwen_vl_interface.model.model.language_model.layers.18,qwen_vl_interface.model.model.language_model.layers.19,qwen_vl_interface.model.model.language_model.layers.20,qwen_vl_interface.model.model.language_model.layers.21,qwen_vl_interface.model.model.language_model.layers.22,qwen_vl_interface.model.model.language_model.layers.23,qwen_vl_interface.model.model.language_model.layers.24,qwen_vl_interface.model.model.language_model.layers.25,qwen_vl_interface.model.model.language_model.layers.26,qwen_vl_interface.model.model.language_model.layers.27,qwen_vl_interface.model.model.language_model.norm
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 10
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

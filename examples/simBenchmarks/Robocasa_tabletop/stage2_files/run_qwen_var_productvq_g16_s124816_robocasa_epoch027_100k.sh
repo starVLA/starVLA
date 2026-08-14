@@ -9,20 +9,24 @@ if [[ ! -f "${TOKEN_CACHE}" ]]; then
   exit 1
 fi
 
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2,3,4,5}"
+PYTHON_BIN="${PYTHON_BIN:-$(pwd)/.venv/bin/python}"
+export PATH="$(pwd)/.venv/bin:${PATH}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
-export WANDB_MODE="${WANDB_MODE:-disabled}"
+export WANDB_MODE="${WANDB_MODE:-online}"
+export WANDB_API_KEY="${WANDB_API_KEY:-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}"
 export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
-RUN_DIR="playground/Checkpoints/qwen_var_productvq_g16_s124816_robocasa_epoch027_100k_fullcache"
+RUN_DIR="/root/nas/feihong/starVLA/Checkpoints/qwen_var_productvq_g16_s124816_robocasa_epoch027_100k_fullcache"
 mkdir -p "${RUN_DIR}"
 
 LOG_FILE="${RUN_DIR}/train.log"
 
-ACCELERATE_BIN="${ACCELERATE_BIN:-accelerate}"
-"${ACCELERATE_BIN}" launch \
-  --num_processes "${NUM_PROCESSES:-4}" \
+"${PYTHON_BIN}" -m accelerate.commands.launch \
+  --num_processes "${NUM_PROCESSES:-8}" \
+  --mixed_precision "${MIXED_PRECISION:-bf16}" \
   --main_process_port "${MAIN_PROCESS_PORT:-29553}" \
   starVLA/training/train_starvla.py \
-  --config_yaml examples/Robocasa_tabletop/stage2_files/train_qwen_var_productvq_g16_s124816_robocasa_epoch027_100k.yaml \
+  --config_yaml examples/simBenchmarks/Robocasa_tabletop/stage2_files/train_qwen_var_productvq_g16_s124816_robocasa_epoch027_100k.yaml \
   2>&1 | tee -a "${LOG_FILE}"

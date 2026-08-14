@@ -35,7 +35,7 @@ class QwenVARDefaultConfig:
     stage1_tokenizer: dict = field(
         default_factory=lambda: {
             "artifact": "playground/Checkpoints/var_stage1_pi05_libero/best_recon.ckpt",
-            "stage1_config": "examples/LIBERO/train_files/train_var_stage1_pi05_libero.yaml",
+            "stage1_config": "examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero.yaml",
             "freeze": True,
             "token_cache": None,
         }

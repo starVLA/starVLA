@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
 METAWORLD_PYTHON="${METAWORLD_PYTHON:-python}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-10095}"

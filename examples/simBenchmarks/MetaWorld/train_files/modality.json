@@ -1,0 +1,56 @@
+{
+    "state": {
+        "joint_pos_x": {
+            "original_key": "observation.state",
+            "start": 0,
+            "end": 1
+        },
+        "joint_pos_y": {
+            "original_key": "observation.state",
+            "start": 1,
+            "end": 2
+        },
+        "joint_pos_z": {
+            "original_key": "observation.state",
+            "start": 2,
+            "end": 3
+        },
+        "gripper": {
+            "original_key": "observation.state",
+            "start": 3,
+            "end": 4
+        }
+    },
+    "action": {
+        "delta_x": {
+            "original_key": "action",
+            "start": 0,
+            "end": 1
+        },
+        "delta_y": {
+            "original_key": "action",
+            "start": 1,
+            "end": 2
+        },
+        "delta_z": {
+            "original_key": "action",
+            "start": 2,
+            "end": 3
+        },
+        "gripper": {
+            "original_key": "action",
+            "start": 3,
+            "end": 4
+        }
+    },
+    "video": {
+        "primary_image": {
+            "original_key": "observation.image"
+        }
+    },
+    "annotation": {
+        "human.action.task_description": {
+            "original_key": "task_index"
+        }
+    }
+}

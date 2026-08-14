@@ -83,13 +83,14 @@ class ModelClient:
         self.task_description = task_description
         self.raw_actions = None
 
-    def step(self, image: np.ndarray, prompt: str, step: int = 0) -> np.ndarray:
+    def step(self, image: np.ndarray, prompt: str, step: int = 0, state: Optional[Sequence[float]] = None) -> np.ndarray:
         """One env step.
 
         Args:
             image: Preprocessed RGB uint8 HWC image (224x224x3).
             prompt: Task language instruction.
             step: Env step counter; used for chunk caching.
+            state: Current raw MetaWorld proprio state, expected obs[:4] = [x, y, z, gripper].
 
         Returns:
             4-D action ``np.ndarray`` of shape ``(4,)`` (xyz + gripper).
@@ -100,6 +101,8 @@ class ModelClient:
         # Refresh chunk if needed.
         if step % self.action_chunk_size == 0 or self.raw_actions is None:
             example = {"image": [image], "lang": prompt}
+            if state is not None:
+                example["state"] = np.asarray(state, dtype=np.float32).reshape(1, -1)[:, :4]
             vla_input = {
                 "examples": [example],
                 "unnorm_key": self.unnorm_key,

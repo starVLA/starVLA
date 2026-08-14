@@ -204,7 +204,7 @@ def eval_metaworld(args: Args) -> None:
                     img_rgb = preprocess_metaworld_image(sub_env.render())
                     replay_images.append(img_rgb)
 
-                    action = client.step(image=img_rgb, prompt=prompt, step=step)
+                    action = client.step(image=img_rgb, prompt=prompt, step=step, state=np.asarray(obs)[:4])
                     action = np.clip(action, sub_env.action_space.low, sub_env.action_space.high)
                     obs, _, terminated, truncated, info = sub_env.step(action)
                     step += 1

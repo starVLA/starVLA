@@ -23,5 +23,5 @@ LOG_FILE="${RUN_DIR}/train.log"
   --num_processes "${NUM_PROCESSES:-4}" \
   --main_process_port "${MAIN_PROCESS_PORT:-29552}" \
   starVLA/training/train_starvla.py \
-  --config_yaml examples/Robocasa_tabletop/stage2_files/train_qwen_var_productvq_g16_s124816_robocasa_epoch027_smoke.yaml \
+  --config_yaml examples/simBenchmarks/Robocasa_tabletop/stage2_files/train_qwen_var_productvq_g16_s124816_robocasa_epoch027_smoke.yaml \
   2>&1 | tee -a "${LOG_FILE}"
