@@ -403,7 +403,7 @@ The codebase was originally forked from [InternVLA-M1](https://github.com/Intern
 ## Star History
 Here's how our community has grown over time:
 
-[![Star History Chart](https://api.star-history.com/svg?repos=starVLA/starVLA&type=date&legend=bottom-right)](https://www.star-history.com/#starVLA/starVLA&type=date&legend=bottom-right)
+[![Star History Chart](https://star-history.dera.page/svg?repos=starVLA/starVLA&type=date&legend=bottom-right)](https://star-history.dera.page/#starVLA/starVLA&type=date&legend=bottom-right)
 
 
 <!-- *Chart updates automatically. Click to interact with the full timeline.* -->
