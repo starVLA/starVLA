@@ -1591,8 +1591,8 @@ class LeRobotSingleDataset(Dataset):
                 video_file_index = episode_meta["data/file_index"]
             video_filename = self.video_path_pattern.format(
                 video_key=original_key,
-                chunk_index=episode_meta["data/chunk_index"],
-                file_index=episode_meta["data/file_index"],
+                chunk_index=video_chunk_index,
+                file_index=video_file_index
             )
         return self.dataset_path / video_filename
 
