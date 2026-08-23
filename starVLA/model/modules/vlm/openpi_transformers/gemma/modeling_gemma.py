@@ -39,7 +39,17 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import TransformersKwargs, auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
-from transformers.utils.generic import check_model_inputs
+
+try:
+    from transformers.utils.generic import check_model_inputs
+except ImportError:
+    from transformers.utils.generic import merge_with_config_defaults
+    from transformers.utils.output_capturing import capture_outputs
+
+    def check_model_inputs(forward):
+        return merge_with_config_defaults(capture_outputs(forward))
+
+
 from .configuration_gemma import GemmaConfig
 
 
@@ -110,11 +120,23 @@ class GemmaRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        if self.rope_type == "default":
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS.get("default", self.compute_default_rope_parameters)
+        else:
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(config: GemmaConfig, device=None, seq_len=None):
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * getattr(config, "partial_rotary_factor", 1.0))
+        inv_freq = 1.0 / (
+            config.rope_theta ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, 1.0
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -412,11 +434,14 @@ class GemmaModel(GemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        # Transformers 5 renamed `input_embeds` to `inputs_embeds`, and later
+        # made the cache arguments keyword-only. Keep the renamed input
+        # positional while spelling out the stable cache argument names.
         causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
+            self.config,
+            inputs_embeds,
+            attention_mask,
+            cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -448,7 +473,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
 @auto_docstring
 class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
