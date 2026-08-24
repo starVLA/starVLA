@@ -19,6 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 from typing import Callable, Optional, Union
 
 import torch
@@ -41,16 +42,19 @@ from transformers.utils import TransformersKwargs, auto_docstring, can_return_tu
 from transformers.utils.deprecation import deprecate_kwarg
 
 try:
-    from transformers.utils.generic import check_model_inputs
-except ImportError:
     from transformers.utils.generic import merge_with_config_defaults
     from transformers.utils.output_capturing import capture_outputs
+except ImportError:
+    from transformers.utils.generic import check_model_inputs
+else:
 
     def check_model_inputs(forward):
         return merge_with_config_defaults(capture_outputs(forward))
 
 
 from .configuration_gemma import GemmaConfig
+
+_CREATE_CAUSAL_MASK_SUPPORTS_CACHE_POSITION = "cache_position" in inspect.signature(create_causal_mask).parameters
 
 
 class GemmaRMSNorm(nn.Module):
@@ -434,16 +438,19 @@ class GemmaModel(GemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # Transformers 5 renamed `input_embeds` to `inputs_embeds`, and later
-        # made the cache arguments keyword-only. Keep the renamed input
-        # positional while spelling out the stable cache argument names.
+        # Transformers 5 renamed `input_embeds` to `inputs_embeds`, made the
+        # cache arguments keyword-only, and later removed `cache_position`.
+        causal_mask_kwargs = {
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        if _CREATE_CAUSAL_MASK_SUPPORTS_CACHE_POSITION:
+            causal_mask_kwargs["cache_position"] = cache_position
         causal_mask = create_causal_mask(
             self.config,
             inputs_embeds,
             attention_mask,
-            cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
+            **causal_mask_kwargs,
         )
 
         # embed positions
