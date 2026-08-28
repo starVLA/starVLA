@@ -7,6 +7,7 @@ A lightweight implementation that Qwen2.5-vl + Flow-matching head to directly pr
 Flow-matching header is copyright from GR00T N1.5, but a sample MoE inspired by PI_0
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -164,13 +165,45 @@ class Qwen_PI(baseframework):
         # only ever read `action_horizon` here.
         self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
+    @classmethod
+    def build_collate(cls, cfg):
+        # Only backends whose processor path is equivalence-verified against
+        # the in-forward tokenization (token-exact tests) are eligible;
+        # currently that is Qwen3.5 only.
+        base_vlm = cfg.framework.qwenvl.base_vlm
+        if "Qwen3.5" not in base_vlm:
+            return None
+        from starVLA.model.framework.VLM4A.qwenpi_collate import QwenPIPreprocessCollate
+
+        vla = cfg.datasets.vla_data
+        return QwenPIPreprocessCollate(
+            base_vlm=base_vlm,
+            cot_prompt=vla.get("CoT_prompt", None) if "CoT_prompt" in vla else None,
+            pad_to=vla.get("collate_pad_to", 0),
+            obs_image_size=vla.get("obs_image_size", None),
+        )
+
+    @staticmethod
+    def _is_prepared_batch(examples) -> bool:
+        """True for a batch preprocessed by the DataLoader collate."""
+        return isinstance(examples, Mapping) and "input_ids" in examples
+
+    def _unpack_prepared_batch(self, examples):
+        """Move a prepared batch to the model device; returns (qwen_inputs, actions, state)."""
+        device = next(self.qwen_vl_interface.model.parameters()).device
+        batch = {k: v.to(device, non_blocking=True) for k, v in examples.items()}
+        actions = batch.pop("action", None)
+        state = batch.pop("state", None)
+        return batch, actions, state
+
     def _encode_vl_hidden_states(
-        self, batch_images: List, instructions: List[str]
+        self, batch_images: List = None, instructions: List[str] = None, qwen_inputs: dict = None
     ) -> tuple:
         """Run QwenVL and return (layer-wise hidden states, attention_mask) for the Action DiT."""
-        qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
-            images=batch_images, instructions=instructions
-        )
+        if qwen_inputs is None:
+            qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(
+                images=batch_images, instructions=instructions
+            )
         attention_mask = qwen_inputs.get("attention_mask", None)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
@@ -198,22 +231,26 @@ class Qwen_PI(baseframework):
             dict:
                 action_loss (torch.Tensor): Scalar diffusion noise prediction loss.
         """
-        batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
-        instructions = [example["lang"] for example in examples]  # [B, str]
-        actions = [example["action"] for example in examples]  # label [B, len, 7]
+        if self._is_prepared_batch(examples):
+            batch, actions, state = self._unpack_prepared_batch(examples)
+            vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(qwen_inputs=batch)
+        else:
+            batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
+            instructions = [example["lang"] for example in examples]  # [B, str]
+            actions = [example["action"] for example in examples]  # label [B, len, 7]
 
-        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+            state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        # Step 1: encode through QwenVL
-        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
+            # Step 1: encode through QwenVL
+            vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
 
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             # Label alignment: take the last chunk_len segment
-            actions = torch.tensor(
-                np.array(actions), device=base_hidden.device, dtype=base_hidden.dtype
-            )  # [B, T_full, action_dim]
+            if not torch.is_tensor(actions):
+                actions = torch.tensor(np.array(actions))
+            actions = actions.to(device=base_hidden.device, dtype=base_hidden.dtype)  # [B, T_full, action_dim]
             actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
             repeated_diffusion_steps = (
@@ -232,7 +269,9 @@ class Qwen_PI(baseframework):
 
             state_repeated = None
             if state is not None:
-                state = torch.tensor(np.array(state), device=base_hidden.device, dtype=base_hidden.dtype)
+                if not torch.is_tensor(state):
+                    state = torch.tensor(np.array(state))
+                state = state.to(device=base_hidden.device, dtype=base_hidden.dtype)
                 state_repeated = state.repeat(repeated_diffusion_steps, 1, 1)
 
             action_loss = self.action_model(
@@ -262,29 +301,31 @@ class Qwen_PI(baseframework):
             dict:
                 normalized_actions (np.ndarray): Shape [B, T, action_dim], diffusion-sampled normalized actions.
         """
-        if type(examples) is not list:
-            examples = [examples]
+        if self._is_prepared_batch(examples):
+            batch, _, state = self._unpack_prepared_batch(examples)
+            vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(qwen_inputs=batch)
+        else:
+            if type(examples) is not list:
+                examples = [examples]
 
-        batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
-        instructions = [example["lang"] for example in examples]  # [B, str]
+            batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
+            instructions = [example["lang"] for example in examples]  # [B, str]
 
-        state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
+            state = [example["state"] for example in examples] if "state" in examples[0] else None  # [B, 1, state_dim]
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
-        if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+            train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
+            if train_obs_image_size:
+                batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
-        # Step 1: encode through QwenVL
-        vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
+            # Step 1: encode through QwenVL
+            vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
         base_hidden = vl_embs_list[-1]
         if backbone_attention_mask is not None:
             backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
 
-        state = (
-            torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
-            if state is not None
-            else None
-        )
+        if state is not None and not torch.is_tensor(state):
+            state = torch.from_numpy(np.array(state))
+        state = state.to(base_hidden.device, dtype=base_hidden.dtype) if state is not None else None
         # Step 4: Action Expert Forward and Loss
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action(
@@ -325,29 +366,38 @@ class Qwen_PI(baseframework):
         if prev_action_chunk_normalized is None or inference_delay <= 0:
             return self.predict_action(examples)
 
-        if type(examples) is not list:
-            examples = [examples]
+        if self._is_prepared_batch(examples):
+            batch, _, state_t = self._unpack_prepared_batch(examples)
+            vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(qwen_inputs=batch)
+            base_hidden = vl_embs_list[-1]
+            state_t = state_t.to(base_hidden.device, dtype=base_hidden.dtype) if state_t is not None else None
+        else:
+            if type(examples) is not list:
+                examples = [examples]
 
-        batch_images = [to_pil_preserve(example["image"]) for example in examples]
-        instructions = [example["lang"] for example in examples]
-        state = [example["state"] for example in examples] if "state" in examples[0] else None
+            batch_images = [to_pil_preserve(example["image"]) for example in examples]
+            instructions = [example["lang"] for example in examples]
+            state = [example["state"] for example in examples] if "state" in examples[0] else None
 
-        train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
-        if train_obs_image_size:
-            batch_images = resize_images(batch_images, target_size=train_obs_image_size)
+            train_obs_image_size = getattr(self.config.datasets.vla_data, "obs_image_size", None)
+            if train_obs_image_size:
+                batch_images = resize_images(batch_images, target_size=train_obs_image_size)
 
-        vl_embs_list, _ = self._encode_vl_hidden_states(batch_images, instructions)
-        base_hidden = vl_embs_list[-1]
+            vl_embs_list, backbone_attention_mask = self._encode_vl_hidden_states(batch_images, instructions)
+            base_hidden = vl_embs_list[-1]
 
-        state_t = (
-            torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
-            if state is not None
-            else None
-        )
+            state_t = (
+                torch.from_numpy(np.array(state)).to(base_hidden.device, dtype=base_hidden.dtype)
+                if state is not None
+                else None
+            )
 
         prev_chunk_t = torch.from_numpy(np.array(prev_action_chunk_normalized)).to(
             base_hidden.device, dtype=torch.float32
         )
+
+        if backbone_attention_mask is not None:
+            backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
 
         with torch.autocast("cuda", dtype=torch.float32):
             pred_actions = self.action_model.predict_action_realtime(
@@ -355,6 +405,7 @@ class Qwen_PI(baseframework):
                 state_t,
                 prev_action_chunk=prev_chunk_t,
                 inference_delay=inference_delay,
+                encoder_attention_mask=backbone_attention_mask,
                 **kwargs,
             )
 

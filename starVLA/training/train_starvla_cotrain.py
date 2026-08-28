@@ -332,7 +332,10 @@ class VLAMTrainer(TrainerUtils):
         """Evaluate action prediction with current model."""
         if self.accelerator.is_main_process:
             examples, _ = self._get_next_batch()
-            actions = [example["action"] for example in examples]
+            if isinstance(examples, dict) and "input_ids" in examples:
+                actions = examples["action"].cpu().numpy()
+            else:
+                actions = [example["action"] for example in examples]
 
             output_dict = self.accelerator.unwrap_model(self.model).predict_action(examples=examples)
             normalized_actions = output_dict["normalized_actions"]

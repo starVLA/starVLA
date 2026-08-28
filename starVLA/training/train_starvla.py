@@ -373,7 +373,10 @@ class VLATrainer(TrainerUtils):
     def eval_action_model(self, step_metrics: dict = None) -> float:
         """Run simple action-eval on current batch and attach score to metrics."""
         examples = self._get_next_batch()
-        actions = [example["action"] for example in examples]
+        if isinstance(examples, dict) and "input_ids" in examples:
+            actions = examples["action"].cpu().numpy()
+        else:
+            actions = [example["action"] for example in examples]
         output_dict = self.accelerator.unwrap_model(self.model).predict_action(
             examples=examples, use_ddim=True, num_ddim_steps=20
         )

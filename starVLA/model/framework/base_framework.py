@@ -124,6 +124,13 @@ def build_framework(cfg): # The single entry point for building different model 
 
 
 class baseframework(PreTrainedModel):
+
+    @classmethod
+    def build_collate(cls, cfg):
+        """Optional DataLoader collate producing batches this framework's
+        forward can consume directly (CPU preprocessing moved into workers).
+        Return None (default) to keep the raw-example collate."""
+        return None
     """
     Lightweight base class for higher-level VLA model assemblies.
     Subclasses are expected to:

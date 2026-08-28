@@ -35,6 +35,10 @@ _ACTION_TOKEN_MAX = (
 import torch.nn as nn
 
 
+
+from starVLA.model.modules.vlm.qwenvl_messages import build_qwenvl_messages
+
+
 class _QWen3_5_VL_Interface(nn.Module):
     """
     This exists because of the diversity of VLMs, so we encapsulate the changes here.
@@ -124,26 +128,8 @@ class _QWen3_5_VL_Interface(nn.Module):
         Build model inputs from raw data (images + instructions + optional solutions).
         Follow Oficial Qwen3.5-VL Instruct format: https://huggingface.co/Qwen/Qwen3.5-VL-4B-Instruct
         """
-
-        # Create messages: one message per sample
-        messages = []
-        assert len(images) == len(instructions), "Images and instructions must have the same length"
-        for imgs, instruction in zip(images, instructions):
-            content = [{"type": "image", "image": img} for img in imgs]
-
-            if "CoT_prompt" in self.config.datasets.vla_data:  # If using a grounding prompt to task
-                CoT_prompt = self.config.datasets.vla_data.get("CoT_prompt", "")
-                prompt = CoT_prompt.replace("{instruction}", instruction)
-            else:
-                prompt = instruction
-
-            content.append({"type": "text", "text": prompt})
-            msg = [{"role": "user", "content": content}]
-
-            if solutions is not None:
-                solution = solutions[len(messages)]
-                msg.append({"role": "assistant", "content": [{"type": "text", "text": solution}]})
-            messages.append(msg)
+        cot_prompt = self.config.datasets.vla_data.get("CoT_prompt", "") if "CoT_prompt" in self.config.datasets.vla_data else None
+        messages = build_qwenvl_messages(images, instructions, cot_prompt, solutions=solutions)
 
         # Preparation for inference
 

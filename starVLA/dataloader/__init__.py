@@ -45,9 +45,25 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
         )
         num_workers = int(vla_dataset_cfg.get("num_workers", 4))
+        batch_collate = collate_fn
+        if bool(vla_dataset_cfg.get("preprocess_in_collate", False)):
+            # Ask the framework for its preprocessing collate (CPU work moves
+            # into DataLoader workers). Frameworks opt in by overriding
+            # baseframework.build_collate; everything else keeps raw examples.
+            from starVLA.model.framework.base_framework import _auto_import_framework_modules
+            from starVLA.model.tools import FRAMEWORK_REGISTRY
+
+            _auto_import_framework_modules()
+            batch_collate = FRAMEWORK_REGISTRY[cfg.framework.name].build_collate(cfg)
+            if batch_collate is None:
+                raise ValueError(
+                    f"datasets.vla_data.preprocess_in_collate is not supported by framework "
+                    f"{cfg.framework.name!r} with this configuration (no build_collate implementation "
+                    "or an unverified VLM backend); remove the flag or use a supported setup"
+                )
         dataloader_kwargs = {
             "batch_size": cfg.datasets.vla_data.per_device_batch_size,
-            "collate_fn": collate_fn,
+            "collate_fn": batch_collate,
             "num_workers": num_workers,
             "pin_memory": bool(vla_dataset_cfg.get("pin_memory", True)),
             # shuffle=True
