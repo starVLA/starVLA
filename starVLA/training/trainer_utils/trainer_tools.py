@@ -5,21 +5,37 @@ Utility classes defining a Metrics container and multiple Trackers to enable mod
 endpoints (e.g., JSONL local logs, Weights & Biases).
 """
 
-from typing import Tuple
-import re
 import json
+import os
+import re
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.distributed as dist
-from transformers import get_scheduler
-
+from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
+from transformers import get_scheduler
 
 logger = get_logger(__name__)
 
 
 def _dist_rank() -> int:
     return dist.get_rank() if dist.is_initialized() else 0
+
+
+def build_accelerator(cfg) -> Accelerator:
+    deepspeed_plugin = (
+        None
+        if os.environ.get("STARVLA_DISABLE_DEEPSPEED") == "1"
+        else DeepSpeedPlugin(gradient_clipping=cfg.trainer.gradient_clipping)
+    )
+    accelerator = Accelerator(
+        gradient_accumulation_steps=cfg.trainer.gradient_accumulation_steps,
+        deepspeed_plugin=deepspeed_plugin,
+    )
+    accelerator.print(accelerator.state)
+    return accelerator
 
 
 # === Define Tracker Interface ===
@@ -537,8 +553,6 @@ class TrainerUtils:
         latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
         return latest_checkpoint_path, completed_steps
-
-import os
 
 
 def is_main_process():
