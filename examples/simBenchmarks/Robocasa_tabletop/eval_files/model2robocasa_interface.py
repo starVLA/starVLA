@@ -1,4 +1,5 @@
 from collections import deque
+import os
 from typing import Dict, Optional, Sequence
 
 import cv2 as cv
@@ -50,6 +51,7 @@ class PolicyWarper:
         self.sticky_gripper_action = 0.0
         self.previous_gripper_action = None
         self.n_action_steps = n_action_steps
+        self._step_count = 0
 
         self.task_description = None
         self.image_history = deque(maxlen=self.horizon)
@@ -140,7 +142,7 @@ class PolicyWarper:
             state["right_hand"] = observations["state.right_hand"]  # (N, 1, 6)
             state["waist"] = observations["state.waist"]  # (N, 1, 3)
 
-            state = self.normalize_state(state)
+            # The policy server applies the training-time state transform and normalization.
             input_state = []
             for key in state.keys():
                 input_state.append(state[key])
@@ -154,7 +156,7 @@ class PolicyWarper:
 
         images = [[self._resize_image(img) for img in sample] for sample in images]  # (B, N_view, H, W, 3)
         if input_state is not None:
-            input_state = [input_s for input_s in input_state]  # B, state_dim*(sin, cos)
+            input_state = [input_s for input_s in input_state]  # B, raw state_dim
 
         # prepare vla input
         examples = []
@@ -208,6 +210,35 @@ class PolicyWarper:
             "action.right_hand": raw_actions[:, : self.n_action_steps, 20:26],  # (B, n_action_steps, 6)
             "action.waist": raw_actions[:, : self.n_action_steps, 26:29],  # (B, n_action_steps, 3)
         }
+
+        self._step_count += 1
+        stats_every = int(os.environ.get("ROBOCASA_ACTION_STATS_EVERY", "0") or 0)
+        if stats_every > 0 and self._step_count % stats_every == 0:
+            state_stats = None
+            if input_state is not None:
+                state_arr = np.asarray(input_state, dtype=np.float32)
+                state_stats = {
+                    "shape": list(state_arr.shape),
+                    "min": float(np.nanmin(state_arr)),
+                    "max": float(np.nanmax(state_arr)),
+                    "mean": float(np.nanmean(state_arr)),
+                }
+            key_stats = {
+                key: {
+                    "shape": list(value.shape),
+                    "min": float(np.nanmin(value)),
+                    "max": float(np.nanmax(value)),
+                    "mean": float(np.nanmean(value)),
+                }
+                for key, value in raw_action.items()
+            }
+            print(
+                f"ROBOCASA_ACTION_STATS step={self._step_count} lang={self.task_description!r} "
+                f"raw_shape={list(raw_actions.shape)} raw_min={float(np.nanmin(raw_actions)):.6f} "
+                f"raw_max={float(np.nanmax(raw_actions)):.6f} raw_mean={float(np.nanmean(raw_actions)):.6f} "
+                f"state={state_stats} keys={key_stats}",
+                flush=True,
+            )
 
         return {"actions": raw_action}
 

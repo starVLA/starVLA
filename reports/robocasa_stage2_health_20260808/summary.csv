@@ -1,0 +1,2 @@
+latest_step,latest_loss,latest_accuracy,samples_per_second,critical_events,late_loss_slope,late_accuracy_slope
+95500,1.555059552192688,0.4946446418762207,291.7046490428441,0,-0.0018287466286520707,0.0006630140806347226

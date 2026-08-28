@@ -1,0 +1,8 @@
+item,e128,e256,implication
+Stage-2 数据与优化超参数,相同 RoboCasa 数据、GBS 512、100k steps,相同 RoboCasa 数据、GBS 512、100k steps,排除数据量与 Stage-2 训练配方差异
+token cache 形状,"5,660,058 × 496","5,660,058 × 496",样本数和每样本 token 位置数相同
+VQ 拓扑,ProductVQ；512 codes；16 groups；scales 1/2/4/8/16,ProductVQ；512 codes；16 groups；scales 1/2/4/8/16,拓扑相同，但 code ID 的含义并不固定
+latent 维度,128（每 group 8 维）,256（每 group 16 维）,每组表征空间翻倍，分类难度与分区语义改变
+Stage-1 表征目标,标准重建；best_recon checkpoint,close/late/task-balanced + adaptive worst-task；best_worst_task_mae,tokenizer 被优化成不同的离散标签空间
+action-type embedding,关闭,开启,token 条件与分配方式进一步不同
+Stage-1 code 使用,511 / 512,512 / 512,两者都无明显 codebook collapse

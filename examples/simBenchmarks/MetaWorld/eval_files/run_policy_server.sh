@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+STARVLA_DIR="${STARVLA_DIR:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
 STARVLA_PYTHON="${STARVLA_PYTHON:-python}"
 CKPT="${CKPT:-${STARVLA_DIR}/playground/Checkpoints/metaworld_example/checkpoints/steps_50000_pytorch_model.pt}"
 GPU_ID="${GPU_ID:-0}"

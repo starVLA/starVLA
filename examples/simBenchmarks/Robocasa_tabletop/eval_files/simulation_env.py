@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -38,6 +38,82 @@ from examples.simBenchmarks.Robocasa_tabletop.eval_files.wrappers.video_recordin
     VideoRecorder,
     VideoRecordingWrapper,
 )
+
+
+def parse_delta_indices(value: str | Sequence[int] | np.ndarray | None) -> Optional[np.ndarray]:
+    if value is None:
+        return None
+    if isinstance(value, np.ndarray):
+        return value.astype(int)
+    if isinstance(value, (list, tuple)):
+        return np.array(value, dtype=int)
+
+    text = str(value).strip()
+    if text.lower() in {"none", "null", ""}:
+        return None
+    parts = text.replace(",", " " ).split()
+    return np.array([int(part) for part in parts], dtype=int)
+
+
+IMAGE_OBSERVATION_KEYS = (
+    "video.ego_view",
+    "video.ego_view_bg_crop_pad_res256_freq20",
+    "video.ego_view_pad_res256_freq20",
+)
+
+
+def _validate_image_observations(observations: Dict[str, Any], context: str) -> None:
+    """Fail fast if RoboCasa is returning missing or blank camera observations."""
+    candidate_keys = [key for key in IMAGE_OBSERVATION_KEYS if key in observations]
+    if not candidate_keys:
+        candidate_keys = [
+            key
+            for key in observations
+            if key.startswith("video.") or "image" in key.lower() or "view" in key.lower()
+        ]
+
+    if not candidate_keys:
+        raise RuntimeError(
+            f"No image observations found during {context}. "
+            f"Available observation keys: {sorted(observations.keys())}"
+        )
+
+    stats = []
+    for key in candidate_keys:
+        array = np.asarray(observations[key])
+        if array.size == 0:
+            continue
+        values = array.astype(np.float32, copy=False)
+        stats.append(
+            {
+                "key": key,
+                "shape": tuple(array.shape),
+                "min": float(np.nanmin(values)),
+                "max": float(np.nanmax(values)),
+                "mean": float(np.nanmean(values)),
+                "std": float(np.nanstd(values)),
+            }
+        )
+
+    if not stats:
+        raise RuntimeError(f"Image observation candidates were empty during {context}: {candidate_keys}")
+
+    primary = stats[0]
+    if primary["std"] <= 1e-6 or primary["max"] - primary["min"] <= 1e-6:
+        raise RuntimeError(
+            "Degenerate image observation during "
+            f"{context}: key={primary['key']} shape={primary['shape']} "
+            f"min={primary['min']:.3f} max={primary['max']:.3f} "
+            f"mean={primary['mean']:.3f} std={primary['std']:.3f}. "
+            "RoboCasa rendering is likely disabled or broken."
+        )
+
+    summary = ", ".join(
+        f"{item['key']} shape={item['shape']} min={item['min']:.1f} max={item['max']:.1f} "
+        f"mean={item['mean']:.1f} std={item['std']:.1f}"
+        for item in stats[:3]
+    )
+    print(f"Image observation sanity check passed during {context}: {summary}", flush=True)
 
 
 @dataclass
@@ -136,6 +212,7 @@ class SimulationInferenceEnv:
         episode_successes = []
         # Initial environment reset
         obs, _ = self.env.reset()
+        _validate_image_observations(obs, "initial reset")
         # Main simulation loop
         while completed_episodes < config.n_episodes:
             # Process observations and get actions from the model
@@ -151,6 +228,15 @@ class SimulationInferenceEnv:
                 if terminations[env_idx] or truncations[env_idx]:
                     episode_lengths.append(current_lengths[env_idx])
                     episode_successes.append(current_successes[env_idx])
+                    print(
+                        f"Episode {completed_episodes}: env={env_idx}, "
+                        f"success={current_successes[env_idx]}, "
+                        f"length={current_lengths[env_idx]}, "
+                        f"reward={float(np.asarray(current_rewards[env_idx]).sum())}, "
+                        f"terminated={bool(terminations[env_idx])}, "
+                        f"truncated={bool(truncations[env_idx])}",
+                        flush=True,
+                    )
                     current_successes[env_idx] = False
                     completed_episodes += 1
                     # Reset trackers for this environment
@@ -182,8 +268,10 @@ class SimulationInferenceEnv:
 
 def _create_single_env(config: SimulationConfig, idx: int) -> gym.Env:
     """Create a single environment with appropriate wrappers."""
-    # Create base environment
-    env = gym.make(config.env_name, enable_render=True)
+    # Camera observations require robosuite rendering even when we do not save
+    # rollout videos. With enable_render=False, RoboCasa returns black images.
+    enable_render = True
+    env = gym.make(config.env_name, enable_render=enable_render)
     # Add video recording wrapper if needed (only for the first environment)
     if config.video.video_dir is not None:
         video_recorder = VideoRecorder.create_h264(
@@ -219,6 +307,8 @@ def run_evaluation(
     n_envs: int = 1,
     n_action_steps: int = 2,
     max_episode_steps: int = 100,
+    video_delta_indices: Optional[np.ndarray] = None,
+    state_delta_indices: Optional[np.ndarray] = None,
 ) -> Tuple[str, List[bool]]:
     """
     Simple entry point to run a simulation evaluation.
@@ -233,13 +323,21 @@ def run_evaluation(
     Returns:
         Tuple of environment name and list of episode success flags
     """
+    if isinstance(video_dir, str) and video_dir.lower() in {"", "none", "null"}:
+        video_dir = None
+
     # Create configuration
     config = SimulationConfig(
         env_name=env_name,
         n_episodes=n_episodes,
         n_envs=n_envs,
         video=VideoConfig(video_dir=video_dir),
-        multistep=MultiStepConfig(n_action_steps=n_action_steps, max_episode_steps=max_episode_steps),
+        multistep=MultiStepConfig(
+            video_delta_indices=np.array([0]) if video_delta_indices is None else video_delta_indices,
+            state_delta_indices=np.array([0]) if state_delta_indices is None else state_delta_indices,
+            n_action_steps=n_action_steps,
+            max_episode_steps=max_episode_steps,
+        ),
     )
     # Create client and run simulation
     client = SimulationInferenceEnv(model=model)
@@ -268,6 +366,8 @@ class Args:
     n_envs: int = 1  # Number of rollouts per task
     max_episode_steps: int = 360  #
     n_action_steps: int = 3
+    video_delta_indices: str = "0"
+    state_delta_indices: str = "0"
 
     #################################################################################################################
     # Utils
@@ -305,6 +405,8 @@ def eval_gr1_unified(args: Args) -> None:
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
         max_episode_steps=args.max_episode_steps,
+        video_delta_indices=parse_delta_indices(args.video_delta_indices),
+        state_delta_indices=parse_delta_indices(args.state_delta_indices),
     )
 
 

@@ -3,7 +3,7 @@
 # (starVLA env) and the simulation client in another (robocasa365 env).
 set -euo pipefail
 
-CKPT=${CKPT:-./playground/Checkpoints/robocasa365_qwenoft_OpenDrawer_100step/checkpoints/steps_100_pytorch_model.pt}
+CKPT=${CKPT:-/root/nas/feihong/starVLA/Checkpoints/robocasa365_qwenoft_OpenDrawer_100step/checkpoints/steps_100_pytorch_model.pt}
 ENV_NAME=${ENV_NAME:-robocasa/OpenDrawer}
 PORT=${PORT:-5678}
 N_EPISODES=${N_EPISODES:-5}
@@ -14,14 +14,14 @@ N_ACT=${N_ACT:-8}
 case "${1:-}" in
   server)
     # Run inside the `starVLA` env
-    exec python deployment/model_server/server_policy.py \
+    exec ${STARVLA_PYTHON:-python} deployment/model_server/server_policy.py \
       --ckpt_path "${CKPT}" \
       --port "${PORT}" \
       --use_bf16
     ;;
   client)
     # Run inside the `robocasa365` env
-    exec python -m examples.Robocasa_365.eval_files.simulation_env \
+    exec ${ROBOCASA365_PYTHON:-python} -m examples.Robocasa_365.eval_files.simulation_env \
       --args.pretrained-path "${CKPT}" \
       --args.env-name "${ENV_NAME}" \
       --args.port "${PORT}" \

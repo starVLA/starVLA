@@ -1,0 +1,63 @@
+run_id: qwen_var_productvq_g8_libero_stage2_smoke
+run_root_dir: playground/Checkpoints
+seed: 42
+wandb_entity: smap
+wandb_project: starVLA_Libero
+is_debug: false
+version_id: "0.21"
+
+framework:
+  name: QwenVAR
+  qwenvl:
+    base_vlm: ./playground/Pretrained_models/Qwen3-VL-4B-Instruct-VARAction
+    attn_implementation: flash_attention_2
+  stage1_tokenizer:
+    artifact: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g8/best_recon.ckpt
+    stage1_config: examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero_q99_e32_aeinit_productvq_g8.yaml
+    freeze: true
+    token_cache: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g8/stage2_token_cache_smoke.pt
+  action_token_text:
+    prefix: "<var_action_"
+    suffix: ">"
+  labeling:
+    mask_strategy: qwenfast
+  generation:
+    constrain_to_action_tokens: false
+    do_sample: false
+    max_length: 2048
+
+datasets:
+  vla_data:
+    dataset_py: var_stage2_token_dataset
+    data_mix: libero_all_q99
+    per_device_batch_size: 1
+    num_workers: 0
+    shuffle: true
+    mode: train
+    window_mode: full
+
+trainer:
+  max_train_steps: 20
+  num_warmup_steps: 2
+  save_interval: 20
+  eval_interval: 10
+  learning_rate:
+    base: 2.5e-05
+    qwen_vl_interface: 1.0e-05
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06
+  freeze_modules: ""
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 1
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  gradient_checkpointing: true
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08

@@ -1,0 +1,91 @@
+LIBERO Stage1 + Stage2 98.05% Chain
+
+This records the LIBERO VAR stage1/stage2 chain that produced the
+steps_99000_pytorch_model.pt 40-task eval result of 98.05%.
+
+Stage1 tokenizer
+
+Train:
+
+  cd /home/zhangfeihong/starVLA_github
+  bash examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb_gpu0.sh
+
+Config:
+
+  examples/simBenchmarks/LIBERO/train_files/train_var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb.yaml
+
+Important local artifacts copied into this repo:
+
+  playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb/best_recon.ckpt
+  playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb/action_spec.json
+  playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb/config.yaml
+
+The stage1 run initializes encoder/decoder weights from:
+
+  playground/Checkpoints/var_stage1_pi05_libero_q99_pure_ae_e32/best_recon.ckpt
+
+That small init checkpoint was also copied so stage1 can be reproduced.
+
+Stage2 token cache
+
+Build the cache locally when needed:
+
+  cd /home/zhangfeihong/starVLA_github
+  bash examples/simBenchmarks/LIBERO/stage2_files/build_productvq_g16_s1248_structemb_full_token_cache.sh
+
+Expected output:
+
+  playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb/stage2_token_cache_full.pt
+
+The original source cache had shape (261614, 240) and was built from
+best_recon.ckpt. The cache file is intentionally not copied because it is
+about 494 MB and can be regenerated.
+
+Stage2 training
+
+Train:
+
+  cd /home/zhangfeihong/starVLA_github
+  bash examples/simBenchmarks/LIBERO/stage2_files/run_qwen_var_productvq_g16_s1248_structemb_nextscale_100k.sh
+
+Config:
+
+  examples/simBenchmarks/LIBERO/stage2_files/train_qwen_var_productvq_g16_s1248_structemb_nextscale_100k.yaml
+
+Key settings:
+
+  framework.name: QwenVARScaleParallel
+  stage1 artifact: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb/best_recon.ckpt
+  stage1 token cache: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s1_2_4_8_structemb/stage2_token_cache_full.pt
+  max_train_steps: 100000
+
+The large stage2 checkpoints were not copied. In the source run, the 99k
+checkpoint was:
+
+  /home/zhangfeihong/starVLA/playground/Checkpoints/qwen_var_productvq_g16_s1248_structemb_nextscale_100k_fullcache/checkpoints/steps_99000_pytorch_model.pt
+
+99k eval result
+
+The copied summary is stored at:
+
+  playground/Checkpoints/qwen_var_productvq_g16_s1248_structemb_nextscale_100k_fullcache/eval_stage2_99k_40task_4suite_seed7_0616_fp32/logs/libero_40task_summary.txt
+
+Original eval command shape:
+
+  cd /home/zhangfeihong/starVLA_github
+  EVAL_OUTPUT_ROOT=eval_stage2_99k_40task_4suite_seed7_0616_fp32 \
+  EVAL_SEED=7 \
+  EVAL_USE_BF16=0 \
+  EVAL_GPUS="6 0 1 8" \
+  EVAL_PORTS="19010 19011 19012 19013" \
+  SESSION_SUFFIX="_99k_seed7_0616fp32" \
+  bash examples/simBenchmarks/LIBERO/eval_files/run_stage2_100k_4suite_parallel_eval_supervisor.sh \
+    /path/to/steps_99000_pytorch_model.pt
+
+Summary:
+
+  libero_spatial: 98.80%
+  libero_object: 99.60%
+  libero_goal: 98.19%
+  libero_10: 95.60%
+  overall_40_task_mean: 98.05%

@@ -1,0 +1,1273 @@
+StarVLA
+StarVLA-α: Reducing Complexity in
+Vision-Language-Action Systems
+Jinhui Ye1,† Ning Gao2,† Senqiao Yang3 Jinliang Zheng4 Zixuan Wang1 Yuxin Chen1
+Pengguang Chen6 Yilun Chen5,‡ Shu Liu6 Jiaya Jia1,6,‡
+1HKUST 2XJTU 3CUHK 4THU 5Tongyi Lab, Alibaba Group 6SmartMore Ltd.
+Abstract
+Vision-Language-Action (VLA) models have recently emerged as a promising paradigm for building
+general-purpose robotic agents. However, the VLA landscape remains highly fragmented and complex:
+as existing approaches vary substantially in architectures, training data, embodiment configurations,
+and benchmark-specific engineering. In this work, we introduceStarVLA- α, a simple yet strong
+baseline designed to study VLA design choices under controlled conditions. StarVLA-α deliberately
+minimizes architectural and pipeline complexity to reduce experimental confounders and enable
+systematic analysis. Specifically, we re-evaluate several key design axes, including action modeling
+strategies, robot-specific pretraining, and interface engineering. Across unified multi-benchmark
+training on LIBERO, SimplerEnv, RoboTwin, and RoboCasa, the same simple baseline remains
+highly competitive, indicating that a strong VLM backbone combined with minimal design is already
+sufficient to achieve strong performance without relying on additional architectural complexity or
+engineering tricks. Notably, our single generalist model outperforms π0.5 by 20% on the public real-
+world RoboChallenge benchmark. We expect StarVLA-α to serve as a solid starting point for future
+research in the VLA regime. Code will be released athttps://github.com/starVLA/starVLA.
+Date:April 2026
+Project Page:https://starvla.github.io
+1 Introduction
+Recent progress in robotic manipulation has been increasingly driven by Vision-Language-Action (VLA)
+models, which aim to move beyond task-specific policies toward general-purpose robotic agents. Since the
+introduction of RT-series Brohan et al. (2023, 2022); Belkhale et al. (2024) as robotic foundation models, the
+field has rapidly evolved by leveraging large foundation models, scaling robot data Black et al. (2024a); Wu
+et al. (2024); Generalist AI (2025) and general multimodal supervision Intelligence et al. (2025a); Brohan et al.
+(2023); Yang et al. (2025b); Chen et al. (2025b); Ye et al. (2026) to achieve impressive policy transferability
+and task coverages Brohan et al. (2022, 2023); Kim et al. (2024); Octo Model Team et al. (2024); Black et al.
+(2024b); Intelligence et al. (2025a). As a result, a growing number of VLA systems demonstrate impressive
+results across a variety of robotic benchmarks Li et al. (2024d); Liu et al. (2024a); Mees et al. (2022); Mu et al.
+(2025); Chen et al. (2025a); Gu et al. (2023). Meanwhile, open-source efforts Kim et al. (2024); Intelligence
+et al. (2025b); Bjorck et al. (2025); Liu et al. (2024c); Cai et al. (2026) have broadened accessibility and
+accelerated experimentation.
+Despite the rapid development of VLA systems, the field still lacks a clear understanding of which com-
+ponents actually drive performance gains. Existing systems vary in model architectures, pre-training data,
+embodiment configurations, and benchmark-specific fine-tuning, making empirical comparison difficult to
+interpret. Reported improvements are often entangled with dataset choices, preprocessing pipelines, and
+benchmark-specific engineering, obscuring whether gains arise from modeling innovations or experimental
+† Equal contribution ‡ Corresponding author
+arXiv:2604.11757v1  [cs.RO]  13 Apr 2026
+Heavy Data 
+Engineering ?
+Fragmented  
+VLA Design ?
+Heterogeneous 
+robot data ?
+Action Type:
+Joint
+EEF
+Abs
+Rel
+Delta
+Input:
+State
+Output: 
+History
+Num.
+Bin.
+Action Chunk
+FAST
+•VLA Model Dissection
+VLM
+VLM
+VLM
+VLM
+DiT
+MLP
+DiT
+Simple but Strong
+All-in-One Generalist
+MLP+
+Minimal Data Engineering
+Raw
+Action
+Data
+EEF
+FAST
+Delta
+Rot6D
+Action policy design
+Data engineering
+Training strategies
+Rethinking Common Practices in VLA
+Minimal Data 
+Processing
+Raw Action
+Simple
+Architecture
+Qwen+MLP
+Cross-
+Benchmark
+LIBERO  SimplerEnv   RoboTwin  RoboCasa
+Single              Arm Dual Arm Humanoid
+StarVLA-𝛼
+Figure 1: Current VLA systems are difficult to compare due to heterogeneous robot datasets, fragmented
+architectures, and heavy benchmark-specific engineering. StarVLA-α removes these confounders with a simple
+VLM-based architecture, minimal data processing, and unified cross-benchmark training. This controlled
+baseline enables systematic analysis of action modeling, robot pretraining, and interface design, revealing that
+many commonly adopted complexities provide limited context-dependent benefits.
+variation. In contrast to vision-language modeling (VLM), where training practices have gradually converged
+toward standardized recipes Li et al. (2024a); Dai et al. (2023); Liu et al. (2024b), VLA research remains
+highly fragmented. Establishing clearer methodological consensus is therefore increasingly important for
+guiding future progress in the field.
+However, reaching methodological consensus is a challenging and long-standing problem due to substantial
+heterogeneity across the VLA pipeline as shown in Fig. 1. First, pre-training data and embodiment configura-
+tions vary substantially across studies. Rapid evolution of robotic platforms and teleoperation pipelines has led
+to heterogeneous datasets with incompatible interfaces, action spaces, and normalization schemes Kim et al.
+(2024); Liu et al. (2024c). Robot embodiments span single-arm manipulators such as Franka and UR5 Franka
+Emika (2025); Universal Robots (2025), wheeled dual-arm systems Galbot (2025); Galaxea (2025); AgiBot
+(2025), and humanoid robots Fourier Intelligence (2025); Unitree Robotics (2025); AgiBot (2025), accom-
+panied by differences in camera viewpoints and end-effectors, further entangling modeling choices with
+embodiment-specific preprocessing. Second, modeling and training strategies lack consensus. Existing VLA
+systems adopt diverse combinations of vision towers, language backbones, and action experts Octo Model
+Team et al. (2024); Kim et al. (2024); Li et al. (2024c, 2023b); Black et al. (2024a); Intelligence et al. (2025b);
+Team (2025), while design choices such as action parameterization and normalization for continuous robot
+states and controls remain poorly understood. Third, varied evaluation practices complicate comparison.
+Benchmark-specific hyperparameter tuning, dataset splits, and action chunking strategies are often required
+to achieve strong performance Li et al. (2024d); Liu et al. (2024a); Mu et al. (2025); Chen et al. (2025a);
+Nasiriany et al. (2024); Li et al. (2023a), and strong in-benchmark results do not necessarily translate to
+robustness under broader distribution shifts Pumacay et al. (2024); Nasiriany et al. (2024); Gao et al. (2025).
+To demystify the essential components of VLA systems, we proposeStarVLA- α upon the infrastructure of
+StarVLA Community (2026), a simple yet strong baseline that serves as a starting point for systematically
+studying existing VLA paradigms. It is explicitly designed to reduce experimental confounding and isolate
+modeling effects. Rather than introducing additional architectural complexity, we deliberately minimize
+structural variations by employing a pre-trained VLM backbone (Qwen3-VL) without robot-specific pre-
+training or sophisticated action engineering. We follow official evaluation protocols and avoid benchmark-
+specific tuning to ensure controlled and reproducible comparisons. The objective is not architectural novelty
+but methodological clarity: by controlling major sources of variation, StarVLA- α provides acontrolled
+substratefor reassessing widely adopted VLA design choices under comparable conditions.
+Under this controlled setting, a strong VLM-based baseline matches or exceeds recent VLA systems while
+keeping the backbone, training data, and training settings identical. Under controlled conditions, we examine
+2
+the necessity of common VLA design choices along three axes: action head design, robot-specific pretraining,
+and data/interface engineering. Keeping the backbone, data scale, and training protocol identical, we compare
+several canonical VLM-to-VLA instantiations within a unified pipeline, including discrete token-based
+autoregressive decoding (FAST-style), direct continuous action regression with a lightweight MLP head
+(OpenVLA-OFT-style), diffusion/flow-matching based continuous action generation ( π0-style), and dual-
+system designs that couple a VLM with a separate low-level action module (GR00T-style), finding that
+simple MLP action header remains highly competitive while more complex designs provide only scenario-
+dependent gains (see Sec. 3.1). Robot pretraining by incorporating large-scale action data Collaboration
+et al. (2023); contributors (2025) is re-assessed. We observe that heterogeneous pretraining may impair cross-
+embodiment generalization and that domain-aligned data yields conditional rather than overall improvements
+(Sec. 3.2). Finally, we revisit common engineering choices (e.g. auxiliary inputs, action output modeling).
+Overall, removing major confounders reveals that architectural and engineering complexity offers limited and
+context-dependent gains (Sec. 3.3).
+To mitigate potential benchmark-specific bias in single-benchmark evaluation, we further assess robustness
+under broader generalization regimes. We jointly train a unified model across LIBERO Liu et al. (2024a),
+SimplerEnv Minderer et al. (2022), RoboTwin 2.0 Chen et al. (2025a), and RoboCasa-GR1 Nasiriany et al.
+(2024); Bjorck et al. (2025) without benchmark-specific adaptation, using unified action padding across
+embodiments (Sec. 4). Under this multi-benchmark setting, the same simple baseline remains competitive,
+and in several cases superior to task-specific models. These results indicate that strong backbone initialization
+and unified training can support cross-task and cross-embodiment generalization without requiring additional
+architectural complexity.
+Our contributions are summarized as follows:
+• We present a simple yet strong VLA baseline that removes key confounders, showing that a streamlined
+VLM design can reach leading performance on four benchmarks spanning five embodiments.
+• Under controlled backbone, data, and training settings, we systematically re-evaluate common VLA design
+choices and find that added architectural/data engineering complexity yields smaller and more context-
+dependent gains than often assumed.
+• We further demonstrate that a single generalist model trained jointly across benchmarks, without task-
+specific adaptation, can generalize across tasks and embodiments, supported by strong initialization and a
+standardized pipeline.
+2 StarVLA-α
+Since the introduction of RT-1 Brohan et al. (2022) in 2022, Vision–Language–Action (VLA) research has
+pursued general-purpose embodied agents built on foundation models. Along the way, the community has
+explored many design dimensions—vision backbones (e.g., SigLIP Zhai et al. (2023), DINO Oquab et al.
+(2023), CLIP Radford et al. (2021)), action heads (discrete tokens, continuous regression, diffusion, flow
+matching), and action/data pipelines (delta vs. relative actions; embodiment-specific preprocessing across
+eef/joint/6D pose). While these choices have driven steady gains, they have also fragmented the field: systems
+often become complex, hard to reproduce, and tightly tuned to benchmark-specific details, which can hurt
+transfer to new embodiments.
+Against this backdrop, we ask a simple question:can we cut through this complexity?Specifically, we test
+whether a strong VLM backbone can deliver competitive performance without elaborate architectures or heavy
+data engineering. To study this, we build a clean, transparent, and robust VLA baseline from scratch (Fig. 2).
+2.1 A Simple and Unified VLA Framework
+Our framework is guided by a minimal-sufficiency hypothesis: a strong VLM paired with a lightweight action
+head captures most of the benefits commonly attributed to more complex designs. Here, “clean” refers to two
+aspects: minimal data processing and a simple architecture.
+Minimal data processing.To promote generalization across diverse robot embodiments and benchmarks,
+we use a single minimal data pipeline shared across all environments. The model takes raw RGB images and
+the provided language instructions as input, without benchmark-specific engineering or custom formatting.
+We normalize actions using the training split only (zero mean, unit variance). For evaluation, we follow each
+3
+Heavy Data 
+Engineering
+Action Type Choices
+Action Chunk
+History Inputs
+Action Tokenizer
+VL Backbone / Action Model Design
+Vision-language Models Action Head
+Benchmark-specific 
+Evaluation
+Minimal Data 
+Engineering
+Abs Joint
+Simple Model Design Evaluation as 
+All-in-one Generalist
+Generalist 
+Model
+Bench 1
+Bench 2
+Bench 3
+SigLip
+Dinov2
+CLIP
+Llama 2
+Eagle 2
+DiT
+Flow Matching
+Autoregressive
+MLP
+Bench 3ModelBModel C
+Bench 2ModelBModel B
+Bench 1ModelBModel A
+Development of VLAs Regime
+Simplified Pipeline of StarVLA-𝜶
+Embodiments
+PaliGemma
+Benchmarks
+SimplerEnvRoboTwin2RoboCasa
+ LIBERO
+Qwen
+Figure 2:Overview of StarVLA- α. We use a unified VLM backbone (Qwen3-VL) with minimal preprocess-
+ing and a lightweight MLP action head. This simple setup avoids specialized vision encoders, benchmark-
+specific data pipelines, and complex action heads, while enabling consistent training and evaluation across
+diverse benchmarks.
+benchmark’s official protocol. This unified preprocessing makes the framework directly applicable to new
+robot embodiments and benchmarks without additional adaptation.
+Clean architecture.We follow common practice and couple a VLM backbone with a lightweight action head
+for continuous action prediction. We instantiate the backbone with the Qwen family of models Wang et al.
+(2024b); Bai et al. (2025), specifically Qwen3-VL. We choose Qwen for two reasons: (i) it is a widely adopted
+open-source VLM with strong community support; and (ii) its unified design natively processes both vision
+and language inputs, avoiding the need to separately select and combine vision encoders (e.g., CLIP Radford
+et al. (2021), SigLIP Zhai et al. (2023)). On top of the VLM, we attach a simple MLP action head that reads
+the hidden state of a designated action token and regresses a chunk of continuous actions. The modular design
+also allows us to swap in alternative VLM backbones or action heads with minimal changes.
+Unified benchmark integration.To enable systematic evaluation, we integrate a diverse suite of manipulation
+benchmarks (e.g., LIBERO, SimplerEnv, RoboTwin 2.0, and RoboCasa-GR1) into a unified pipeline without
+benchmark-specific design. For each benchmark, we strictly follow its original data and evaluation protocols,
+applying only our minimal processing while keeping the action representation consistent. We confine hetero-
+geneity to thin adapters that standardize observation formats, action interfaces, and evaluation entry points.
+As a result, the same model and training recipe run across all benchmarks without customization, and the
+framework remains easy to extend to new benchmarks. This setup also enables a more general evaluation
+regime:training a single model jointly across all benchmarks. We refer readers to Sec. 4 for detailed results
+in this unified multi-benchmark setting.
+2.2 Experimental Setup
+We evaluate our models on a diverse set of widely used manipulation benchmarks:LIBEROLiu et al. (2024a),
+SimplerEnvLi et al. (2024d), the dual-arm benchmarkRoboTwin 2.0Chen et al. (2025a), and the humanoid
+benchmarkRoboCasa-GR1Nasiriany et al. (2024); Bjorck et al. (2025). Benchmark details are provided in
+Appendix B.
+Baselines.We compare StarVLA- α against several representative VLA methods: FAST Pertsch et al. (2025),
+OpenVLA-OFT Kim et al. (2024), π0 Black et al. (2024a), and GR00T-N1.6 Bjorck et al. (2025). These
+prior methods are typically trained separately on each benchmark with their own task-specific data processing.
+For our approach, we consider two training protocols: (1)Specialist training, where we train StarVLA- α
+independently on each benchmark’s training set using our unified minimal data pipeline , and (2)Generalist
+training, where we merge all benchmarks’ data into a single training set and train a single model. We note that
+the Generalist model represents a large-scale unified training scenario and is included for completeness,for
+direct comparisons under similar computational budgets, we focus primarily on Specialist training. In the
+unified setting, actions from different robots are simply padded to a maximum dimension (here 32) with zeros,
+4
+Table 1:Performance comparison of StarVLA- α with existing VLAs. ∗ indicates that both clean and
+random data are used for training. Default StarVLA-α represents multiple models trained separately on each
+benchmark-specific dataset, while Generalist represents a single model jointly trained across all datasets.
+Method LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Spatial Object Goal Long avg WidowX Google V A Google VM clean clean∗ random∗ (avg of 24 tasks)
+Specialist
+OpenVLA-OFT 97.6 98.4 97.9 94.5 97.1 31.3 54.3 63.0 – – – –
+π0 96.8 98.8 95.8 85.2 94.1 27.1 54.8 58.8 46.42 65.9 58.4 –
+π0+FAST 96.4 96.8 88.6 60.2 85.5 39.5 60.5 61.9 – – – –
+π0.5 98.8 98.2 98.0 92.4 96.9 46.9 68.4 72.760.282.7 76.8 37.0
+GR00T-N1.6 97.5 98.5 97.594.497.0 62.0 65.3 67.7 – – – 47.6
+StarVLA-α99.0 99.898.5 94.198.864.670.2 76.050.3 88.288.353.8
+StarVLA-α(Generalist) 98.7 99.798.694.2 97.865.269.8 74.3 –88.787.857.3
+requiring no per-task engineering; more details are provided in Sec. 4. Training and implementation details are
+given in Appendix C.
+2.3 Main Results
+As shown in Table 1, StarVLA-α performs strongly across all benchmarks relative to prior VLA methods. On
+LIBERO, StarVLA-α achieves an average success rate of 98.8%, outperforming all previous approaches. On
+SimplerEnv, it exceeds the best existing method by a substantial margin (e.g., +6.8% on Google VM). On the
+more challenging dual-arm and humanoid settings, StarVLA-α reaches up to 53.8% success, highlighting the
+strength of a capable VLM backbone even with a lightweight action head.
+Moreover, under a unified generalist training setup, we find that training a single model on diverse data
+achieves competitive per-benchmark performance while notably improving on challenging benchmarks such
+as RoboCasa-GR1 (Sec. 4).
+Together, these results support our central hypothesis:a strong VLM, paired with a straightforward action
+head and minimal data preprocessing, can deliver highly competitive performance.More broadly, they suggest
+a practical way to reduce the field’s growing complexity: fix the backbone, standardize the data pipeline, and
+avoid task-specific engineering. This approach yields a strong, reproducible baseline that can serve as a solid
+foundation for future work.
+3 Rethinking Common Practices in VLA Systems
+As described in Sec. 2, StarVLA- α baseline is intentionally simple: it pairs a strong VLM (Qwen3-VL)
+with a lightweight MLP action head, uses minimally processed data, and introduces no state inputs, history
+frames, or additional pretraining. Despite this minimal design, StarVLA-α achieves state-of-the-art results
+across multiple benchmarks and substantially outperforms prior methods. This finding motivates a natural
+question:when a strong backbone is available, what actually drives VLA performance?In this section, we
+systematically analyze three commonly emphasized design choices: action head architecture, action-specific
+pretraining, and data engineering.
+3.1 Do Different Action Head Designs Matter?
+Motivation.Given that our simple MLP head already delivers strong performance, we askwhether more
+complex action heads (e.g. fast token predictors, diffusion models, or dual-system designs) provide additional
+benefitswhen paired with the same strong VLM backbone. Prior comparisons have often been confounded by
+differences in backbones and training recipes; our unified framework enables us to isolate the effect of the
+action head itself.
+Implementation details.As shown in Fig. 3, we evaluate four commonly used designs: (1)StarVLA- α-
+FAST: Discrete action prediction via an autoregressive FAST tokenizer, similar to π0-FAST Pertsch et al.
+(2025). (2)StarVLA- α: Continuous action regression with a lightweight MLP head applied to dedicated action
+tokens, following OpenVLA-OFT Kim et al. (2025). (3)StarVLA- α-GR00T: A dual-system architecture
+where the VLM serves as System 2 (high-level reasoning) and a flow-matching module acts as System 1 for
+action execution, following GR00T N1.5 Bjorck et al. (2025). (4)StarVLA- α-π: Diffusion-style continuous
+action prediction using a flow-matching expert, analogous toπ 0 Black et al. (2024a).
+5
+VLM
+FAST FAST
+Img Text Img Text
+VLM
+MLP
+ACT ACT ACT
+CLS Img Text
+VLM DiT
+ACT ACT
+DiT
+ACT ACT
+Img Text
+VLM
+Figure 3:Action expert designs on StarVLA- α.From left to right: StarVLA- α-FAST, StarVLA-α (MLP
+regression), StarVLA- α -GR00T (dual-system flow matching), and StarVLA- α-PI (diffusion-style flow
+matching).
+Table 2:Performance comparison across action head designs.
+Method LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Spatial Object Goal Long avg WidowX Google V A Google VM clean clean∗ random∗ (avg of 24 tasks)
+StarVLA-α99.0 99.8 98.594.198.864.6 70.2 76.0 50.388.288.353.8
+StarVLA-α-FAST 98.3 98.4 97.3 91.6 97.8 35.6 58.8 60.1 46.4 72.5 83.2 45.0
+StarVLA-α-GR00T 98.9 99.6 98.495.398.7 65.3 70.7 75.3 48.8 88.0 88.5 52.8
+StarVLA-α-π98.0 99.2 98.2 93.6 98.165.9 72.8 76.6 50.888.188.848.9
+Main results.As shown in Table 2, we compare four action head designs across several settings. Continu-
+ous action prediction consistently outperforms discrete action prediction (StarVLA-α-FAST) on nearly all
+benchmarks. Among the continuous-action variants, however, the three action heads achieve comparable
+performance. In particular, all methods reach over 98% success on LIBERO and around 65% on WidowX.
+Notably, the simplest design, StarVLA-α, achieves 53.8% on RoboCasa-GR1.
+Takeaway.These results suggest two key observations: (1) continuous action prediction is critical for strong
+performance and consistently outperforms discrete token-based approaches; and (2) given a powerful VLM,
+the choice of continuous action head has limited impact. Consequently, a lightweight MLP head serves as a
+simple, efficient, and competitive default. This result indicates that additional architectural complexity in the
+action head is unnecessary when the underlying VLM backbone is sufficiently strong.
+3.2 Does existing action-specific pretraining matter?
+Motivation.Most existing VLA models perform large-scale action-specific pretraining before fine-tuning
+on downstream tasks. For instance, OpenVLA uses the Open X-Embodiment (OXE) dataset Kim et al.
+(2024), π0.5 leverages diverse robot and multimodal data Intelligence et al. (2025b), and GR00T relies on
+large-scale simulation datasets Bjorck et al. (2025). Such pretraining is widely regarded as important for strong
+performance. However, our StarVLA- α baseline, built solely on a pretrained VLM (Qwen3-VL-4B) and
+without any action-specific data, already achieves competitive results. This observation raises a key question:
+given a strong VLM backbone, does additional action-specific pretraining provide further benefits?
+Experimental setups.To answer this question, we use the StarVLA- α architecture and keep all hyperparame-
+ters fixed. We compare four pretraining settings and evaluate them on RoboCasa-GR1 and RoboTwin: (1)
+StarVLA-α (VLM-based):No additional pretraining; the pretrained Qwen3-VL model is directly fine-tuned
+on task-specific data. (2)+OXE:The pretrained Qwen3-VL model is first trained on the OXE dataset Col-
+laboration et al. (2023) and then fine-tuned on the task-specific data. (3)+InternData-A1:The pretrained
+Qwen3-VL model is first trained on the InternData-A1 dataset contributors (2025), which shares overlapping
+embodiments (and partially aligned action interfaces) with RoboTwin, and then fine-tuned on the task-specific
+data. (4)+RoboTwin-Rand:Qwen3-VL model is pre-trained on RoboTwin randomized data Chen et al.
+(2025a) (within the same domain) and then fine-tuned on the task-specific data.
+Results.As shown in Table 3, the StarVLA- α baseline achieves near-best performance when sufficient
+task-specific data is available, reaching 88.2 and 53.8 on RoboTwin 2.0 and RoboCasa-GR1, respectively.
+Adding large-scale pretraining data does not consistently improve performance; out-of-domain data such
+as OXE can even degrade results. Although pretraining with InternData-A1 or RoboTwin data improves
+6
+Table 3:Effects of additional robotic data pretraining.
+Mid-Pretraining Traj. Num. RoboTwin-Clean RoboCasa-GR1
+Clean50×50+Random×100+Random×500 24×10 24×100 24×1000
+StarVLA-α- 50.3 78.5 88.29.8 39.4 53.8
++ OXE 232.6k 30.2 40.6 83.6 1.2 17.7 27.8
++ InternData-A1 630k 63.6 80.4 88.6 2.8 27.6 35.4
++ RoboTwin-Rand 25k79.7 84.1 88.82.2 27.3 33.3
+Table 4:Ablation study on data engineering across benchmarks and data scales.
+Mid-Pretraining LIBERO RoboTwin-2.0 RoboCasa-GR1
+avg Clean50×50+Random×100+Random×500 24×10 24×100 24×1000
+StarVLA-α98.850.3 78.588.29.8 39.4 53.8
++ Proprioception 98.560.8 79.688.0 12.5 42.1 54.2
++ History frames 97.8 44.8 76.2 87.4 10.2 33.2 52.6
++ Delta action 98.1 48.7 77.8 85.615.8 43.254.8
++ Relative action 98.7 51.1 77.9 87.3 13.6 40.655.5
+RoboTwin performance, particularly in low-data regimes, it still reduces performance on RoboCasa, suggesting
+that even in-domain gains may not transfer across embodiments or tasks.
+Takeaway. Additional action-specific pretraining can improve performance when the pretraining data
+closely matches the target task, but it may hurt generalization to unseen domains.A strong VLM baseline
+already provides a solid foundation; further pretraining can therefore act as a double-edged sword and should
+be applied with caution.
+3.3 Is Data Engineering Necessary?
+Motivation.Beyond architecture and pretraining, many VLA models rely on various data engineering
+techniques to improve performance. These include perception-related inputs, such as proprioceptive states and
+stacked history frames, as well as action representations, such as absolute, delta, or relative actions. While
+widely used, the necessity of these techniques remains unclear, particularly when a strong VLM backbone
+is available. In this section, we systematically examine a set of common data engineering choices within
+StarVLA-α framework. We evaluate them across multiple benchmarks and data scales to determine whether
+they yield consistent improvements.
+Experimental setup.We study four commonly used data engineering choices: (1)Proprioception Black
+et al. (2024a); Bjorck et al. (2025):adding robot joint states as input, concatenated with VLM features
+before the action head. (2)History frames Li et al. (2025):stacking the previous two frames to provide
+temporal context. (3)Delta action Feng et al. (2026):predicting relative changes from the current joint
+position. (4)Relative action Feng et al. (2026):predicting actions in a reference coordinate frame (e.g.,
+end-effector–centric).
+Each modification is applied to StarVLA-α while keeping all other training hyperparameters unchanged. We
+report results on three representative benchmarks: LIBERO (average over four tasks), RoboTwin 2.0, and
+RoboCasa-GR1 under different data scales. For RoboTwin 2.0, the data regimes include Clean 50×50 ,
++Random 100, and +Random 500. For RoboCasa, we evaluate with 24×10 , 24×100 , and 24×1000
+demonstrations.
+Results.As shown in Table 4, when the dataset is small, for example, Clean 50×50 on RoboTwin 2.0 or
+24×10 on RoboCasa-GR1, certain data engineering techniques provide modest improvements. However, once
+sufficient task-specific data is available, these techniques offer little additional benefit and perform similarly to
+the baseline without data engineering.
+Takeaway.When built upon a strong VLM and a clean codebase,data engineering techniques can offer
+modest benefits when task-specific data is limited. However, their impactbecomes negligible once
+sufficient task-specific data is available.
+7
+4 All-in-one Evaluation as a Generalist
+In Sec. 2, we build a clean VLA framework that achieves strong performance across several individual
+benchmarks. In Sec. 3, we further rethink several existing techniques and analyze their impact on model
+training. Hence, after examining the factors that influence training, we move a step further in this section
+and investigate:What is an effective evaluation paradigm for assessing whether a model truly possesses
+generalization ability?
+Existing evaluation patterns.The Embodied AI community shares a unified ambition: to develop a generalist
+agent that can seamlessly operate across diverse tasks, environments, and robots. In practice, however, the
+research landscape remains fragmented. Several state-of-the-art systems need to fine-tune their models on
+benchmark-specific datasets to achieve strong results on individual benchmarks, but their performance drops
+sharply on others. This leads to a concerning trend in the field: newly proposed policies that excel on one
+benchmark often suffer sharp performance degradation when transferred to another, making it difficult to
+demonstrate true generalization ability.
+All-in-one evaluation as a generalist.In recent years, large language models (LLMs) have achieved
+remarkable success, demonstrating generalization capabilities across diverse tasks. A unified evaluation
+paradigm, which requires a single model to handle multiple benchmarks simultaneously, has driven progress in
+generalization within the LLM field. This suggests that an appropriate evaluation paradigm can meaningfully
+shape both model development and the broader direction of the field. Hence, intuitively, Embodied AI should
+undergo a similar paradigm shift: evaluating a single model across a wide range of diverse benchmarks to
+ensure that its capabilities are not tied to any specific environment.
+4.1 Task Settings
+In this setting, we utilize all datasets to train a single model jointly and directly evaluate it on multiple
+benchmarks, without any additional fine-tuning on benchmark-specific datasets. Specifically, we select
+LIBERO, SimplerEnv, RoboTwin 2.0, and RoboCasa-GR1 as the unified benchmark suite and train the model
+on the combined training sets of these benchmarks.
+4.2 Experiments
+Implementation details.We set the learning rate as 1×10 −4, batchsize as 256 and train on the 5 datasets. In
+addition, to address the differences in action dimensions across robots, we do not introduce any task-specific
+design. Instead, we pad the action space of robots with lower degrees of freedom so that all action vectors are
+uniformly expanded to 32 dimensions in our setting.
+Baselines.To further demonstrate the effectiveness of our method and the proposed setting, we report both
+specialist results, where models are trained only on individual datasets, and results from the generalist training
+setting. In addition to comparing with our model, we also evaluate several state-of-the-art methods, such as
+π0.5 and GR00T-N1.6.
+Results.As shown in Table 5, we compare our model trained under the generalist setting, where all datasets
+are jointly used for training, with specialist models trained on individual benchmarks. Our generalist model
+consistently achieves sota or competitive performance across most benchmarks. In particular, on the chal-
+lenging RoboCasa-GR1 benchmark with 24 sub-tasks, our jointly trained model improves performance by
+3.5%. These results suggest that a single model can effectively handle diverse tasks and robot embodiments,
+supporting the development of more unified evaluation paradigms for embodied AI.
+4.3 Discussion and Analysis
+Our method is simple: it directly pads all actions to the same dimension and uses Qwen3-VL as the pretrained
+model, yet achieves strong performance. Therefore, in this section, we discuss and analyzewhat the most
+critical factor is in this generalist settingandwhy such a simple method performs so strongly. We examine
+this question from multiple perspectives, including action processing, model size, model initialization, and the
+impact of batch size.
+Do we truly need specific action designs for each embodiment?Previous studies, such as ABot-VLA Yang
+et al. (2026) and LingBot-VLA Wu et al. (2026), have proposed complex, robot-specific solutions, includ-
+8
+Table 5:Performance comparison between generalist and specialist settings.Specialist represents multiple
+models trained separately on each benchmark-specific dataset, while Generalist represents a single model
+jointly trained across all datasets.
+Settings Method LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Spatial Object Goal Long avg WidowX Google V A Google VM clean clean∗ random∗ (avg of 24 tasks)
+Specialist
+π0.5 98.8 98.2 98.0 92.4 96.9 46.9 68.4 72.760.282.7 76.8 37.0GR00T-N1.6 97.5 98.5 97.5 94.4 94.167.841.5 35.2 – – – 47.6
+StarVLA-α-π98.0 99.2 98.2 93.6 98.1 65.972.8 76.650.8 88.188.848.9StarVLA-α-GR00T 98.9 99.6 98.495.398.7 65.3 70.7 75.3 48.8 88.0 88.5 52.8StarVLA-α99.0 99.898.5 94.198.864.6 70.2 76.0 53.4 88.2 88.3 53.8
+GeneralistStarVLA-α98.7 99.798.694.2 97.8 65.2 69.8 74.3 –88.787.857.3
+Action
+Head A
+Action
+Head B
+Action
+Head C
+ Simple Padding
+Figure 4:Comparison of action parameterization for multiple embodiments.Left: RDT Action. Middle:
+Multi-Action Head. Right: Simple Padding strategy.
+ing unified action spaces and multi-action heads tailored to each robotic embodiment. However, modern
+vision–language models (VLMs) possess sufficient intelligence and parameter capacity to handle diverse
+tasks. Therefore, can we instead adopt a simple padding strategy and allow the VLA model itself to recognize
+and manage tasks across multiple embodiments? As shown in Table 6, we compare simple padding strategy
+with RDT Action and the Multi-Action Head (Fig. 4). Our approach achieves comparable performance on
+LIBERO and RoboTwin 2.0, while improving results on Google Robot VM and RoboCasa-GR1 by 2.9% and
+4.8%, respectively. These results suggest that complex specialist designs may be unnecessary for challenging
+cross-embodiment tasks.
+What is the influence of model size?To further investigate the impact of model size on VLA performance in
+this general all-in-one setting, we evaluate three pretrained Qwen3-VL models (2B, 4B, and 8B) under the
+same experimental setup. As shown in Fig. 5, the 4B model achieves significant performance improvements on
+Simpler compared with the 2B model. Additional results in Appendix D further show that this improvement
+generalizes beyond a single benchmark, yielding gains of 18.1% on WidowX and 6.6% on RoboCasa-
+GR1. However, compared with the 4B model, the 8B model does not demonstrate substantial additional
+improvements, with gains remaining within 1%. These results suggest that, under the current training scale
+and scenarios, the model size should not be too small, but a 4B parameter scale is sufficient.
+/uni00000015/uni00000025/uni00000016/uni00000025/uni00000017/uni00000025/uni0000001b/uni00000025
+/uni00000030/uni00000052/uni00000047/uni00000048/uni0000004f/uni00000003/uni00000036/uni0000004c/uni0000005d/uni00000048
+/uni00000015/uni00000013
+/uni00000016/uni00000013
+/uni00000017/uni00000013
+/uni00000018/uni00000013
+/uni00000019/uni00000013
+/uni0000001a/uni00000013
+/uni0000001b/uni00000013
+/uni0000001c/uni00000013/uni0000002a/uni00000052/uni00000052/uni0000004a/uni0000004f/uni00000048/uni00000003/uni00000035/uni00000052/uni00000045/uni00000052/uni00000057/uni00000003/uni00000039/uni00000030/uni00000003/uni00000036/uni00000058/uni00000046/uni00000046/uni00000048/uni00000056/uni00000056/uni00000003/uni00000035/uni00000044/uni00000057/uni00000048/uni00000003/uni0000000b/uni00000008/uni0000000c
+/uni00000036/uni00000057/uni00000044/uni00000055/uni00000039/uni0000002f/uni00000024/uni00000010/uni00000010/uni00000015/uni00000025
+/uni00000019/uni00000018/uni00000011/uni00000017/uni00000008
+/uni00000036/uni00000057/uni00000044/uni00000055/uni00000039/uni0000002f/uni00000024/uni00000010/uni00000010/uni00000017/uni00000025
+/uni0000001a/uni0000001c/uni00000011/uni00000016/uni00000008
+/uni00000036/uni00000057/uni00000044/uni00000055/uni00000039/uni0000002f/uni00000024/uni00000010/uni00000010/uni0000001b/uni00000025
+/uni0000001b/uni00000013/uni00000011/uni00000016/uni00000008
+/uni0000002a/uni00000035/uni00000013/uni00000013/uni00000037/uni00000010/uni00000016/uni00000025
+/uni00000016/uni00000018/uni00000011/uni00000015/uni00000008
+0/uni00000010/uni00000016/uni00000011/uni00000018/uni00000025
+/uni00000018/uni0000001b/uni00000011/uni0000001b/uni00000008
+/uni00000019/uni00000017/uni00000014/uni00000015/uni0000001b/uni00000015/uni00000018/uni00000019/uni00000018/uni00000014/uni00000015/uni00000014/uni00000013/uni00000015/uni00000017
+/uni00000037/uni00000052/uni00000057/uni00000044/uni0000004f/uni00000003/uni00000025/uni00000044/uni00000057/uni00000046/uni0000004b/uni00000003/uni00000036/uni0000004c/uni0000005d/uni00000048
+/uni00000016/uni00000018
+/uni00000017/uni00000013
+/uni00000017/uni00000018
+/uni00000018/uni00000013
+/uni00000018/uni00000018
+/uni00000019/uni00000013
+/uni00000019/uni00000018
+/uni0000001a/uni00000013/uni00000036/uni00000058/uni00000046/uni00000046/uni00000048/uni00000056/uni00000056/uni00000003/uni00000035/uni00000044/uni00000057/uni00000048/uni00000003/uni0000000b/uni00000008/uni0000000c
+/uni00000019/uni00000017/uni00000011/uni00000019
+/uni00000036/uni00000053/uni00000048/uni00000046/uni0000004c/uni00000044/uni0000004f/uni0000004c/uni00000056/uni00000057
+/uni00000018/uni00000016/uni00000011/uni0000001b
+/uni00000036/uni00000053/uni00000048/uni00000046/uni0000004c/uni00000044/uni0000004f/uni0000004c/uni00000056/uni00000057
+/uni00000036/uni0000004c/uni00000050/uni00000053/uni0000004f/uni00000048/uni00000055/uni00000028/uni00000051/uni00000059/uni00000003/uni0000000b/uni0000003a/uni0000004c/uni00000047/uni00000052/uni0000005a/uni0000003b/uni0000000c
+/uni00000035/uni00000052/uni00000045/uni00000052/uni00000046/uni00000044/uni00000056/uni00000044/uni00000003/uni0000000b/uni00000044/uni00000059/uni0000004a/uni0000000c
+Figure 5:Scaling trends in VLA training.Left: performance as a function of model size. Right: performance
+as a function of total batch size.
+9
+Table 6:Performance comparison of multi-embodiment action parameterization.
+Method LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Avg WidowX Google V A Google VM clean random avg
+RDT action Liu et al. (2024c) 97.2 63.9 68.2 71.4 87.2 86.6 52.3
+Multi Action Header Wang et al. (2024a) 97.2 60.6 66.3 67.8 85.6 86.1 53.5
+Simple Padding Black et al. (2024a)97.8 65.2 69.8 74.3 88.7 87.8 57.3
+Table 7:Real-world evaluation as a Generalist in RoboChallenge. SR represents success rate, and score
+represents progress score.
+Robot Task StarVLA-α π0.5 π0
+SR score SR score SR score
+ARX5
+arrange flowers 40.0 66.5 0.0 30.5 0.0 13.5
+arrange paper cups 20.0 63.0 0.0 31.0 0.0 15.0
+fold dishcloth 0.0 3.5 0.0 0.0 0.0 0.0
+open the drawer 20.0 60.0 50.0 80.0 0.0 20.0
+place shoes on rack 50.0 70.0 0.0 20.0 0.0 16.5
+put cup on coaster 100.0 98.0 70.0 63.0 0.0 0.0
+search green boxes 60.0 58.5 0.0 3.0 0.0 0.0
+sort electronic products 20.0 39.4 0.0 22.5 0.0 22.5
+turn on light switch 50.0 59.0 10.0 25.0 20.0 29.0
+water potted plant 10.0 32.0 0.0 0.0 0.0 0.0
+wipe the table 0.0 44.5 10.0 28.0 0.0 29.0
+Avg. 33.6 54.5 12.7 27.6 3.6 14.7
+Does batchsize matter in the generalist settings? Definitely Yes!As shown in Fig. 5, with additional results
+provided in Appendix D, we evaluate batch sizes of 64, 128, 256, 512, and 1024 under the same total training
+scale. Performance improves consistently as the batch size increases. With a batch size of 512, the model
+already achieves strong performance, e.g., 57.3 on RoboCasa-GR1 and 57.2 on RoboTwin-Clean. These
+results indicate that a larger batch size, which ensures sufficient diversity during training, is a key factor. It
+helps prevent the model from becoming trapped in local minima, thereby enabling better generalization.
+5 Real-World Experiments
+In this section, we validate that our minimalist framework remains competitive in physical robot experiments.
+We evaluate our model on the public real-world benchmarkRoboChallengeYakefu et al. (2025), which pro-
+vides standardized tasks for direct comparison with existing models. Additional real-world OOD experiments
+are provided in the Appendix.
+Benchmark.RoboChallenge is a large-scale real-robot evaluation platform designed to assess learned
+robotic control policies on physical hardware in a standardized and reproducible manner. We evaluate on the
+RoboChallenge suite, which contains several tabletop manipulation tasks (e.g., object reorientation, insertion,
+and multi-stage operations). Following the benchmark protocol, each task is executed multiple times to reduce
+stochasticity in real-robot trials, and performance is measured by the average success rate under predefined
+task success criteria. Additional implementation details are provided in the Appendix.
+Results.As shown in Table 7, on the ARX5 robot, we execute the standard set of 11 tasks. The results show
+that our StarVLA-α achieves a success rate of 33.6 and a progress score of 54.5, which significantly surpass
+the 12.7 and 27.6 achieved by π0.5, respectively. These results demonstrate the effectiveness of our StarVLA-α
+in real-world settings.
+6 Related Works
+Vision-language-action (VLA) models. The rapid progress of Large Vision-Language Models (VLMs) Beyer
+et al. (2024); Liu et al. (2023); Wang et al. (2024b) has catalyzed a paradigm shift toward end-to-end Vision-
+10
+Language-Action (VLA) policies Brohan et al. (2022, 2023). Building on this foundation, recent work has
+rapidly expanded the VLA paradigm, exploring diverse architectural designs, including decoupled vision
+encoder–LLM pipelines Liu et al. (2023); Kim et al. (2024), native multimodal models Bai et al. (2025),
+and specialized action decoding mechanisms Intelligence et al. (2025b); Bjorck et al. (2025). Meanwhile,
+training strategies vary substantially across works, spanning robotic datasets Zheng et al. (2025b,a), human
+video demonstrations Ye et al. (2024); Li et al. (2024b), and web data co-training Intelligence et al. (2025b).
+Alongside a growing number of architectural variants Song et al. (2025); Li et al. (2024c); Qu et al. (2025) and
+training recipes Kim et al. (2025); Wang et al. (2025); Zheng et al. (2025b), these design choices introduce
+significant heterogeneity across VLA systems, making it difficult to attribute performance improvements to
+specific algorithmic innovations.
+Robotic data engineering and action parameterization. Datasets for robot learning Collaboration et al.
+(2023); Khazatsky et al. (2024) require extensive preprocessing to reconcile differences in control frequencies,
+camera viewpoints, and action formats Wu et al. (2024). Diverse action parameterization strategies, ranging
+from discretized token prediction Brohan et al. (2022, 2023); Kim et al. (2024) and continuous autoregressive
+control Kim et al. (2025) to action chunking Zhao et al. (2023) and diffusion-based policies operating Intelli-
+gence et al. (2025b); Chi et al. (2024), have been extensively explored across different models. In addition,
+various data processing strategies have been shown to affect downstream performance Wang et al. (2025),
+including normalization schemes Kim et al. (2024), proprioceptive state conditioning Reuss et al. (2025), and
+cross-embodiment padding mechanisms Octo Model Team et al. (2024); Liu et al. (2024c). The reliance on
+heterogeneous data pipelines tightly couples algorithmic design with engineering choices, obscuring the true
+sources of performance gains.
+7 Conclusion
+We introducedStarVLA- α, a simple VLA baseline combining a strong VLM backbone with a lightweight
+MLP action head and minimal data processing, which achieves strong performance across multiple benchmarks
+and real-world robotic tasks. Controlled experiments with StarVLA-α show that many complex techniques,
+i.e., sophisticated action header design, heavy data engineering, or task-specific pretraining, are not strictly
+necessary for generalist robot development. This simplified design reduces architectural complexity, minimizes
+data engineering, and provides a reproducible and generalizable framework for future VLA research.
+References
+AgiBot (2025). Agibot official website.https://www.agibot.com/.
+Bai, S., Cai, Y ., Chen, R., Chen, K., Chen, X., Cheng, Z., Deng, L., Ding, W., Gao, C., Ge, C., et al. (2025). Qwen3-vl
+technical report.arXiv preprint arXiv:2511.21631.
+Belkhale, S., Ding, T., Xiao, T., Sermanet, P., Vuong, Q., Tompson, J., Chebotar, Y ., Dwibedi, D., and Sadigh, D. (2024).
+Rt-h: Action hierarchies using language.arXiv preprint arXiv:2403.01823.
+Beyer, L., Steiner, A., Pinto, A. S., Kolesnikov, A., Wang, X., Salz, D., Neumann, M., Alabdulmohsin, I., Tschannen, M.,
+Bugliarello, E., et al. (2024). Paligemma: A versatile 3b vlm for transfer.arXiv preprint arXiv:2407.07726.
+Bjorck, J., Castañeda, F., Cherniadev, N., Da, X., Ding, R., Fan, L., Fang, Y ., Fox, D., Hu, F., Huang, S., et al. (2025).
+Gr00t n1: An open foundation model for generalist humanoid robots.arXiv preprint arXiv:2503.14734.
+Black, K., Brown, N., Driess, D., Esmail, A., Equi, M., Finn, C., Fusai, N., Groom, L., Hausman, K., Ichter, B., et al.
+(2024a).\pi 0: A vision-language-action flow model for general robot control.arXiv preprint arXiv:2410.24164.
+Black, K., Brown, N., Driess, D., Esmail, A., Equi, M., Finn, C., Fusai, N., Groom, L., Hausman, K., Ichter, B., et al.
+(2024b).pi_0: A vision-language-action flow model for general robot control.arXiv preprint arXiv:2410.24164.
+Brohan, A., Brown, N., Carbajal, J., Chebotar, Y ., Chen, X., Choromanski, K., Ding, T., Driess, D., Dubey, A., Finn,
+C., et al. (2023). Rt-2: Vision-language-action models transfer web knowledge to robotic control.arXiv preprint
+arXiv:2307.15818.
+Brohan, A., Brown, N., Carbajal, J., Chebotar, Y ., Dabis, J., Finn, C., Gopalakrishnan, K., Hausman, K., Herzog, A., Hsu,
+J., et al. (2022). Rt-1: Robotics transformer for real-world control at scale.arXiv preprint arXiv:2212.06817.
+Bu, Q., Yang, Y ., Cai, J., Gao, S., Ren, G., Yao, M., Luo, P., and Li, H. (2025). Univla: Learning to act anywhere with
+task-centric latent actions.arXiv preprint arXiv:2505.06111.
+11
+Cai, J., Cai, Z., Cao, J., Chen, Y ., He, Z., Jiang, L., Li, H., Li, H., Li, Y ., Liu, Y ., et al. (2026). Internvla-a1: Unifying
+understanding, generation and action for robotic manipulation.arXiv preprint arXiv:2601.02456.
+Cen, J., Yu, C., Yuan, H., Jiang, Y ., Huang, S., Guo, J., Li, X., Song, Y ., Luo, H., Wang, F., et al. (2025). Worldvla:
+Towards autoregressive action world model.arXiv preprint arXiv:2506.21539.
+Chen, D., Zhang, J., Mu, T., Tan, Q., Li, Y ., Mao, J., Liu, X., Li, K., Qiao, Y ., Xiao, F., Ling, Z., and Su, H. (2025a).
+Robotwin 2.0: Towards general robot policies with active data generation.arXiv preprint arXiv:2504.13059.
+Chen, X., Chen, Y ., Fu, Y ., Gao, N., Jia, J., Jin, W., Li, H., Mu, Y ., Pang, J., Qiao, Y ., et al. (2025b). Internvla-m1: A
+spatially guided vision-language-action framework for generalist robot policy.arXiv preprint arXiv:2510.13778.
+Chi, C., Xu, Z., Feng, S., Cousineau, E., Du, Y ., Burchfiel, B., Tedrake, R., and Song, S. (2024). Diffusion policy:
+Visuomotor policy learning via action diffusion.
+Collaboration, O. X.-E., O’Neill, A., Rehman, A., Gupta, A., Maddukuri, A., Gupta, A., Padalkar, A., Lee, A., Pooley,
+A., Gupta, A., Mandlekar, A., Jain, A., Tung, A., Bewley, A., Herzog, A., Irpan, A., Khazatsky, A., Rai, A., Gupta,
+A., Wang, A., Kolobov, A., Singh, A., Garg, A., Kembhavi, A., Xie, A., Brohan, A., Raffin, A., Sharma, A., Yavary,
+A., Jain, A., Balakrishna, A., Wahid, A., Burgess-Limerick, B., Kim, B., Schölkopf, B., Wulfe, B., Ichter, B., Lu, C.,
+Xu, C., Le, C., Finn, C., Wang, C., Xu, C., Chi, C., Huang, C., Chan, C., Agia, C., Pan, C., Fu, C., Devin, C., Xu, D.,
+Morton, D., Driess, D., Chen, D., Pathak, D., Shah, D., Büchler, D., Jayaraman, D., Kalashnikov, D., Sadigh, D., Johns,
+E., Foster, E., Liu, F., Ceola, F., Xia, F., Zhao, F., Frujeri, F. V ., Stulp, F., Zhou, G., Sukhatme, G. S., Salhotra, G., Yan,
+G., Feng, G., Schiavi, G., Berseth, G., Kahn, G., Yang, G., Wang, G., Su, H., Fang, H.-S., Shi, H., Bao, H., Amor, H. B.,
+Christensen, H. I., Furuta, H., Bharadhwaj, H., Walke, H., Fang, H., Ha, H., Mordatch, I., Radosavovic, I., Leal, I.,
+Liang, J., Abou-Chakra, J., Kim, J., Drake, J., Peters, J., Schneider, J., Hsu, J., Vakil, J., Bohg, J., Bingham, J., Wu, J.,
+Gao, J., Hu, J., Wu, J., Wu, J., Sun, J., Luo, J., Gu, J., Tan, J., Oh, J., Wu, J., Lu, J., Yang, J., Malik, J., Silvério, J.,
+Hejna, J., Booher, J., Tompson, J., Yang, J., Salvador, J., Lim, J. J., Han, J., Wang, K., Rao, K., Pertsch, K., Hausman,
+K., Go, K., Gopalakrishnan, K., Goldberg, K., Byrne, K., Oslund, K., Kawaharazuka, K., Black, K., Lin, K., Zhang, K.,
+Ehsani, K., Lekkala, K., Ellis, K., Rana, K., Srinivasan, K., Fang, K., Singh, K. P., Zeng, K.-H., Hatch, K., Hsu, K., Itti,
+L., Chen, L. Y ., Pinto, L., Fei-Fei, L., Tan, L., Fan, L. J., Ott, L., Lee, L., Weihs, L., Chen, M., Lepert, M., Memmel,
+M., Tomizuka, M., Itkina, M., Castro, M. G., Spero, M., Du, M., Ahn, M., Yip, M. C., Zhang, M., Ding, M., Heo, M.,
+Srirama, M. K., Sharma, M., Kim, M. J., Kanazawa, N., Hansen, N., Heess, N., Joshi, N. J., Suenderhauf, N., Liu, N.,
+Palo, N. D., Shafiullah, N. M. M., Mees, O., Kroemer, O., Bastani, O., Sanketi, P. R., Miller, P. T., Yin, P., Wohlhart, P.,
+Xu, P., Fagan, P. D., Mitrano, P., Sermanet, P., Abbeel, P., Sundaresan, P., Chen, Q., Vuong, Q., Rafailov, R., Tian, R.,
+Doshi, R., Mart’in-Mart’in, R., Baijal, R., Scalise, R., Hendrix, R., Lin, R., Qian, R., Zhang, R., Mendonca, R., Shah,
+R., Hoque, R., Julian, R., Bustamante, S., Kirmani, S., Levine, S., Lin, S., Moore, S., Bahl, S., Dass, S., Sonawani, S.,
+Tulsiani, S., Song, S., Xu, S., Haldar, S., Karamcheti, S., Adebola, S., Guist, S., Nasiriany, S., Schaal, S., Welker, S.,
+Tian, S., Ramamoorthy, S., Dasari, S., Belkhale, S., Park, S., Nair, S., Mirchandani, S., Osa, T., Gupta, T., Harada, T.,
+Matsushima, T., Xiao, T., Kollar, T., Yu, T., Ding, T., Davchev, T., Zhao, T. Z., Armstrong, T., Darrell, T., Chung, T.,
+Jain, V ., Kumar, V ., Vanhoucke, V ., Zhan, W., Zhou, W., Burgard, W., Chen, X., Chen, X., Wang, X., Zhu, X., Geng, X.,
+Liu, X., Liangwei, X., Li, X., Pang, Y ., Lu, Y ., Ma, Y . J., Kim, Y ., Chebotar, Y ., Zhou, Y ., Zhu, Y ., Wu, Y ., Xu, Y ., Wang,
+Y ., Bisk, Y ., Dou, Y ., Cho, Y ., Lee, Y ., Cui, Y ., Cao, Y ., Wu, Y .-H., Tang, Y ., Zhu, Y ., Zhang, Y ., Jiang, Y ., Li, Y ., Li,
+Y ., Iwasawa, Y ., Matsuo, Y ., Ma, Z., Xu, Z., Cui, Z. J., Zhang, Z., Fu, Z., and Lin, Z. (2023). Open X-Embodiment:
+Robotic learning datasets and RT-X models.https://arxiv.org/abs/2310.08864.
+Community, S. (2026). Starvla: A lego-like codebase for vision-language-action model developing.
+contributors, I.-A. (2025). Interndata-a1.https://github.com/InternRobotics/InternManip.
+Dai, W., Li, J., Li, D., Tiong, A. M. H., Zhao, J., Wang, W., Li, B., Fung, P., and Hoi, S. (2023). Instructblip: Towards
+general-purpose vision-language models with instruction tuning. InAdvances in Neural Information Processing Systems
+(NeurIPS), volume 36, pages 49250–49267.
+Fei, S., Wang, S., Shi, J., Dai, Z., Cai, J., Qian, P., Ji, L., He, X., Zhang, S., Fei, Z., Fu, J., Gong, J., and Qiu, X. (2025).
+Libero-plus: In-depth robustness analysis of vision-language-action models.
+Feng, Y ., Zheng, J., Wang, Z., Liu, D., Li, J., Pang, J., Wang, T., and Zhan, X. (2026). Demystifying action space design
+for robotic manipulation policies.arXiv preprint arXiv:2602.23408.
+Fourier Intelligence (2025). Fourier gr-1.https://www.fftai.com/products-gr1.
+Franka Emika (2025). Franka research 3.https://franka.de/franka-research-3.
+Galaxea (2025). Galaxea official website.https://galaxea-ai.com/cn/about.
+Galbot (2025). Galbot official website.https://www.galbot.com/.
+12
+Gao, N., Chen, Y ., Yang, S., Chen, X., Tian, Y ., Li, H., Huang, H., Wang, H., Wang, T., and Pang, J. (2025). Genmanip: Llm-
+driven simulation for generalizable instruction-following manipulation. InProceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR).
+Generalist AI (2025). Gen-0: Embodied foundation models that scale with physical interaction. https://generalistai.
+com/blog/nov-04-2025-GEN-0. Generalist AI Blog.
+Gu, J., Xiang, F., Li, X., Ling, Z., Liu, X., Mu, T., Tang, Y ., Tao, S., Wei, X., Yao, Y ., Yuan, X., Xie, P., Huang, Z.,
+Chen, R., and Su, H. (2023). Maniskill2: A unified benchmark for generalizable manipulation skills. InInternational
+Conference on Learning Representations.
+Hung, C.-Y ., Sun, Q., Hong, P., Zadeh, A., Li, C., Tan, U.-X., Majumder, N., and Poria, S. (2025). Nora: A small
+open-sourced generalist vision language action model for embodied tasks.
+Intelligence, P., Black, K., Brown, N., Darpinian, J., Dhabalia, K., Driess, D., Esmail, A., Equi, M., Finn, C., Fusai, N.,
+et al. (2025a). Pi0.5: a vision-language-action model with open-world generalization.arXiv preprint arXiv:2504.16054.
+Intelligence, P., Black, K., Brown, N., Darpinian, J., Dhabalia, K., Driess, D., Esmail, A., Equi, M., Finn, C., Fusai, N.,
+et al. (2025b). pi0.5: a vision-language-action model with open-world generalization.arXiv preprint arXiv:2504.16054.
+Khazatsky, A., Pertsch, K., Nair, S., Balakrishna, A., Dasari, S., Karamcheti, S., Nasiriany, S., Srirama, M. K., Chen, L. Y .,
+Ellis, K., et al. (2024). Droid: A large-scale in-the-wild robot manipulation dataset.arXiv preprint arXiv:2403.12945.
+Kim, M. J., Finn, C., and Liang, P. (2025). Fine-tuning vision-language-action models: Optimizing speed and success.
+arXiv preprint arXiv:2502.19645.
+Kim, M. J., Pertsch, K., Karamcheti, S., Xiao, T., Balakrishna, A., Nair, S., Rafailov, R., Foster, E., Lam, G., Sanketi, P.,
+et al. (2024). Openvla: An open-source vision-language-action model.arXiv preprint arXiv:2406.09246.
+Li, B., Zhang, Y ., Guo, D., Zhang, R., Li, F., Zhang, H., Zhang, K., Zhang, P., Li, Y ., Liu, Z., et al. (2024a). Llava-onevision:
+Easy visual task transfer.arXiv preprint arXiv:2408.03326.
+Li, C., Zhang, R., Wong, J., Gokmen, C., Srivastava, S., Martín-Martín, R., Wang, C., Levine, G., Lingelbach, M., Sun, J.,
+et al. (2023a). Behavior-1k: A benchmark for embodied ai with 1,000 everyday activities and realistic simulation. In
+Conference on Robot Learning, pages 80–93. PMLR.
+Li, H., Yang, S., Chen, Y ., Tian, Y ., Yang, X., Chen, X., Wang, H., Wang, T., Zhao, F., Lin, D., et al. (2025). Cronusvla:
+Transferring latent motion across time for multi-frame prediction in manipulation.arXiv preprint arXiv:2506.19816.
+Li, J., Zheng, J., Zheng, Y ., Mao, L., Hu, X., Cheng, S., Niu, H., Liu, J., Liu, Y ., Liu, J., et al. (2024b). Decisionnce:
+embodied multimodal representations via implicit preference learning. InProceedings of the 41st International
+Conference on Machine Learning, pages 29461–29488.
+Li, Q., Liang, Y ., Wang, Z., Luo, L., Chen, X., Liao, M., Wei, F., Deng, Y ., Xu, S., Zhang, Y ., et al. (2024c). Cogact: A
+foundational vision-language-action model for synergizing cognition and action in robotic manipulation.arXiv preprint
+arXiv:2411.19650.
+Li, X., Hsu, K., Gu, J., Pertsch, K., Mees, O., Walke, H. R., Fu, C., Lunawat, I., Sieh, I., Kirmani, S., et al. (2024d).
+Evaluating real-world robot manipulation policies in simulation.arXiv preprint arXiv:2405.05941.
+Li, X., Liu, M., Zhang, H., Yu, C., Xu, J., Wu, H., Cheang, C., Jing, Y ., Zhang, W., Liu, H., Li, H., and Kong, T. (2023b).
+Vision-language foundation models as effective robot imitators.arXiv preprint arXiv:2311.01378.
+Liu, B., Zhu, Y ., Gao, C., Feng, Y ., Liu, Q., Zhu, Y ., and Stone, P. (2024a). Libero: Benchmarking knowledge transfer for
+lifelong robot learning.Advances in Neural Information Processing Systems, 36.
+Liu, H., Li, C., Li, Y ., Li, B., Zhang, Y ., Shen, S., and Lee, Y . J. (2024b). Llava-next: Improved reasoning, ocr, and world
+knowledge.
+Liu, H., Li, C., Wu, Q., and Lee, Y . J. (2023). Visual instruction tuning.Advances in neural information processing
+systems, 36:34892–34916.
+Liu, S., Wu, L., Li, B., Tan, H., Chen, H., Wang, Z., Xu, K., Su, H., and Zhu, J. (2024c). Rdt-1b: a diffusion foundation
+model for bimanual manipulation.arXiv preprint arXiv:2410.07864.
+Mees, O., Hermann, L., Rosete-Beas, E., and Burgard, W. (2022). Calvin: A benchmark for language-conditioned policy
+learning for long-horizon robot manipulation tasks.IEEE Robotics and Automation Letters, 7(3):7327–7334.
+13
+Minderer, M., Gritsenko, A., Stone, A., Neumann, M., Weissenborn, D., Dosovitskiy, A., Mahendran, A., Arnab, A.,
+Dehghani, M., Shen, Z., et al. (2022). Simple open-vocabulary object detection. InEuropean Conference on Computer
+Vision, pages 728–755. Springer.
+Mu, T., Mao, J., Tan, Q., Chen, D., Li, Y ., Li, K., Huang, Z., Xie, P., Liu, X., Liu, X., Wang, H., Liu, X., Ling, Z., Tao, S.,
+Jiang, F., Xu, H., and Su, H. (2025). Robotwin 1.0: Sim-to-real robot benchmarks are solvable by pre-trained large
+models as generalist policies. InProceedings of the Computer Vision and Pattern Recognition Conference (CVPR),
+pages 32851–32863.
+Nasiriany, S., Maddukuri, A., Zhang, L., Parikh, A., Lo, A., Joshi, A., Mandlekar, A., and Zhu, Y . (2024). Robocasa:
+Large-scale simulation of everyday tasks for generalist robots.arXiv preprint arXiv:2406.02523.
+Octo Model Team, Ghosh, D., Walke, H., Pertsch, K., Black, K., Mees, O., Dasari, S., Hejna, J., Xu, C., Luo, J., Kreiman,
+T., Tan, Y ., Sanketi, P., Vuong, Q., Xiao, T., Sadigh, D., Finn, C., and Levine, S. (2024). Octo: An open-source generalist
+robot policy. InProceedings of Robotics: Science and Systems, Delft, Netherlands.
+Oquab, M., Darcet, T., Moutakanni, T., V o, H., Szafraniec, M., Khalidov, V ., Fernandez, P., Haziza, D., Massa, F., El-Nouby,
+A., et al. (2023). Dinov2: Learning robust visual features without supervision.arXiv preprint arXiv:2304.07193.
+Pertsch, K., Stachowicz, K., Ichter, B., Driess, D., Nair, S., Vuong, Q., Mees, O., Finn, C., and Levine, S. (2025). Fast:
+Efficient action tokenization for vision-language-action models.arXiv preprint arXiv:2501.09747.
+Pumacay, W., Singh, I., Duan, J., Krishna, R., Thomason, J., and Fox, D. (2024). The colosseum: A benchmark for
+evaluating generalization for robotic manipulation.arXiv preprint arXiv:2402.08191.
+Qu, D., Song, H., Chen, Q., Yao, Y ., Ye, X., Ding, Y ., Wang, Z., Gu, J., Zhao, B., Wang, D., et al. (2025). Spatialvla:
+Exploring spatial representations for visual-language-action model.arXiv preprint arXiv:2501.15830.
+Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al.
+(2021). Learning transferable visual models from natural language supervision. InInternational conference on machine
+learning, pages 8748–8763. PMLR.
+Reuss, M., Zhou, H., Rühle, M., Ya˘gmurlu, Ö. E., Otto, F., and Lioutikov, R. (2025). FLOWER: Democratizing generalist
+robot policies with efficient vision-language-action flow policies. In7th Robot Learning Workshop: Towards Robots
+with Human-Level Abilities.
+Song, W., Zhou, Z., Zhao, H., Chen, J., Ding, P., Yan, H., Huang, Y ., Tang, F., Wang, D., and Li, H. (2025). Reconvla:
+Reconstructive vision-language-action model as effective robot perceiver.arXiv preprint arXiv:2508.10333.
+Tan, S., Dou, K., Zhao, Y ., and Krähenbühl, P. (2025). Interactive post-training for vision-language-action models.
+Team, X.-S. R. (2025). W ALL-OSS: Igniting vlms toward the embodied space. arXiv preprint arXiv:2509.06087. Code:
+https://github.com/X-Square-Robot/wall-x.
+Unitree Robotics (2025). Unitree h1 humanoid robot.https://www.unitree.com/h1/.
+Universal Robots (2025). Universal robots cb3 series (ur5).https://www.universal-robots.com/cb3/.
+Wang, L., Chen, X., Zhao, J., and He, K. (2024a). Scaling proprioceptive-visual learning with heterogeneous pre-trained
+transformers.Advances in Neural Information Processing Systems, 37:124420–124450.
+Wang, P., Bai, S., Tan, S., Wang, S., Fan, Z., Bai, J., Chen, K., Liu, X., Wang, J., Ge, W., et al. (2024b). Qwen2-vl:
+Enhancing vision-language model’s perception of the world at any resolution.arXiv preprint arXiv:2409.12191.
+Wang, Y ., Ding, P., Li, L., Cui, C., Ge, Z., Tong, X., Song, W., Zhao, H., Zhao, W., Hou, P., Huang, S., Tang, Y ., Wang,
+W., Zhang, R., Liu, J., and Wang, D. (2025). Vla-adapter: An effective paradigm for tiny-scale vision-language-action
+model.arXiv preprint arXiv:2509.09372.
+Wu, K., Hou, C., Liu, J., Che, Z., Ju, X., Yang, Z., Li, M., Zhao, Y ., Xu, Z., Yang, G., Fan, S., Wang, X., Liao, F., Zhao, Z.,
+Li, G., Jin, Z., Wang, L., Mao, J., Liu, N., Ren, P., Zhang, Q., Lyu, Y ., Liu, M., He, J., Luo, Y ., Gao, Z., Li, C., Gu, C.,
+Fu, Y ., Wu, D., Wang, X., Chen, S., Wang, Z., An, P., Qian, S., Zhang, S., and Tang, J. (2024). Robomind: Benchmark
+on multi-embodiment intelligence normative data for robot manipulation.arXiv preprint arXiv:2412.13877.
+Wu, W., Lu, F., Wang, Y ., Yang, S., Liu, S., Wang, F., Zhu, Q., Sun, H., Wang, Y ., Ma, S., et al. (2026). A pragmatic vla
+foundation model.arXiv preprint arXiv:2601.18692.
+Yakefu, A., Xie, B., Xu, C., Zhang, E., Zhou, E., Jia, F., Yang, H., Fan, H., Zhang, H., Peng, H., et al. (2025). Robochallenge:
+Large-scale real-robot evaluation of embodied policies.arXiv preprint arXiv:2510.17950.
+14
+Yang, J., Tan, R., Wu, Q., Zheng, R., Peng, B., Liang, Y ., Gu, Y ., Cai, M., Ye, S., Jang, J., et al. (2025a). Magma: A
+foundation model for multimodal ai agents.arXiv preprint arXiv:2502.13130.
+Yang, S., Li, H., Chen, Y ., Wang, B., Tian, Y ., Wang, T., Wang, H., Zhao, F., Liao, Y ., and Pang, J. (2025b). Instructvla:
+Vision-language-action instruction tuning from understanding to manipulation.arXiv preprint arXiv:2507.17520.
+Yang, Y ., Zeng, S., Lin, T., Chang, X., Qi, D., Xiao, J., Liu, H., Chen, R., Chen, Y ., Huo, D., et al. (2026). Abot-m0: Vla
+foundation model for robotic manipulation with action manifold learning.arXiv preprint arXiv:2602.11236.
+Ye, J., Wang, F., Gao, N., Yu, J., Zhu, Y ., Wang, B., Zhang, J., Jin, W., Fu, Y ., Zheng, F., Chen, Y ., and Pang, J.
+(2026). St4vla: Spatially guided training for vision-language-action models. InInternational Conference on Learning
+Representations (ICLR).
+Ye, S., Jang, J., Jeon, B., Joo, S., Yang, J., Peng, B., Mandlekar, A., Tan, R., Chao, Y .-W., Lin, B. Y ., et al. (2024). Latent
+action pretraining from videos.arXiv preprint arXiv:2410.11758.
+Zhai, X., Mustafa, B., Kolesnikov, A., and Beyer, L. (2023). Sigmoid loss for language image pre-training. InProceedings
+of the IEEE/CVF International Conference on Computer Vision, pages 11975–11986.
+Zhao, T. Z., Kumar, V ., Levine, S., and Finn, C. (2023). Learning fine-grained bimanual manipulation with low-cost
+hardware.arXiv preprint arXiv:2304.13705.
+Zheng, J., Li, J., Liu, D., Zheng, Y ., Wang, Z., Ou, Z., Liu, Y ., Liu, J., Zhang, Y .-Q., and Zhan, X. (2025a). Universal
+actions for enhanced embodied foundation models.
+Zheng, J., Li, J., Wang, Z., Liu, D., Kang, X., Feng, Y ., Zheng, Y ., Zou, J., Chen, Y ., Zeng, J., et al. (2025b). X-vla: Soft-
+prompted transformer as scalable cross-embodiment vision-language-action model.arXiv preprint arXiv:2510.10274.
+15
+Supplementary Material for “StarVLA-α: Reducing Complexity in
+Vision-Language-Action Systems”
+The supplementary material is organized as follows.
+1. Related works.Related works on VLA models, robotic data engineering, and action parameterization are
+described in Sec. A.
+2. Benchmark details.Detailed descriptions of all benchmarks, including LIBERO, SimplerEnv, RoboTwin
+2.0, RoboCasa-GR1, and RoboChallenge, are described in Sec. B.
+3. Training details.Default training setup, optimization hyperparameters, compute resources, and architec-
+ture details are described in Sec. C.
+4. More ablation studies.Additional ablations on model initialization, model size, and batch size in the
+all-in-one setting are described in Sec. D.
+5. Large-scale real-world evaluations on RoboChallenge.Large-scale real-world evaluation results on the
+RoboChallenge benchmark Yakefu et al. (2025) across multiple robot embodiments as a Generalist are
+described in Sec. E.
+6. Real-world OOD experiments.Experimental setup and results for real-world out-of-distribution evalua-
+tion are described in Sec. F.
+7. Detailed benchmarks results.Full benchmark results and supplementary quantitative comparisons are
+described in Sec. G.
+8. Qualitative results across simulation benchmarks.Visualizations of simulation benchmarks, RoboChal-
+lenge, and real-world deployment settings are described in Sec. H.
+9. Robustness evaluation on LIBERO-Plus.Additional robustness evaluation results on the LIBERO-Plus
+benchmark are described in Sec. I.
+A Related Works
+Vision-language-action (VLA) models. The rapid advancement of Large Vision-Language Mod-
+els(VLMs) Beyer et al. (2024); Liu et al. (2023); Wang et al. (2024b) has fundamentally reshaped the
+development of robotics models, driving a paradigm shift toward end-to-end Vision-Language-Action(VLA)
+frameworks. By directly mapping multimodal observations to deployable control signals, pioneering works
+like RT-series Brohan et al. (2022, 2023) demonstrated the viability of leveraging VLM reasoning for generalist
+embodied agents. Building upon this foundation, the community has witnessed a surge of VLA methodologies.
+Initiatives like Octo Octo Model Team et al. (2024) and OpenVLA Kim et al. (2024) explored diverse back-
+bone with specific injection methods for action, while recent advancement like π-series Black et al. (2024a);
+Intelligence et al. (2025b) and GR00T-series Bjorck et al. (2025) introduced specialized action decoding
+mechanism and larger-scale robotics pretraining. However, the rapid iteration within the field introduce
+massive heterogeneous structural designs Song et al. (2025); Li et al. (2024c); Qu et al. (2025) and disparate
+training recipes Kim et al. (2025); Wang et al. (2025); Zheng et al. (2025b). For example, the choice of VLM
+backbone vary drastically across models, ranging from decoupled vision-encoder-plus-LLM pipelines Liu
+et al. (2023); Kim et al. (2024) to natively multimodal architectures Bai et al. (2025), while pre-training recipe
+diverge significantly among cross-embodiment Zheng et al. (2025b,a), human video Ye et al. (2024); Li et al.
+(2024b) and even vision-language data co-training Intelligence et al. (2025b). Furthermore, many approaches
+rely heavily on idiosyncratic engineering practice for specific evaluation recipe Kim et al. (2025); Wang et al.
+(2025), resulting in a highly fragmented methodological landscape and unreliable evaluation. In this work,
+we build a clean and neat framework to abstract away this structural complexity, establishing a rigorously
+controlled baseline to isolate the true drivers of VLA performance.
+Robotic data engineering and action parameterization. The landscape of robotic learning has been
+significantly propelled by advancing data engineering techniques. To effectively harness heterogeneous
+datasets Collaboration et al. (2023); Khazatsky et al. (2024) and promote learning efficiency, the community
+has introduced a variety of specialized techniques. A central challenge lies in transforming incompatible
+control frequencies, camera viewpoints, and action representations into formats compatible with VLM-based
+policies Wu et al. (2024), which often requires substantial dataset-specific preprocessing. At the same time, the
+design of action parameterization remains an actively debated topic Feng et al. (2026). Implementations span a
+broad spectrum: from discretizing continuous control signals into language tokens via uniform binning Brohan
+16
+et al. (2022, 2023); Kim et al. (2024), to continuous autoregressive prediction Kim et al. (2025), action
+chunking Zhao et al. (2023), and high-frequency diffusion processes Intelligence et al. (2025b); Chi et al.
+(2024). Beyond action modeling, auxiliary data processing choices, ranging from dataset-specific normalization
+schemes Kim et al. (2024) and conditional injection of proprioceptive states Reuss et al. (2025) to complex
+padding mechanisms for cross-embodiment alignment Octo Model Team et al. (2024); Liu et al. (2024c), have
+been successively demonstrated across various studies to substantially impact downstream performance Wang
+et al. (2025). This deep reliance on disparate data pipelines and action modeling deeply entangles algorithmic
+innovations with empirical tuning, obscuring whether performance gains originate from core architectural
+advancements or merely optimized recipes. In this work, we systematically disentangle these confounding
+factors by establishing a clean, unified baseline that isolates and rigorously evaluates the true impact of these
+individual engineering choices under strictly controlled conditions.
+B Benchmark Details
+We evaluate StarVLA-α on a diverse set of benchmarks that cover complementary aspects of robotic manipu-
+lation, including compositional multi-task learning Liu et al. (2024a); Fei et al. (2025), simulated evaluation
+of real-world policies Li et al. (2024d), dual-arm coordination Chen et al. (2025a), humanoid tabletop ma-
+nipulation Nasiriany et al. (2024), and standardized real-robot testing Yakefu et al. (2025). Together, these
+benchmarks span different embodiments, task structures, and evaluation protocols, providing a broad testbed
+for studying both specialization and generalization in VLA systems.
+• LIBERO:LIBERO is a widely used benchmark for language-conditioned robot manipulation and lifelong
+robot learning Liu et al. (2024a). The benchmark contains130 manipulation tasksorganized into four task
+suites, namelySpatial,Object,Goal, andLong. The first three suites are designed to isolate transfer under
+controlled shifts in spatial relations, object identities, and task goals, while LIBERO-Long contains a larger
+set of manipulation tasks with more entangled variations. In the literature, a common training protocol
+uses 50 expert demonstrations per task, yielding approximately 6.5K trajectories across the full benchmark.
+LIBERO provides a standardized evaluation protocol and has become a common testbed for studying
+instruction following, compositional generalization, and multi-task policy learning in language-conditioned
+manipulation settings. We additionally evaluate our model on LIBERO-Plus Fei et al. (2025), which is a
+robustness-oriented benchmark built on top of LIBERO for systematically evaluating VLA policies under
+controlled distribution shifts.
+• SimplerEnv:SimplerEnv is a simulation framework designed for evaluating real-world manipulation
+policies in simulation Li et al. (2024d). Rather than focusing on policy learning in simulation, it provides a
+standardized and scalable proxy for real-world evaluation, and its results have been shown to correlate with
+physical robot performance. The benchmark includes simulated environments corresponding to common
+real-robot setups, in particular the Google Robot environments used in the RT-series and the WidowX
+/ BridgeData V2 setting. As a result, SimplerEnv is widely used to assess whether a policy trained on
+real-world robot data can generalize to standardized evaluation scenarios without requiring direct real-robot
+testing for every experiment.
+• RoboTwin 2.0:RoboTwin 2.0 is a large-scale benchmark forbimanual robotic manipulationthat focuses
+on dual-arm coordination across diverse interaction scenarios Chen et al. (2025a). We use 50 clean
+data per task for standard clean evaluation, and followed the multi-task training protocol uses 50 clean
+demonstrations per task together with 500 randomized demonstrations per task, resulting in approximately
+550 trajectories per task and 27.5K trajectories over all 50 tasks. The randomized trajectories are generated
+through structured domain randomization, typically including factors such as cluttered scenes, background
+variation, table-height perturbation, lighting changes, and other environmental variations. This benchmark
+therefore provides a challenging testbed for evaluating fine-grained bimanual coordination as well as
+robustness to environmental diversity.
+• RoboCasa-GR1:RoboCasa-GR1 is a tabletop manipulation benchmark built on top of the RoboCasa
+simulation framework and is commonly used for evaluating humanoid-style manipulation policies Nasiriany
+et al. (2024); Bjorck et al. (2025). Compared with standard single-arm tabletop benchmarks, it introduces
+a more challenging embodiment together with household interaction scenarios involving articulated
+objects and multi-stage manipulation. The benchmark contains 24 tabletop tasks, and the associated
+data release commonly used in recent work provides 1000 demonstrations per task, resulting in around
+24K trajectories in total. RoboCasa-GR1 is therefore a useful benchmark for studying cross-embodiment
+transfer, long-horizon tabletop manipulation, and humanoid-oriented visuomotor control.
+17
+• RoboChallenge:RoboChallenge is a large-scale real-robot evaluation platform for benchmarking em-
+bodied control policies in the physical world Yakefu et al. (2025). Its initial benchmark suite,Table-30,
+contains 30 real-world tabletop manipulation tasks, and the platform report describes an initial deployment
+with10 hosted machines. Unlike simulation benchmarks, RoboChallenge evaluates policies directly
+under real sensing noise, actuation uncertainty, and physical environment variability. It therefore serves as
+an important testbed for validating whether strong simulation performance can transfer to standardized
+real-world robotic deployment.
+C Training Details
+Default setup.Unless otherwise specified, we initialize the VLM backbone from the publicly available
+Qwen3-VL-4B checkpoint, while the action heads are randomly initialized. All models are trained in a single
+stage directly on the target benchmark data without any action-specific pretraining.
+Training paradigms.We study bothSpecialistandGeneralisttraining. ASpecialistmodel is trained using
+data from a single embodiment only. In contrast, aGeneralistmodel is trained jointly on merged data from
+multiple embodiments and benchmark suites. In this paper, all benchmarks jointly training correspond to the
+Generalistsetting.
+Optimization.We use different learning rates for the VLM backbone and the action head: 1×10 −5 for the
+backbone and 1×10 −4 for the action head, with a cosine learning rate schedule. All models are trained for a
+maximum of 100k steps with a per-GPU batch size of 16.
+Computation resources.Our training setup scales with dataset size while keeping all other hyperparameters
+benchmark-agnostic. Specifically, shown in Table 8:
+Table 8:Computation resources for each benchmark suite.
+Training Data #GPUs Training Data #GPUs
+LIBERO8×A100 SimplerEnv16×A100
+RoboCasa-GR116×A100 RoboTwin-Clean16×A100
+RoboTwin-Clean + Rand.48×A100 RoboChallenge Table 3032×A100
+Real-World OOD16×A100 All benchmarks jointly64×A100
+Architecture details.For implementation specifics of different action heads (FAST, OFT, PI, GR00T), we
+refer readers to our code at https://github.com/starVLA/starVLA/tree/starVLA/starVLA/model/
+modules/action_model.
+D More Ablation Studies
+In addition to the analyses in Sec. 4, we further study several practical factors that may influence generalist
+VLA training: model initialization, model size, and batch size. Unlike the main ablations in Sec. 3, these
+experiments focus on the all-in-one training setting and aim to better understand which factors are most critical
+for achieving strong cross-benchmark performance under a unified training pipeline.
+D.1 Effect of Model Initialization
+Motivation.A key question in the generalist setting is whether the gain mainly comes from the unified training
+recipe itself, or depends critically on the backbone initialization. Since our framework is built on top of a
+pretrained VLM, it is important to quantify the role of initialization quality.
+Experimental setup.We keep the all-in-one training recipe unchanged and vary only the backbone initializa-
+tion. Specifically, we compare random initialization, Qwen2.5-VL, and Qwen3-VL, while using the same
+action head and training pipeline in all cases.
+Results.Table 9 shows that initialization quality plays a crucial role in generalist policy training. Random
+initialization performs substantially worse across all benchmarks, indicating that unified training alone is
+insufficient to learn a strong generalist policy from scratch. In contrast, initializing from pretrained VLMs
+18
+Table 9:Performance comparison across different VLM model initialization.
+VLM Initial LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Avg WidowX Google V A Google VM clean random Avg
+Random 77.5 24.8 45.4 52.8 65.6 59.8 28.8
+Florence-2 93.2 53.4 63.6 65.7 77.8 79.1 39.2
+Qwen2.5-VL 95.5 65.6 70.7 77.1 87.2 85.6 53.6
+Qwen3-VL 97.8 70.2 73.8 79.388.787.857.3
+Qwen3.598.2 71.3 76.8 80.088.388.456.1
+consistently improves performance. Among the pretrained backbones, stronger models generally lead to better
+results. Qwen2.5-VL already provides a large improvement over Florence-2, and Qwen3-VL further improves
+performance across most benchmarks. Using the even stronger Qwen3.5 backbone yields the best results on
+LIBERO and SimplerEnv and achieves the highest average performance on RoboTwin 2.0, demonstrating that
+improved multimodal priors can further enhance downstream robot control.
+Takeaway.These results indicate thatstrong VLM initialization is a key ingredient for generalist VLA
+training. The backbone is not merely a starting point: better pretrained multimodal representations translate
+directly into stronger cross-benchmark generalization.
+D.2 Effect of Model Size
+Motivation.Besides initialization, model capacity may also affect how well a single policy absorbs heteroge-
+neous data from multiple benchmarks and embodiments. We therefore study whether scaling the backbone
+improves performance in the generalist setting.
+Experimental setup.We evaluate three Qwen3-VL model sizes, 2B, 4B, and 8B, under the same all-in-one
+training setup. All other settings, including the action head, optimizer, and unified action padding strategy,
+remain unchanged.
+Table 10:Performance across VLA model sizes underGeneralistsetting.
+Method LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Avg WidowX Google V A Google VM clean* random* Avg
+2B 97.8 52.1 61.5 65.4 76.8 79.1 50.7
+4B 97.8 70.273.879.388.787.8 57.3
+8B98.2 71.572.980.388.6 88.858.2
+Results.As shown in Table 10, increasing model size from 2B to 4B brings clear and consistent gains,
+especially on the more challenging benchmarks. This suggests that insufficient capacity can limit unified
+multi-benchmark learning even when the training recipe is fixed. However, the improvement from 4B to 8B
+is much smaller and less consistent, indicating a clear diminishing-return trend once the backbone reaches
+moderate scale.
+Takeaway.These results suggest thatmodel size should not be too small in the generalist setting, but
+scaling beyond a moderate size is not the dominant factor. In our setup, 4B already captures most of the
+achievable gains and provides a favorable trade-off between capacity and efficiency.
+D.3 Effect of Batch Size
+Motivation.In the all-in-one setting, each batch may contain samples from different tasks, robots, and
+environments. As a result, batch size directly affects how much diversity the model observes at each
+optimization step, which may be particularly important for cross-benchmark generalization.
+Experimental setup.We vary the total batch size from 64 to 1024 while keeping the rest of the training setup
+unchanged. The model architecture and unified action representation remain the same, so the effect can be
+attributed to batch size alone.
+19
+Table 11:Performance comparison under different batch sizes.
+Batch Size LIBERO SimplerEnv RoboTwin 2.0 RoboCasa-GR1
+Avg WidowX Google V A Google VM clean random Avg
+64 95.8 35.4 63.2 76.8 80.4 81.3 40.0
+128 97.4 55.4 63.8 77.2 80.8 83.8 44.6
+256 97.9 62.3 70.6 78.3 86.4 86.5 48.3
+512 98.1 65.8 70.7 79.788.888.7 57.3
+102498.8 70.2 71.3 80.1 88.8 89.2 59.2
+Results.Table 11 shows a clear and consistent benefit from larger batch sizes. Performance improves
+steadily as the batch size increases, with especially pronounced gains on more challenging benchmarks
+such as SimplerEnv, RoboTwin 2.0, and RoboCasa-GR1. This trend suggests that, in the unified setting,
+exposing the model to more diverse supervision within each step is crucial for stable optimization and stronger
+generalization.
+Takeaway.These results indicate thatbatch size is one of the most important optimization factors in
+generalist VLA training. Its impact is broader and more consistent than that of model scaling, highlighting
+the importance of diverse gradient signals in all-in-one training.
+E RoboChallenge
+To further evaluate the real-world performance of StarVLA-α, we report results on the RoboChallenge Table-
+30 benchmark. RoboChallenge is a standardized real-robot benchmark that covers a broad range of household
+manipulation tasks across multiple robot embodiments. In our evaluation, the benchmark includes four
+representative platforms, namely UR5, Franka, ARX5, and ALOHA, and a diverse set of tasks with different
+levels of difficulty, including short-horizon pick-and-place, precise object manipulation, and long-horizon
+multi-step interaction. This benchmark therefore provides a strong testbed for measuring not only raw task
+success, but also embodiment-level transfer and robustness across varied real-world manipulation settings.
+Table ?? summarizes the full evaluation results across all four robot platforms. Each task is evaluated with
+two complementary metrics: success rate (SR) and progress score. The success rate measures whether the
+full task is completed successfully, while the progress score captures partial completion and thus provides a
+finer-grained view of policy behavior on long-horizon or difficult tasks where binary success alone may hide
+meaningful differences.
+Overall, StarVLA-α consistently outperforms π0.5 and π0 on most platforms and task groups in terms of both
+success rate and progress score. The gains are especially clear on challenging tasks that require accurate
+grounding, sequential reasoning, or stable long-horizon control, showing that StarVLA-α is not only stronger
+at completing tasks end-to-end, but also more reliable in making steady progress when full completion is
+difficult. These results validate the effectiveness of StarVLA- α in real-world manipulation and show that
+even a simple unified framework can generalize well across different robot embodiments and diverse task
+distributions.
+20
+F Real-world OOD Experiments
+To further assess the robustness of StarVLA-α in practical deployment, we conduct a set of real-world out-of-
+distribution (OOD) experiments using a physical robot. Compared with the standardized real-world benchmark
+results in Sec. 5, these experiments are designed to explicitly test whether StarVLA-α can generalize under
+realistic distribution shifts, includingnovel objects,unseen colors,shifted object positions, andunseen
+spatial coordinates. The goal is to evaluate whether the same simple StarVLA-α framework remains reliable
+in real-world instruction-following tasks beyond benchmark-specific settings.
+Experimental setup.We use a stationary, table-mountedFranka Research 3robot arm for all real-world
+experiments. The observation consists of two RGB images: one from a fixed third-person camera and the
+other from a wrist-mounted first-person camera. Both images are resized to 224×224 before being fed into
+the model. We consider three representative real-world manipulation tasks that probe different aspects of
+OOD generalization. The first is awaste-sorting categorizationtask, where the robot must place objects
+into the correct bin according to semantic category; the OOD setting containsnovel objects. The second is a
+pick-colored-eggtask with instructions such as“pick up the red egg”; this task includes OOD settings with
+unseen colorsandunseen positions. The third is anegg-carton placementtask, where the robot places an egg
+into a specified cell of a 4×4 carton grid according to language instructions such as“line 2, column 4”; the
+OOD setting containsunseen row-column combinations. For tasks with multiple OOD settings, we report the
+average OOD performance.
+Table 12: Summary of real-world OOD experiments with StarVLA-α. We report performance under in-domain
+(ID) and out-of-distribution (OOD) settings across three real-world tasks. For tasks with multiple OOD settings,
+we report the average OOD performance.
+Metric Pick colored egg Egg carton placement Waste-sorting Average
+ID OOD ID OOD ID OOD ID OOD
+Success rate (%) 77.1 75.0 91.3 68.8 87.5 85.0 85.3 76.3
+Results.The results are summarized in Table 12. Overall, StarVLA- α remains robust across all three real-
+world tasks and maintains strong performance under multiple forms of distribution shift. Notably, although
+StarVLA-α is intentionally simple and does not rely on elaborate data engineering, heavy data augmentation,
+or task-specific training tricks, its OOD performance remains largely comparable to its IID performance across
+all tasks. On average, the success rate only drops from 85.3% in the IID setting to 76.3% in the OOD setting,
+indicating that the robustness of StarVLA- α mainly comes from the learned policy itself rather than from
+dataset-specific engineering.
+In the waste-sorting task, the OOD performance on novel objects remains very close to the in-domain result
+(85.0% vs. 87.5%), suggesting that the model learns category-level grounding rather than merely memorizing
+object appearance. In the pick-colored-egg task, StarVLA-α also generalizes well to both unseen colors and
+unseen positions, achieving success rates of 68.0% and 81.9%, respectively. This result indicates that the model
+can reliably bind language attributes to visual instances while preserving spatial robustness under distribution
+shift. In the egg-carton placement task, StarVLA- α achieves strong in-domain performance and remains
+effective on unseen coordinate combinations, although compositional spatial generalization is comparatively
+more challenging than the other OOD settings. Even in this more difficult case, the OOD result remains
+reasonably competitive relative to the IID performance, further demonstrating the stability of the framework in
+practical real-world settings.
+Discussion.These real-world results complement the benchmark evaluations in the main paper. Beyond
+achieving strong performance on standardized benchmarks, StarVLA-α also demonstrates stable instruction
+following and nontrivial OOD robustness in practical robotic manipulation tasks. More importantly, this
+robustness is obtained with a simple and unified framework, without requiring sophisticated data curation
+pipelines, additional augmentation strategies, or complex task-specific engineering. The relatively small gap
+from IID to OOD suggests that StarVLA-α learns a transferable visuomotor policy with genuine generalization
+ability, instead of overfitting to the exact training distribution. Taken together, these experiments further support
+our main conclusion that a simple VLM-based policy can already provide strong real-world generalization
+without additional architectural complexity.
+21
+G Full Benchmark Results
+Due to space limitations in the main paper, we only report benchmark-level average results in the main text.
+In this appendix, we provide the full task-level results for several benchmarks to facilitate more detailed
+comparison and reproducibility. Specifically, we include detailed results forSimplerEnv,RoboTwin-2.0, and
+RoboCasa-GR1. All results follow the official evaluation protocols of each benchmark.
+G.1 SimplerEnv
+Table 13 reports the detailed results on the SimplerEnv benchmark under the WidowX robot with the Visual
+Matching setting. The benchmark contains four manipulation tasks, and we report the success rate for each
+task together with the average performance. Results are shown for representative prior VLA methods as well
+as our StarVLA-αvariants with different action heads and backbones.
+Table 13:Detailed results on SimplerEnv under the WidowX robot (VM).We report per-task success rates
+and the average across tasks for prior methods and StarVLA-αvariants.
+WidowX Robot Method Put Spoonon TowelPut Carroton Plate Stack Green Blockon Yellow BlockPut Eggplantin Yellow BasketAverage
+VisualMatching
+RT-1-X Brohan et al. (2022) 0.0 4.2 0.0 0.0 1.1Octo-Base Octo Model Team et al. (2024) 15.8 12.5 0.0 41.7 17.5Octo-Small Octo Model Team et al. (2024) 41.7 8.2 0.0 56.7 26.7OpenVLA Kim et al. (2024) 4.2 0.0 0.0 12.5 4.2CogACT Li et al. (2024c) 71.7 50.8 15.0 67.5 51.3SpatialVLA Qu et al. (2025) 16.7 25.0 29.2100.042.7π0Black et al. (2024a) 29.1 0.0 16.6 62.5 27.1π0-FAST Pertsch et al. (2025) 29.1 21.9 10.8 66.6 48.3GR00T N1.5 Bjorck et al. (2025) 75.3 54.357.061.3 61.9Magma Yang et al. (2025a) 37.5 31.0 12.7 60.5 35.8
+StarVLA-α(Specialist) 90.338.5 29.710064.6StarVLA-α(Generalist)79.759.822.8 98.565.2
+G.2 RoboTwin-2.0
+Table 15 presents the full task-level results of StarVLA-α on RoboTwin-2.0. The benchmark consists of 50
+dual-arm manipulation tasks, each evaluated under both Easy and Hard settings. We report the success rate for
+each task as well as the overall average across all tasks.
+G.3 RoboCasa-GR1
+Table 16 shows the detailed evaluation results on the RoboCasa-GR1 tabletop benchmark. The benchmark
+contains 24 tasks, and each model is trained jointly across all tasks. We report the success rate of each task
+together with the overall average performance.
+22
+Table 14: Detailed results on the SimplerEnv Google Robot benchmark. Underlined scores indicate the
+best results excluding ours. Numbers are officially reported unless marked with ∗, which denotes our
+reimplementation.
+Google
+Robot Models Pick
+Coke Can
+Move
+Near
+Open/Close
+Drawer
+Open Top Drawer
+and Place Apple Avg
+Visual
+Matching
+RT-1 Brohan et al. (2022) 85.7 44.273.06.5 52.4
+RT-1-X Collaboration et al. (2023) 56.7 31.7 59.7 21.3 42.4
+RT-2-X Brohan et al. (2023) 78.7 77.9 25.0 3.7 46.3
+OpenVLA Kim et al. (2024) 18.0 56.3 63.0 0.0 34.3
+CogACT Li et al. (2024c) 91.3 85.0 71.8 50.9 74.8
+SpatialVLA Qu et al. (2025) 86.0 77.9 57.4 - 75.1
+π0 Black et al. (2024a) 72.7 65.3 38.3 - 58.8
+π0-FAST Pertsch et al. (2025) 75.3 67.5 42.9 - 61.9
+GR00T N1.5∗ Bjorck et al. (2025) 51.7 54.0 27.8 7.4 35.2
+Magma Yang et al. (2025a) 83.7 65.4 56.0 6.4 52.9
+StarVLA-α(Specialist) 95.375.0 68.8 66.1 76.0
+StarVLA-α(Generalist)90.182.656.368.7 74.3
+Variant
+Aggregation
+RT-1 Brohan et al. (2022) 89.8 50.0 32.3 2.6 43.7
+RT-1-X Collaboration et al. (2023) 49.0 32.3 29.4 10.1 30.2
+RT-2-X Brohan et al. (2023) 82.3 79.2 35.3 20.6 54.4
+OpenVLA Kim et al. (2024) 60.8 67.7 28.8 0.0 39.3
+CogACT Li et al. (2024c) 89.680.828.3 46.6 61.3
+SpatialVLA Qu et al. (2025) 88.0 82.5 41.8 - 70.7
+π0 Black et al. (2024a) 75.2 63.7 25.6 - 54.8
+π0-FAST Pertsch et al. (2025) 77.6 68.2 31.3 - 59.0
+GR00T N1.5 Bjorck et al. (2025) 69.3 68.7 35.8 4.0 44.5
+Magma Yang et al. (2025a) 68.8 65.7 53.4 18.5 51.6
+StarVLA-α(Specialist) 91.375.1 55.059.4 70.2
+StarVLA-α(Generalist)88.878.8 56.155.5 69.8
+Table 15:Detailed results of StarVLA- α on RoboTwin 2.0 under specialist setting.We report success rates
+for each task under the Easy and Hard settings.
+RoboTwin-2.0
+Task Easy Hard Task Easy Hard Task Easy Hard
+Adjust Bottle 100 99 Open Microwave 28 39 Place Object Stand 99 98
+Beat Block Hammer 93 92 Pick Diverse Bottles 87 86 Place Phone Stand 86 95
+Blocks Ranking RGB 99 98 Pick Dual Bottles 91 93 Place Shoe 96 100
+Blocks Ranking Size 79 80 Place A2B Left 90 95 Press Stapler 99 96
+Click Alarmclock 58 51 Place A2B Right 88 95 Put Bottles Dustbin 90 85
+Click Bell 23 27 Place Bread Basket 91 78 Put Object Cabinet 89 91
+Dump Bin Bigbin 91 94 Place Bread Skillet 89 80 Rotate QRcode 88 90
+Grab Roller 100 100 Place Burger Fries 100 100 Scan Object 94 91
+Handover Block 97 93 Place Can Basket 75 75 Shake Horizontally 100 100
+Handover Mic 98 96 Place Cans Plasticbox 100 99 Shake Bottle 100 100
+Hanging Mug 34 29 Place Container Plate 99 99 Stack Blocks Three 94 86
+Lift Pot 100 100 Place Dual Shoes 91 89 Stack Blocks Two 100 100
+Move Can Pot 91 90 Place Empty Cup 100 100 Stack Bowls Three 95 91
+Move Pillbottle Pad 98 100 Place Fan 94 95 Stack Bowls Two 99 100
+Move Playingcard Away 100 98 Place Mouse Pad 87 94 Stamp Seal 86 90
+Move Stapler Pad 74 90 Place Object Basket 93 94 Turn Switch 65 62
+Open Laptop 98 100 Place Object Scale 93 93 Average 88.2 88.3
+23
+Table 16:Evaluation results on the RoboCasa-GR1 tabletop benchmark.A single model is trained jointly
+on all 24 tasks, and results are reported over 200 rollouts per task.
+Task GR00T-N1.6 StarVLA-α(Specialist)StarVLA-α(Generalist)
+PnPBottleToCabinetClose 51.5 35.0 52.0
+PnPCanToDrawerClose 13.0 81.0 86.0
+PnPCupToDrawerClose 8.5 50.0 38.0
+PnPMilkToMicrowaveClose 14.0 49.0 56.0
+PnPPotatoToMicrowaveClose 41.5 37.0 46.0
+PnPWineToCabinetClose 16.5 42.0 46.0
+PnPNovelFromCuttingboardToBasket58.0 55.0 56.0
+PnPNovelFromCuttingboardToCardboardbox 46.5 45.0 48.0
+PnPNovelFromCuttingboardToPan 68.5 75.0 80.0
+PnPNovelFromCuttingboardToPot65.0 59.0 60.0
+PnPNovelFromCuttingboardToTieredbasket46.5 43.0 42.0
+PnPNovelFromPlacematToBasket 58.5 38.0 60.0
+PnPNovelFromPlacematToBowl 57.5 63.0 74.0
+PnPNovelFromPlacematToPlate 63.0 57.0 74.0
+PnPNovelFromPlacematToTieredshelf 28.5 29.0 28.0
+PnPNovelFromPlateToBowl 57.0 65.0 72.0
+PnPNovelFromPlateToCardboardbox 43.5 55.0 44.0
+PnPNovelFromPlateToPan 51.0 71.0 70.0
+PnPNovelFromPlateToPlate78.7 73.0 74.0
+PnPNovelFromTrayToCardboardbox51.5 49.0 48.0
+PnPNovelFromTrayToPlate 71.0 61.0 72.0
+PnPNovelFromTrayToPot 64.5 67.0 67.0
+PnPNovelFromTrayToTieredbasket 57.0 59.0 58.0
+PnPNovelFromTrayToTieredshelf 31.5 33.0 24.0
+Average47.6 53.8 57.3
+24
+H Result Visualization Across Simulation Benchmarks
+To provide a clearer overview of the evaluation environments used in this work, we visualize representative
+scenes from all benchmarks considered in the paper. These visualizations help illustrate the diversity of robot
+embodiments, task layouts, and manipulation scenarios across the different benchmarks. Since our experiments
+span multiple datasets with different robot platforms and environments, these figures provide an intuitive
+understanding of the visual observations encountered by the policies during evaluation.
+Figure 6 presents example frames from the simulation benchmarks used in our experiments. From top to bottom,
+the figure shows scenes from SimplerEnv with the WidowX robot, RoboCasa-GR1, SimplerEnv with the
+Google Robot embodiment, and RoboTwin 2.0 under the Hard setting. These environments cover a wide range
+of manipulation settings, including single-arm tabletop manipulation, humanoid-style interaction scenarios,
+and dual-arm coordination tasks. Despite the differences in embodiment and environment structure, all
+benchmarks follow language-conditioned manipulation protocols and share similar RGB-based observations.
+Figure 6:Result visualization across simulation benchmarks. From top to bottom: SimplerEnv WidowX,
+RoboCasa-GR1, SimplerEnv Google Robot, and RoboTwin 2.0 (Hard).
+Figure 7 shows representative scenes from the RoboChallenge real-world benchmark used in our evaluation.
+Compared with simulation environments, RoboChallenge introduces additional challenges such as real-world
+sensing noise, lighting variations, and execution uncertainty. These visualizations provide an example of the
+physical robot setup and task environment used for real-world evaluation.
+Figure 8 further presents representative scenes from our real-world deployment experiments on the Franka
+Research 3 robot. Different from RoboChallenge, which emphasizes standardized large-scale evaluation
+across hosted robot platforms, these experiments are designed to study real-world instruction following and
+out-of-distribution generalization under our own deployment setup. The figure illustrates the physical tabletop
+environment, camera viewpoints, and representative manipulation tasks used in our evaluation, including waste
+sorting, colored egg picking, and egg-carton placement. Compared with benchmark-based evaluation, these
+real-world tasks involve more unconstrained object appearances, spatial variations, and language-conditioned
+target specifications, providing a complementary view of how StarVLA-α behaves in practical deployment
+scenarios.
+25
+Figure 7:Result visualization of large-scale real-world benchmark on RoboChallenge. See supplementary
+webpage for more videos.
+I Robustness Evaluation on LIBERO-Plus
+LIBERO-Plus is an extended benchmark built upon the standard LIBERO dataset to evaluate the robustness of
+robot manipulation models under diverse perturbations. It introduces variations in camera viewpoint, robot
+configuration, language instructions, lighting conditions, background clutter, sensor noise, and object layout.
+In our evaluation, we strictly follow the official setup: all models are trained on the standard LIBERO training
+data and directly evaluated on LIBERO-Plus without any additional adaptation. Therefore, this benchmark
+measures whether the policy learned from standard LIBERO can transfer to perturbed environments, rather
+than whether it can fit a specific robustness-oriented training distribution.
+Table 17 shows that StarVLA-α transfers well from standard LIBERO to LIBERO-Plus under diverse pertur-
+bations. Both specialist and generalist variants remain robust and outperform prior baselines, despite being
+trained only on standard LIBERO without any benchmark-specific robustness augmentation.
+26
+Figure 8:Real-world deployment tasks on Franka Research 3.From top to bottom: egg-carton placement,
+waste sorting and colored egg picking.
+Table 17:Performance comparison on the LIBERO-Plus benchmark under perturbations in camera,
+robot, language, lighting, background, noise, and layout.All models are trained on standard LIBERO and
+evaluated on LIBERO-Plus, and the best score in each column is shown in bold.
+Model Camera Robot Language Light Background Noise Layout Total
+OpenVLA Kim et al. (2024) 0.8 3.5 23.0 8.1 34.8 15.2 28.5 15.6
+OpenVLA-OFT Kim et al. (2025) 56.4 31.9 79.5 88.7 93.3 75.8 74.2 69.6
+NORA Hung et al. (2025) 2.2 37.0 65.1 45.7 58.6 12.8 62.1 39.0
+WorldVLA Cen et al. (2025) 0.1 27.9 41.6 43.7 17.1 10.9 38.0 25.0
+UniVLA Bu et al. (2025) 1.8 46.2 69.6 69.0 81.0 21.2 31.9 43.9
+π0 Black et al. (2024a) 13.8 6.0 58.8 85.0 81.4 79.0 68.9 53.6
+π0-Fast Pertsch et al. (2025)65.121.6 61.0 73.2 73.2 74.4 68.8 61.6
+RIPT-VLA Tan et al. (2025) 55.2 31.2 77.6 88.4 91.6 73.5 74.2 68.4
+StarVLA-α(Specialist) 48.7 63.486.895.8 94.6 75.080.277.8
+StarVLA-α(Generalist) 52.564.386.297.8 98.1 80.279.179.7
+Notably, StarVLA-α performs consistently well under language, lighting, background, and layout perturbations,
+suggesting that a strong VLM backbone provides robust multimodal representations. The generalist model is
+also competitive with, and sometimes slightly better than, the specialist model, supporting our main finding that
+joint training across benchmarks can improve robustness. Overall, these results show that strong initialization
+and a unified training pipeline already yield substantial robustness without extra architectural complexity.
+27

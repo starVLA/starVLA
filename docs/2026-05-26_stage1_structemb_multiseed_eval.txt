@@ -1,0 +1,45 @@
+Stage1 tokenizer g16_s8_structemb multi-seed replay eval
+Date: 2026-05-26
+
+Checkpoint:
+playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s8_structemb/best_recon.ckpt
+
+Checkpoint status:
+- best_recon.ckpt has been saved.
+- best_balanced.ckpt, epoch_049.ckpt, latest.ckpt, and final.ckpt are also present in the same run directory.
+- The selected best_recon checkpoint corresponds to epoch 49:
+  - recon_loss = 6.105769955878439e-05
+  - vel_loss = 3.879187637981626e-05
+  - codebook_used = 512/512
+- Use this checkpoint as the preferred g16_s8_structemb Stage1 artifact for downstream Stage2 token cache / replay experiments unless a later replay-grounded selection explicitly replaces it.
+
+Protocol:
+- mode: recon
+- suites: libero_spatial, libero_object, libero_goal, libero_10
+- tasks per suite: 10
+- episodes per task: 5
+- total episodes per seed: 200
+- init_state_strategy: hdf5_action
+- num_steps_wait: 0
+- gripper_mode: open01
+
+Results:
+
+| Seed | spatial | object | goal | libero_10 | Total |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 23 | 48/50 = 0.96 | 48/50 = 0.96 | 49/50 = 0.98 | 42/50 = 0.84 | 187/200 = 0.935 |
+| 11 | 48/50 = 0.96 | 47/50 = 0.94 | 49/50 = 0.98 | 42/50 = 0.84 | 186/200 = 0.930 |
+| 17 | 47/50 = 0.94 | 48/50 = 0.96 | 48/50 = 0.96 | 41/50 = 0.82 | 184/200 = 0.920 |
+| 31 | 48/50 = 0.96 | 48/50 = 0.96 | 47/50 = 0.94 | 41/50 = 0.82 | 184/200 = 0.920 |
+
+Best observed replay result:
+- seed 23
+- 187/200 = 93.5%
+
+Comparison:
+- Previous g16_s8_structemb single run: 183/200 = 91.5%
+- Previous old g16_s8 reference: 185/200 = 92.5%
+- Best observed g16_s8_structemb multi-seed result is now higher than both.
+
+JSON reports:
+playground/Checkpoints/var_stage1_pi05_libero_q99_e32_aeinit_productvq_g16_s8_structemb/replay_multiseed/

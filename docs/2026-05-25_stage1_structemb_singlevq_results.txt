@@ -1,0 +1,61 @@
+Stage1 新增实验结果记录
+日期：2026-05-25
+
+本轮新增两个 Stage1 tokenizer 实验：
+
+1. g16_s8_structemb
+   在原 g16_s8 的基础上加入 time embedding 和 action-type embedding。
+   Product-VQ 设置不变：embed_dim=32, groups=16, scale=[8], codebook_size=512。
+   每个 action chunk 的 token 数仍然是 8 x 16 = 128。
+
+2. single_vq_s8
+   把 Product-VQ 改成 single VQ。
+   embed_dim=32, scale=[8], codebook_size=512。
+   每个 action chunk 的 token 数变成 8 x 1 = 8。
+
+
+训练与离线重建结果
+
+| Checkpoint | 最优 epoch | 训练 recon loss | 离线 MSE | 离线 vel MSE | Codebook 使用 | Perplexity |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| g16_s8_structemb | 49 | 6.106e-05 | 5.775e-05 | 4.404e-05 | 512/512 = 1.000 | 498.30 |
+| single_vq_s8 | 49 | 6.262e-03 | 6.205e-03 | 1.212e-03 | 407/512 = 0.795 | 243.61 |
+
+
+g16_s8_structemb 的 40-task replay 结果
+
+评估协议：
+- libero_spatial、libero_object、libero_goal、libero_10 四个 suite
+- 每个 suite 10 个任务
+- 每个任务 5 个 episode
+- 每个 suite 共 50 episode，总共 200 episode
+- init_state_strategy = hdf5_action
+- num_steps_wait = 0
+- gripper_mode = open01
+- 不保存视频
+
+| Suite | Expert | Recon | FAST |
+| --- | ---: | ---: | ---: |
+| libero_spatial | 48/50 = 0.96 | 47/50 = 0.94 | 50/50 = 1.00 |
+| libero_object | 48/50 = 0.96 | 48/50 = 0.96 | 48/50 = 0.96 |
+| libero_goal | 49/50 = 0.98 | 49/50 = 0.98 | 48/50 = 0.96 |
+| libero_10 | 44/50 = 0.88 | 39/50 = 0.78 | 38/50 = 0.76 |
+| 总计 | 189/200 = 0.945 | 183/200 = 0.915 | 184/200 = 0.920 |
+
+
+和旧 g16_s8 的对比
+
+| Checkpoint | 训练 recon loss | 离线 MSE | 总 recon replay |
+| --- | ---: | ---: | ---: |
+| g16_s8 | 7.919e-05 | 未在本轮重跑 | 185/200 = 0.925 |
+| g16_s8_structemb | 6.106e-05 | 5.775e-05 | 183/200 = 0.915 |
+
+
+结论
+
+- g16_s8_structemb 确实把训练 recon loss 压到了 6.106e-05，比旧 g16_s8 的 7.919e-05 更低。
+- g16_s8_structemb 的离线 MSE 是 5.775e-05，codebook 使用率 100%，perplexity 498.30，说明 tokenizer 本身训练很健康。
+- 但是 g16_s8_structemb 的 40-task recon replay 是 183/200 = 91.5%，低于旧 g16_s8 的 185/200 = 92.5%。
+- 这再次说明 Stage1 的 MSE 更低不必然带来更高 replay 成功率。LIBERO replay 对关键时间点、接触、gripper 开合等误差更敏感，普通均匀 MSE 不能完全解释最终成功率。
+- single_vq_s8 的离线 MSE 是 6.205e-03，比 Product-VQ 差两个数量级，说明每个时间步只用 1 个 code 表示完整 32 维 latent 过于粗糙。这个实验可以作为 Product-VQ 分组离散化必要性的消融。
+

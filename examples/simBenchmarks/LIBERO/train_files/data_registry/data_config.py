@@ -96,9 +96,34 @@ class OpenPILibero4in1DataConfig(Libero4in1DataConfig):
         ])
 
 
+
+class Libero4in1Q99DataConfig(Libero4in1DataConfig):
+    def transform(self):
+        return ComposedModalityTransform(transforms=[
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={key: "q99" for key in self.state_keys},
+            ),
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={
+                    "action.x": "q99",
+                    "action.y": "q99",
+                    "action.z": "q99",
+                    "action.roll": "q99",
+                    "action.pitch": "q99",
+                    "action.yaw": "q99",
+                },
+            ),
+        ])
+
+
 ROBOT_TYPE_CONFIG_MAP = {
     "libero_franka": Libero4in1DataConfig(),
     "openpi_libero_franka": OpenPILibero4in1DataConfig(),
+    "libero_franka_q99": Libero4in1Q99DataConfig(),
 }
 
 
@@ -106,6 +131,7 @@ ROBOT_TYPE_CONFIG_MAP = {
 # Embodiment Tags
 # ---------------------------------------------------------------------------
 ROBOT_TYPE_TO_EMBODIMENT_TAG = {
+    "libero_franka_q99": EmbodimentTag.FRANKA,
     # Per Proposal A, embodiment_tag now lives as a classvar on each DataConfig.
     # The registry derives ROBOT_TYPE_TO_EMBODIMENT_TAG automatically. Kept as
     # an empty dict for backward compat (it is honored as legacy override).
@@ -128,8 +154,17 @@ DATASET_NAMED_MIXTURES = {
         ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "openpi_libero_franka"),
         ("libero_10_no_noops_1.0.0_lerobot", 1.0, "openpi_libero_franka"),
     ],
+    "libero_all_q99": [
+        ("libero_object_no_noops_1.0.0_lerobot", 1.0, "libero_franka_q99"),
+        ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka_q99"),
+        ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "libero_franka_q99"),
+        ("libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka_q99"),
+    ],
     "libero_goal": [
         ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
+    ],
+    "libero_goal_q99": [
+        ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka_q99"),
     ],
     "multi_robot": [
         ("LEROBOT_LIBERO_DATA/libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),

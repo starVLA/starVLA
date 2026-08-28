@@ -1,0 +1,58 @@
+datasets:
+  vla_data:
+    data_mix: fourier_gr1_unified_1000
+    data_root_dir: /root/tianyi/LDA-1B/playground/Datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim
+    dataset_py: var_stage2_token_dataset
+    include_state: true
+    max_read_retries: 16
+    mode: train
+    num_workers: 4
+    per_device_batch_size: 64
+    shuffle: true
+    skip_bad_samples: true
+    window_mode: full
+framework:
+  action_token_text:
+    prefix: <var_action_
+    suffix: '>'
+  name: QwenVARScaleParallel
+  parallel_head:
+    classifier: per_factor
+    code_condition_dropout: 0.0
+    dropout: 0.0
+    mlp_ratio: 4.0
+    num_attention_heads: 8
+    num_cross_attention_layers: 2
+  proprio_state:
+    add_context_token: true
+    add_to_pooled: true
+    enabled: true
+    state_dim: 58
+  qwenvl:
+    attn_implementation: flash_attention_2
+    base_vlm: /root/tianyi/starVLA/playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
+  stage1_tokenizer:
+    artifact: /root/nas/feihong/starVLA/Checkpoints/var_stage1_robocasa_gr1_e128_productvq_resume_local_from_epoch016_mirror/best_recon.ckpt
+    stage1_config: examples/simBenchmarks/Robocasa_tabletop/train_files/train_var_stage1_robocasa_gr1_e128_aeinit_productvq_g16_s1_2_4_8_16_current_from_latest_epoch032.yaml
+    token_cache: /root/feihong/starVLA/Checkpoints/var_stage1_robocasa_gr1_e128_productvq_resume_local_from_epoch016_mirror/stage2_token_cache_best_recon.pt
+output_dir: /root/feihong/starVLA/memtests/memtest_stage2_bs64_noaccum
+run_id: memtest_stage2_bs64_noaccum
+run_root_dir: /root/feihong/starVLA/memtests
+seed: 42
+trainer:
+  freeze_modules: null
+  gradient_accumulation_steps: 1
+  learning_rate:
+    base: 2.5e-05
+    qwen_vl_interface: 1.0e-05
+  lr_scheduler_type: cosine_with_min_lr
+  max_train_steps: 100000
+  num_warmup_steps: 3000
+  optimizer:
+    betas:
+    - 0.9
+    - 0.95
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06

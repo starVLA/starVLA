@@ -1,0 +1,96 @@
+experiment:
+  name: var_stage1_pi05_libero_q99_e32_productvq_weighted_tasks_resume_e50_to_e100
+  output_dir: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_productvq_weighted_tasks
+  seed: 42
+
+data:
+  starvla_config_yaml: examples/simBenchmarks/LIBERO/train_files/starvla_cotrain_libero.yaml
+  data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
+  data_mix: libero_all_q99
+  video_backend: torchvision_av
+  expected_action_horizon: 8
+  expected_action_dim: 7
+  window_mode: full
+  balance_dataset_weights: false
+  balance_trajectory_weights: false
+
+model:
+  type: var_action_tokenizer
+  seq_len: auto
+  action_dim: auto
+  embed_dim: 32
+  codebook_size: 512
+  scales: [1, 2, 4, 8]
+  use_dilated: true
+  quant_resi: 0.0
+  commitment_cost: 0.25
+  normalize_codebook_for_lookup: false
+  decoder_head_type: plain
+  quantization_mode: product_vq
+  product_codebook_groups: 16
+  use_time_embedding: true
+  use_action_type_embedding: true
+  input_embedding_scale: 1.0
+
+loss:
+  recon_weight: 1.0
+  vel_weight: 0.5
+  jerk_weight: 0.0
+  vq_weight: 0.08
+  vq_warmup_epochs: 10
+  gripper_recon_weight: 1.5
+  gripper_vel_weight: 0.25
+  weight_normalization: mean
+  sample_weighting:
+    enabled: true
+    normalization: mean
+    task_weights:
+      "libero_10::task_03": 1.5
+      "libero_10::task_06": 1.5
+      "libero_10::task_08": 1.75
+  trajectory_phase_weighting:
+    enabled: true
+    suites: [libero_10]
+    start_ratio: 0.6
+    weight: 1.5
+  time_weighting:
+    enabled: true
+    late_timestep_start: 4
+    late_timestep_weight: 1.25
+  task_balance_weighting:
+    enabled: true
+    power: 0.25
+    min_weight: 0.75
+    max_weight: 1.5
+    normalize_mean: true
+  adaptive_task_weighting:
+    enabled: true
+    scope: task
+    metric: mae
+    baseline: mean
+    power: 0.5
+    min_weight: 0.75
+    max_weight: 1.75
+    normalize_mean: true
+    min_count: 512
+
+train:
+  epochs: 100
+  batch_size: 256
+  num_workers: 8
+  learning_rate: 5.0e-5
+  weight_decay: 1.0e-5
+  grad_clip: 1.0
+  shuffle: true
+  max_batches_per_epoch: 0
+  min_codebook_usage_ratio_for_balanced: 0.35
+  save_every_epochs: 1
+  init_checkpoint: playground/Checkpoints/var_stage1_pi05_libero_q99_pure_ae_e32/best_recon.ckpt
+  init_checkpoint_mode: encoder_decoder
+  init_codebook_from_data_batches: 64
+  init_codebook_noise_scale: 1.0e-4
+  freeze_encoder_decoder_epochs: 3
+  resume_checkpoint: playground/Checkpoints/var_stage1_pi05_libero_q99_e32_productvq_weighted_tasks/latest.ckpt
+  track_reconstruction_by_task: true
+  save_reconstruction_by_task_every_epoch: true
+  device: cuda

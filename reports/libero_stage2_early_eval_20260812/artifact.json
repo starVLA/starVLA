@@ -1,0 +1,738 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "LIBERO Stage2 早期 Eval 与 Batch Size 核对",
+    "description": "26k–40k checkpoint 的完整 40-task eval 与全局 batch 口径核对。",
+    "generatedAt": "2026-08-12T12:30:00Z",
+    "charts": [
+      {
+        "id": "early_eval_curve",
+        "title": "Stage2 早期 checkpoint 成功率",
+        "subtitle": "每点为 40 tasks × 50 episodes，seed 7；A/B 是独立训练 run",
+        "type": "line",
+        "dataset": "early_eval",
+        "sourceId": "robust_eval_summaries",
+        "valueFormat": "percent",
+        "encodings": {
+          "x": {
+            "field": "step_k",
+            "type": "quantitative",
+            "label": "Optimizer step (k)"
+          },
+          "y": {
+            "field": "overall_success",
+            "type": "quantitative",
+            "label": "40-task mean success",
+            "format": "percent"
+          },
+          "color": {
+            "field": "run",
+            "type": "nominal",
+            "label": "Training run"
+          },
+          "tooltip": [
+            {
+              "field": "libero_10_success",
+              "type": "quantitative",
+              "label": "LIBERO-10",
+              "format": "percent"
+            },
+            {
+              "field": "episodes",
+              "type": "quantitative",
+              "label": "Episodes"
+            }
+          ]
+        },
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "anchor_table",
+        "title": "关键 checkpoint 精确值",
+        "subtitle": "完整评测锚点；成功率按 2,000 episodes 汇总",
+        "dataset": "anchors",
+        "sourceId": "robust_eval_summaries",
+        "density": "spacious",
+        "defaultSort": {
+          "field": "step",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "run",
+            "label": "Run",
+            "type": "text"
+          },
+          {
+            "field": "step",
+            "label": "Step",
+            "type": "number"
+          },
+          {
+            "field": "overall_success",
+            "label": "40-task mean",
+            "type": "number",
+            "format": "percent"
+          },
+          {
+            "field": "libero_10_success",
+            "label": "LIBERO-10",
+            "type": "number",
+            "format": "percent"
+          },
+          {
+            "field": "global_batch",
+            "label": "Global batch",
+            "type": "number"
+          }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "robust_eval_summaries",
+        "label": "LIBERO robust checkpoint sweep summaries",
+        "query": {
+          "engine": "python",
+          "language": "python",
+          "description": "Parses only summaries containing all four suites, 40 tasks, and 2,000 episode rows.",
+          "tables_used": [
+            "libero_40task_summary.txt",
+            "libero_40task_episodes.csv"
+          ],
+          "filters": [
+            "seed=7",
+            "50 episodes per task",
+            "complete 40-task summaries only",
+            "steps 26k–40k"
+          ],
+          "metric_definitions": [
+            "overall_success is total successful episodes divided by 2,000 episodes across 40 tasks.",
+            "global_batch equals 8 GPUs × 16 samples per GPU × gradient accumulation 1."
+          ]
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# LIBERO Stage2 早期 Eval 与 Batch Size 核对"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "sourceId": "robust_eval_summaries",
+        "body": "## Executive Summary\n\n- **你的记忆是对的。** A 基线在 26k 和 30k 都达到 **97.65%**；B 稳定版在 28k 达到 **97.85%**。\n- **这些结果对应 global batch 128。** 启动口径是 8 GPUs × per-device batch 16 × accumulation 1；当前新极核配置已经完全一致。\n- **不建议现在把 per-device batch 提到 32。** 那会把 global batch 改成 256，并同时改变每 step 看到的样本数与优化噪声，削弱新旧 Stage1 的公平归因。"
+      },
+      {
+        "id": "finding_curve",
+        "type": "markdown",
+        "sourceId": "robust_eval_summaries",
+        "body": "## 97%+ 确实在 30k 左右已经出现\n\nA run 从 26k 到 32k 的完整评测基本稳定在 **97.15%–97.65%**；30k 是 **97.65%**，其中 LIBERO-10 为 **95.00%**。B run 的峰值更早，28k 为 **97.85%**，但 30k 回落到 **96.30%**，说明单个 checkpoint 有明显波动，不能把‘30k’理解成固定最优点。"
+      },
+      {
+        "id": "curve",
+        "type": "chart",
+        "chartId": "early_eval_curve",
+        "layout": "full"
+      },
+      {
+        "id": "batch_implication",
+        "type": "markdown",
+        "sourceId": "robust_eval_summaries",
+        "body": "## Batch Size 应保持 128，优先调整评测与保存窗口\n\n现有证据支持保持每卡 16、8 卡、累积 1。新实验唯一希望验证的核心变量是加权后的 Stage1；若同步把 global batch 翻倍，就无法区分涨跌来自 tokenizer 还是 Stage2 优化尺度。更高价值的调整是从 **24k/26k 开始每 1k 保存**，优先评测 26k、28k、30k、32k、35k，并把 40k 设为第一阶段决策点。"
+      },
+      {
+        "id": "anchors",
+        "type": "table",
+        "tableId": "anchor_table",
+        "layout": "full"
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Recommended next steps\n\n- 新 Stage2 保持 global batch 128。\n- 第一阶段训练到 40k，保存 24k–40k 的 1k 间隔 checkpoint。\n- 用同一 seed、同一精度、40 tasks × 50 episodes 对 26k/28k/30k/32k/35k 做 sweep。\n- 若早期没有超过旧链路，再恢复到 100k，并额外保留 99k。"
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## Further questions\n\n新 Stage1 是否让 LIBERO-10 在相同步数超过旧值，需要重点看 task 03/06/08 的逐任务成功率，而不只是 40-task mean。"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats and assumptions\n\nA 与 B 是独立训练 run，不能拼成一条连续曲线。旧 60k/save-all run 在 40k–50k 的下降也属于另一条训练链路，不用于推断 A/B 的后期走势。所有主结论仅使用带完整 40-task 汇总和 2,000-row episode CSV 的评测。"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-12T12:30:00Z",
+    "status": "ready",
+    "datasets": {
+      "early_eval": [
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 26000,
+          "step_k": 26.0,
+          "overall_success": 0.9765,
+          "libero_10_success": 0.9520000000000001,
+          "spatial_success": 0.988,
+          "object_success": 0.992,
+          "goal_success": 0.9740000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 27000,
+          "step_k": 27.0,
+          "overall_success": 0.973,
+          "libero_10_success": 0.938,
+          "spatial_success": 0.98,
+          "object_success": 0.992,
+          "goal_success": 0.982,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 28000,
+          "step_k": 28.0,
+          "overall_success": 0.9725,
+          "libero_10_success": 0.9520000000000001,
+          "spatial_success": 0.976,
+          "object_success": 0.99,
+          "goal_success": 0.972,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 29000,
+          "step_k": 29.0,
+          "overall_success": 0.9734999999999999,
+          "libero_10_success": 0.94,
+          "spatial_success": 0.98,
+          "object_success": 0.992,
+          "goal_success": 0.982,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 30000,
+          "step_k": 30.0,
+          "overall_success": 0.9765,
+          "libero_10_success": 0.95,
+          "spatial_success": 0.986,
+          "object_success": 0.99,
+          "goal_success": 0.98,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 31000,
+          "step_k": 31.0,
+          "overall_success": 0.9715,
+          "libero_10_success": 0.9279999999999999,
+          "spatial_success": 0.986,
+          "object_success": 0.996,
+          "goal_success": 0.976,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 32000,
+          "step_k": 32.0,
+          "overall_success": 0.976,
+          "libero_10_success": 0.956,
+          "spatial_success": 0.9740000000000001,
+          "object_success": 0.9940000000000001,
+          "goal_success": 0.98,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 33000,
+          "step_k": 33.0,
+          "overall_success": 0.9670000000000001,
+          "libero_10_success": 0.93,
+          "spatial_success": 0.976,
+          "object_success": 0.986,
+          "goal_success": 0.976,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 34000,
+          "step_k": 34.0,
+          "overall_success": 0.965,
+          "libero_10_success": 0.932,
+          "spatial_success": 0.986,
+          "object_success": 0.9940000000000001,
+          "goal_success": 0.948,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 35000,
+          "step_k": 35.0,
+          "overall_success": 0.9640000000000001,
+          "libero_10_success": 0.922,
+          "spatial_success": 0.976,
+          "object_success": 0.9940000000000001,
+          "goal_success": 0.9640000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 36000,
+          "step_k": 36.0,
+          "overall_success": 0.9715,
+          "libero_10_success": 0.94,
+          "spatial_success": 0.9740000000000001,
+          "object_success": 0.988,
+          "goal_success": 0.9840000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 37000,
+          "step_k": 37.0,
+          "overall_success": 0.966,
+          "libero_10_success": 0.9420000000000001,
+          "spatial_success": 0.972,
+          "object_success": 0.978,
+          "goal_success": 0.972,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 38000,
+          "step_k": 38.0,
+          "overall_success": 0.9645,
+          "libero_10_success": 0.934,
+          "spatial_success": 0.968,
+          "object_success": 0.9940000000000001,
+          "goal_success": 0.9620000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 39000,
+          "step_k": 39.0,
+          "overall_success": 0.9665,
+          "libero_10_success": 0.93,
+          "spatial_success": 0.976,
+          "object_success": 1.0,
+          "goal_success": 0.96,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 40000,
+          "step_k": 40.0,
+          "overall_success": 0.966,
+          "libero_10_success": 0.932,
+          "spatial_success": 0.972,
+          "object_success": 0.9940000000000001,
+          "goal_success": 0.966,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 26000,
+          "step_k": 26.0,
+          "overall_success": 0.97,
+          "libero_10_success": 0.948,
+          "spatial_success": 0.9840000000000001,
+          "object_success": 0.992,
+          "goal_success": 0.956,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 27000,
+          "step_k": 27.0,
+          "overall_success": 0.97,
+          "libero_10_success": 0.932,
+          "spatial_success": 0.9740000000000001,
+          "object_success": 0.996,
+          "goal_success": 0.978,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 28000,
+          "step_k": 28.0,
+          "overall_success": 0.9784999999999999,
+          "libero_10_success": 0.958,
+          "spatial_success": 0.978,
+          "object_success": 0.992,
+          "goal_success": 0.986,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 29000,
+          "step_k": 29.0,
+          "overall_success": 0.9734999999999999,
+          "libero_10_success": 0.938,
+          "spatial_success": 0.9840000000000001,
+          "object_success": 0.992,
+          "goal_success": 0.98,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 30000,
+          "step_k": 30.0,
+          "overall_success": 0.963,
+          "libero_10_success": 0.912,
+          "spatial_success": 0.98,
+          "object_success": 0.992,
+          "goal_success": 0.968,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 31000,
+          "step_k": 31.0,
+          "overall_success": 0.9740000000000001,
+          "libero_10_success": 0.9540000000000001,
+          "spatial_success": 0.982,
+          "object_success": 0.9840000000000001,
+          "goal_success": 0.976,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 32000,
+          "step_k": 32.0,
+          "overall_success": 0.9590000000000001,
+          "libero_10_success": 0.9159999999999999,
+          "spatial_success": 0.97,
+          "object_success": 0.996,
+          "goal_success": 0.9540000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 33000,
+          "step_k": 33.0,
+          "overall_success": 0.9734999999999999,
+          "libero_10_success": 0.95,
+          "spatial_success": 0.972,
+          "object_success": 0.992,
+          "goal_success": 0.98,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 34000,
+          "step_k": 34.0,
+          "overall_success": 0.9645,
+          "libero_10_success": 0.938,
+          "spatial_success": 0.982,
+          "object_success": 0.992,
+          "goal_success": 0.946,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 35000,
+          "step_k": 35.0,
+          "overall_success": 0.977,
+          "libero_10_success": 0.96,
+          "spatial_success": 0.986,
+          "object_success": 0.992,
+          "goal_success": 0.97,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 36000,
+          "step_k": 36.0,
+          "overall_success": 0.965,
+          "libero_10_success": 0.934,
+          "spatial_success": 0.98,
+          "object_success": 0.992,
+          "goal_success": 0.9540000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 37000,
+          "step_k": 37.0,
+          "overall_success": 0.9645,
+          "libero_10_success": 0.9179999999999999,
+          "spatial_success": 0.9740000000000001,
+          "object_success": 0.9840000000000001,
+          "goal_success": 0.982,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        }
+      ],
+      "anchors": [
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 26000,
+          "step_k": 26.0,
+          "overall_success": 0.9765,
+          "libero_10_success": 0.9520000000000001,
+          "spatial_success": 0.988,
+          "object_success": 0.992,
+          "goal_success": 0.9740000000000001,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 30000,
+          "step_k": 30.0,
+          "overall_success": 0.9765,
+          "libero_10_success": 0.95,
+          "spatial_success": 0.986,
+          "object_success": 0.99,
+          "goal_success": 0.98,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "A: LR 2.5e-5 / warmup 3k",
+          "step": 32000,
+          "step_k": 32.0,
+          "overall_success": 0.976,
+          "libero_10_success": 0.956,
+          "spatial_success": 0.9740000000000001,
+          "object_success": 0.9940000000000001,
+          "goal_success": 0.98,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 28000,
+          "step_k": 28.0,
+          "overall_success": 0.9784999999999999,
+          "libero_10_success": 0.958,
+          "spatial_success": 0.978,
+          "object_success": 0.992,
+          "goal_success": 0.986,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 30000,
+          "step_k": 30.0,
+          "overall_success": 0.963,
+          "libero_10_success": 0.912,
+          "spatial_success": 0.98,
+          "object_success": 0.992,
+          "goal_success": 0.968,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        },
+        {
+          "run": "B: LR 2.0e-5 / warmup 5k",
+          "step": 35000,
+          "step_k": 35.0,
+          "overall_success": 0.977,
+          "libero_10_success": 0.96,
+          "spatial_success": 0.986,
+          "object_success": 0.992,
+          "goal_success": 0.97,
+          "tasks": 40,
+          "episodes": 2000,
+          "per_device_batch": 16,
+          "gpu_count": 8,
+          "gradient_accumulation": 1,
+          "global_batch": 128
+        }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {
+      "id": "robust_eval_summaries",
+      "label": "LIBERO robust checkpoint sweep summaries",
+      "query": {
+        "engine": "python",
+        "language": "python",
+        "description": "Parses complete local checkpoint-sweep summaries with episode-level coverage checks.",
+        "tables_used": [
+          "libero_40task_summary.txt",
+          "libero_40task_episodes.csv"
+        ],
+        "filters": [
+          "seed=7",
+          "50 episodes per task",
+          "40 tasks",
+          "steps 26k–40k"
+        ],
+        "metric_definitions": [
+          "Success rate is successful rollout episodes divided by evaluated episodes.",
+          "Global batch is GPU count times per-device batch times gradient accumulation."
+        ]
+      }
+    }
+  ]
+}

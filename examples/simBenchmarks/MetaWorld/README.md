@@ -174,3 +174,38 @@ per episode; overall SR = mean over the four difficulty buckets):
 > (ROT180 + center-crop 2/3 + resize to 224×224 — already built into
 > `eval_metaworld.py`); the policy server must be started with the matching
 > `dataset_statistics.json` from the checkpoint directory.
+
+---
+
+## 5. Stage 1 / Stage 2 Training
+
+The MetaWorld training flow mirrors the LIBERO and RoboCasa VAR flow, with an
+8-step, 4D action chunk (`delta_x`, `delta_y`, `delta_z`, `gripper`) and a 4D
+proprioceptive state.
+
+Prepare the dataset metadata expected by StarVLA:
+
+```bash
+bash examples/simBenchmarks/MetaWorld/data_preparation.sh /root/nas/feihong/starVLA/Datasets
+```
+
+If the dataset is already downloaded at
+`playground/Datasets/metaworld_starvla/metaworld_mt50_lerobot`, the same script
+is safe to rerun. It copies `train_files/modality.json` and builds
+`meta/stats_gr00t.json` plus `meta/steps_data_index.pkl`.
+
+Train Stage 1 action tokenizer:
+
+```bash
+bash examples/simBenchmarks/MetaWorld/train_files/run_var_stage1_metaworld_mt50_pure_ae_e32.sh
+bash examples/simBenchmarks/MetaWorld/train_files/run_var_stage1_metaworld_mt50_productvq_g16_s1_2_4_8.sh
+```
+
+Build the Stage 2 token cache and launch Stage 2:
+
+```bash
+bash examples/simBenchmarks/MetaWorld/stage2_files/build_productvq_g16_s1248_metaworld_mt50_token_cache.sh
+bash examples/simBenchmarks/MetaWorld/stage2_files/run_qwen_var_productvq_g16_s1248_metaworld_mt50_smoke.sh
+bash examples/simBenchmarks/MetaWorld/stage2_files/run_qwen_var_productvq_g16_s1248_metaworld_mt50_100k.sh
+```
+
