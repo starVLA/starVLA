@@ -9,10 +9,10 @@
 #
 # Slurm submission for MiniCPM-V 4.6 LIBERO training (8×GPU).
 # Aligned with upstream starVLA run_libero_train.sh:
-#   - Uses static deepspeed_zero2.yaml (GA hard-coded to 1 in ds_config.yaml)
+#   - Uses static deepspeed_zero2.yaml
 #   - Per-device BS=16, num_processes=8 -> effective BS = 128
-#   - Note: upstream's `trainer.gradient_accumulation_steps` in YAML is dead config;
-#     real GA is whatever ds_config.yaml says (1). We do NOT pass --grad-accum.
+#   - Passes GRAD_ACCUM explicitly so this script keeps GA=1 by default even
+#     when the shared LIBERO YAML uses a different value.
 #
 # Usage:
 #   sbatch examples/modelExtensions/MiniCPM/submit_hpc3_libero.sh
@@ -24,6 +24,7 @@
 #   DATA_MIX      - libero_all / libero_spatial / ...
 #   MAX_STEPS     - default 80000 (upstream guideline)
 #   PER_DEVICE_BS - default 16  (matches upstream run_libero_train.sh)
+#   GRAD_ACCUM    - default 1
 #   ATTN_IMPL     - default sdpa
 #   FREEZE_MODULES - default '' (unfreeze VLM, matches upstream)
 
@@ -38,6 +39,7 @@ BASE_VLM="${BASE_VLM:-openbmb/MiniCPM-V-4.6}"
 DATA_MIX="${DATA_MIX:-libero_all}"
 MAX_STEPS="${MAX_STEPS:-80000}"
 PER_DEVICE_BS="${PER_DEVICE_BS:-16}"
+GRAD_ACCUM="${GRAD_ACCUM:-1}"
 ATTN_IMPL="${ATTN_IMPL:-sdpa}"
 ENABLE_GRAD_CKPT="${ENABLE_GRAD_CKPT:-true}"
 FREEZE_MODULES="${FREEZE_MODULES:-}"
@@ -58,7 +60,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 echo "[minicpm-vla] FRAMEWORK=${FRAMEWORK}  BASE_VLM=${BASE_VLM}"
 echo "[minicpm-vla] DATA_MIX=${DATA_MIX}  STEPS=${MAX_STEPS}  PER_DEVICE_BS=${PER_DEVICE_BS}"
-echo "[minicpm-vla] effective BS = ${PER_DEVICE_BS}×8×1 (GA=1 from ds_config.yaml)"
+echo "[minicpm-vla] GRAD_ACCUM=${GRAD_ACCUM}  effective BS = ${PER_DEVICE_BS}×8×${GRAD_ACCUM}"
 echo "[minicpm-vla] FREEZE_MODULES='${FREEZE_MODULES}'  RUN_ID=${RUN_ID}"
 
 accelerate launch \
@@ -75,6 +77,7 @@ accelerate launch \
   --datasets.vla_data.data_root_dir "${LIBERO_DATA_ROOT}" \
   --datasets.vla_data.data_mix "${DATA_MIX}" \
   --datasets.vla_data.per_device_batch_size "${PER_DEVICE_BS}" \
+  --trainer.gradient_accumulation_steps "${GRAD_ACCUM}" \
   --trainer.max_train_steps "${MAX_STEPS}" \
   --trainer.freeze_modules "${FREEZE_MODULES}" \
   --trainer.save_interval 10000 \

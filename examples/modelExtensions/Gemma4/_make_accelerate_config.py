@@ -2,14 +2,10 @@
 """
 Generate accelerate + DeepSpeed configs with the requested gradient accumulation steps.
 
-starVLA's `trainer.gradient_accumulation_steps` is dead config — the actual value
-is read from `starVLA/config/deepseeds/ds_config.yaml` at module-import time
-because `train_starvla.py` constructs `Accelerator(deepspeed_plugin=...)` before
-`cfg` is parsed (and DeepSpeed grad_accum can only come from its own JSON).
-
-Instead of patching upstream, this helper writes a temp pair of config files with
-the right value, and prints the path to the generated accelerate yaml so the
-launcher can pass it via `--config_file`.
+StarVLA now passes `trainer.gradient_accumulation_steps` into `Accelerator`.
+This helper still writes a temp pair of config files for launchers that need
+per-run DeepSpeed files, keeping the generated DeepSpeed value aligned with the
+trainer CLI override.
 
 Usage:
   python _make_accelerate_config.py --grad-accum 4
