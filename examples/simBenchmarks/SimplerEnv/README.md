@@ -80,6 +80,17 @@ bash examples/simBenchmarks/SimplerEnv/start_simpler_env.sh ${MODEL_PATH}
 ```
 This script will automatically launch the WidowX Robot evaluation tasks, reproducing the benchmark results reported above.
 
+For reproducible runs, pass a seed to the evaluator and optionally write a
+machine-readable summary for each run:
+
+```bash
+seed=7 bash examples/simBenchmarks/SimplerEnv/eval_files/start_simpler_env.sh ${MODEL_PATH}
+```
+
+The direct entrypoint accepts `--seed` and `--results-file` as well. The JSON
+summary records the seed, checkpoint, environment, robot, episode counts, and
+per-episode success values so that results can be compared across runs.
+
 ⚠️ **Note:** Please ensure that you specify the correct `SimplerEnv_PATH`in 
 `start_simpler_env.sh`  
 
@@ -154,5 +165,4 @@ bash ./examples/simBenchmarks/SimplerEnv/train_files/run_oxe_train.sh
 ```
 
 ⚠️ **Note:** Ensure that the script explicitly uses the validated config path in `run_lerobot_datasets.sh`. If not already passed, add the `--config_yaml` argument.
-
 

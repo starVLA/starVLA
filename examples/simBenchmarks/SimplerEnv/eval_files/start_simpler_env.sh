@@ -9,6 +9,7 @@ SimplerEnv_PATH="${SimplerEnv_PATH:-}"
 SIMPLER_ENV_LIB_DIR="${SIMPLER_ENV_LIB_DIR:-}"
 port="${port:-6678}"
 gpu_id="${gpu_id:-0}"
+seed="${seed:-0}"
 your_ckpt="${your_ckpt:-./results/Checkpoints/0418_oxe_bridge_rt_1_QwenGR00T/checkpoints/steps_10000_pytorch_model.pt}"
 
 MODEL_PATH=${1:-"${your_ckpt}"}
@@ -65,6 +66,8 @@ for i in "${!ENV_NAMES[@]}"; do
     ${sim_python} examples/simBenchmarks/SimplerEnv/eval_files/start_simpler_env.py \
       --ckpt-path ${ckpt_path} \
       --port ${port} \
+      --seed ${seed} \
+      --results-file "${output_eval_dir}/${ckpt_name}_${env}_run${run_idx}.json" \
       --robot ${robot} \
       --policy-setup widowx_bridge \
       --control-freq 5 \
@@ -106,6 +109,8 @@ for i in "${!ENV_NAMES_V2[@]}"; do
     ${sim_python} examples/simBenchmarks/SimplerEnv/eval_files/start_simpler_env.py\
       --ckpt-path ${ckpt_path} \
       --port ${port} \
+      --seed ${seed} \
+      --results-file "${output_eval_dir}/${ckpt_name}_${env}_run${run_idx}.json" \
       --robot ${robot} \
       --policy-setup widowx_bridge \
       --control-freq 5 \

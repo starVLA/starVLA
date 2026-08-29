@@ -1,11 +1,13 @@
+import json
 import os
-
-import numpy as np
-from simpler_env.evaluation.maniskill2_evaluator import maniskill2_evaluator
 
 # from IPython import embed; embed()
 from examples.simBenchmarks.SimplerEnv.eval_files.custom_argparse import get_args
-from examples.simBenchmarks.SimplerEnv.eval_files.model2simpler_interface import ModelClient
+from examples.simBenchmarks.SimplerEnv.eval_files.evaluation_utils import (
+    build_evaluation_summary,
+    set_seed_everywhere,
+    write_evaluation_summary,
+)
 
 
 def start_debugpy_once():
@@ -21,6 +23,12 @@ def start_debugpy_once():
 
 if __name__ == "__main__":
     args = get_args()
+    set_seed_everywhere(args.seed)
+
+    # Import simulation and model dependencies after seeding the process.
+    from simpler_env.evaluation.maniskill2_evaluator import maniskill2_evaluator
+
+    from examples.simBenchmarks.SimplerEnv.eval_files.model2simpler_interface import ModelClient
 
     os.environ["DISPLAY"] = ""
     # prevent a single jax process from taking up all the GPU memory
@@ -39,5 +47,9 @@ if __name__ == "__main__":
     # policy model creation; update this if you are using a new policy model
     # run real-to-sim evaluation
     success_arr = maniskill2_evaluator(model, args)
+    summary = build_evaluation_summary(args, success_arr)
     print(args)
-    print(" " * 10, "Average success", np.mean(success_arr))
+    print(" " * 10, "Average success", summary["success_rate"])
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    if args.results_file is not None:
+        write_evaluation_summary(args.results_file, summary)

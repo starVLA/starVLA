@@ -112,8 +112,15 @@ def get_args():
         "is allowed.",
     )
     parser.add_argument("--logging-dir", type=str, default="./results")
+    parser.add_argument(
+        "--results-file",
+        type=str,
+        default=None,
+        help="Optional JSON file for reproducible evaluation metadata and results",
+    )
     parser.add_argument("--tf-memory-limit", type=int, default=3072, help="Tensorflow memory limit")
     parser.add_argument("--octo-init-rng", type=int, default=0, help="Octo init rng seed")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducible evaluation")
     parser.add_argument("--async-freq", type=int, default=1)
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Octo init rng seed")
     parser.add_argument("--port", type=int, default=10093)
