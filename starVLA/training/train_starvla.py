@@ -275,11 +275,14 @@ class VLATrainer(TrainerUtils):
 
     def _save_checkpoint(self):
         """Save current training state."""
+        # ZeRO-3 consolidates parameters with collectives and therefore every
+        # rank must enter get_state_dict(). Only rank 0 should serialize the
+        # resulting full state dict to disk.
+        state_dict = _get_state_dict(self.accelerator, self.model)
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
 
-            state_dict = _get_state_dict(self.accelerator, self.model)
             if save_format == "safetensors":
                 from safetensors.torch import save_file
 
@@ -442,11 +445,13 @@ class VLATrainer(TrainerUtils):
 
     def _finalize_training(self):
         """Training end processing."""
+        # DeepSpeed ZeRO-3 requires all ranks to participate in the parameter
+        # gathers performed by get_state_dict(); rank 0 alone writes the file.
+        state_dict = _get_state_dict(self.accelerator, self.model)
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)
-            state_dict = _get_state_dict(self.accelerator, self.model)
             if save_format == "safetensors":
                 from safetensors.torch import save_file
 
