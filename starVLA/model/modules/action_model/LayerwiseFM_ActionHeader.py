@@ -16,6 +16,7 @@ from starVLA.model.modules.action_model.flow_matching_head.action_encoder import
     SinusoidalPositionalEncoding,
     swish,
 )
+from starVLA.model.modules.action_model.dit_graph_compile import maybe_wrap_dit
 from starVLA.model.modules.action_model.flow_matching_head.cross_attention_dit import DiT
 
 # TODO try to meger DiT Modules with follow_match_head, they are just the same arch, but diff loss, use diffusers package will be simple
@@ -241,6 +242,11 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
 
         self.input_embedding_dim = diffusion_model_cfg_kwargs["input_embedding_dim"]
         self.model = DiT(**diffusion_model_cfg_kwargs)  # TODO: ideally copy LLM init from VLM
+        # Optional CUDA-graph execution of the training-time DiT forward
+        # (action_model.compile: true). Prediction paths keep the eager module.
+        # None when disabled: assigning self.model to a second attribute would
+        # re-register it as a submodule and duplicate its state_dict keys.
+        self._dit_train_forward = maybe_wrap_dit(self.model, action_config)
         self.dit_out_hidden_size = self.input_embedding_dim
         self.action_dim = action_config.action_dim
         # `action_horizon` is the canonical chunk length.  Legacy YAMLs are
@@ -330,7 +336,8 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         )
 
         # Layer-wise DiT forward. DiT handles cross/self-attention interleaving.
-        model_output = self.model(
+        dit_forward = self._dit_train_forward if self._dit_train_forward is not None else self.model
+        model_output = dit_forward(
             hidden_states=sa_embs,
             encoder_hidden_states=vl_embs_list,
             timestep=t_discretized,
