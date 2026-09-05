@@ -378,18 +378,31 @@ was last updated on 2026-09-01 and lists 13 verified models. If the four local
 StarVLA checkpoints were inserted simultaneously and sorted only by overall
 success rate, their numerical positions would be:
 
-| Illustrative position | Local checkpoint | Overall | Why this is not an official rank |
+| Illustrative position | Policy | Overall | Training/evaluation data |
 | ---: | --- | ---: | --- |
-| 3 | **StarVLA-PI** | **40.64%** | seen-34 target-task training; target kitchens; not submitted |
-| 6 | **StarVLA-GR00T** | **39.24%** | seen-34 target-task training; target kitchens; not submitted |
-| 9 | **StarVLA-OFT** | **33.32%** | target-50 training; target kitchens; not submitted |
-| 10 | **StarVLA-OFT (no state)** | **30.92%** | target-50 training; target kitchens; not submitted |
+| 1 | Xiaomi-Robotics-1 | 57.4% | Human300 pretraining data; pretraining kitchens |
+| 2 | ABot-M0.6 | 46.6% | Human300 pretraining data; pretraining kitchens |
+| 3 | **StarVLA-PI** | **40.64%** | target/human seen-34; target kitchens; no Human300 pretraining |
+| 4 | ABot-M0.5 | 40.3% | Human300 pretraining data; pretraining kitchens |
+| 5 | PRTS | 39.6% | Human300 pretraining data; pretraining kitchens |
+| 6 | **StarVLA-GR00T** | **39.24%** | target/human seen-34; target kitchens; no Human300 pretraining |
+| 7 | RLDX-1 | 36.0% | Human300 pretraining data; pretraining kitchens |
+| 8 | WorldDreamer | 35.3% | Human300 pretraining data; pretraining kitchens |
+| 9 | **StarVLA-OFT** | **33.32%** | target/human target-50; target kitchens; no Human300 pretraining |
+| 10 | **StarVLA-OFT (no state)** | **30.92%** | target/human target-50; target kitchens; no Human300 pretraining |
+| 11 | GR00T N1.5 | 23.9% | Human300 pretraining data; pretraining kitchens |
+| 12 | GR00T N1.6 | 21.9% | Human300 pretraining data; pretraining kitchens |
+| 13 | GigaWorld-Policy 0.1 | 20.7% | Human300 pretraining data; pretraining kitchens |
+| 14 | π0.5 | 16.9% | Human300 pretraining data; pretraining kitchens |
+| 15 | π0 | 14.8% | Human300 pretraining data; pretraining kitchens |
+| 16 | Azero-Robotics-1 | 12.6% | Human300 pretraining data; pretraining kitchens |
+| 17 | Diffusion Policy | 6.1% | Human300 pretraining data; pretraining kitchens |
 
-For context, the nearby verified leaderboard entries are Xiaomi-Robotics-1
-(57.4%), ABot-M0.6 (46.6%), ABot-M0.5 (40.3%), PRTS (39.6%), RLDX-1
-(36.0%), and WorldDreamer (35.3%). Protocol differences prevent an official
-rank claim; this table is only an arithmetic placement against the current
-published scores.
+The 13 non-StarVLA rows are verified leaderboard entries. The four bold
+StarVLA rows are local target-task results inserted only for arithmetic
+comparison; they have not been submitted to the official leaderboard. The
+training data and evaluation kitchens differ, so the combined ordering is not
+an official rank.
 
 Useful public references include:
 
