@@ -373,4 +373,9 @@ DATASET_NAMED_MIXTURES = {
     "vla_arena_L0_L": [
         ("VLA_Arena_L0_L_lerobot_openpi", 1.0, "vla_arena_franka"),
     ],
+
+    "task350": [
+        ("task350", 1.0, "aloha"),
+        # (dataset_folder_name, sampling_weight, robot_type_config)
+    ],
 }
