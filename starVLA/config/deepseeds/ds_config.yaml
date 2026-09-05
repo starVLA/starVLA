@@ -7,7 +7,7 @@
     },
     "train_micro_batch_size_per_gpu": "auto",
     "train_batch_size": "auto",
-    "gradient_accumulation_steps": 1,
+    "gradient_accumulation_steps": "auto",
     "zero_optimization": {
         "stage": 2,
         "allgather_partitions": true,
@@ -18,6 +18,6 @@
         "contiguous_gradients": true,
         "cpu_offload": false
     },
-    "gradient_clipping": 1.0,
+    "gradient_clipping": "auto",
     "steps_per_print": 10
 }
