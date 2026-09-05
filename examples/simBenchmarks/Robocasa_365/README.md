@@ -1,14 +1,30 @@
 # RoboCasa365 (PandaOmron)
 
-This directory contains StarVLA data registration, training, and evaluation
-examples for the official [RoboCasa365](https://robocasa.ai/) benchmark using
-the mobile single-arm PandaOmron robot.
+This directory contains StarVLA training and evaluation recipes for the
+official [RoboCasa365](https://robocasa.ai/) benchmark using the mobile
+single-arm PandaOmron robot. It covers the 50 target tasks, four locally tested
+StarVLA policy variants, and restartable multi-lane evaluation in target
+kitchens.
 
 > [!IMPORTANT]
 > The NVIDIA GR1 tabletop fork under
 > [`examples/simBenchmarks/Robocasa_tabletop`](../Robocasa_tabletop/README.md)
 > is a different benchmark. Its checkpoints, observation/action contracts, and
 > scores are not interchangeable with RoboCasa365.
+
+## Status and headline results
+
+The latest complete local result snapshot is **2026-08-30**. Every reported
+variant below completed all **50 tasks × 50 rollouts = 2,500 rollouts** with
+RoboCasa **v1.0.1** task-specific horizons in target kitchens.
+
+- Best local overall: **StarVLA-PI at 150k — 40.64% (1,016/2,500)**.
+- Best local Atomic-Seen: **StarVLA-GR00T at 120k — 76.67%**.
+- Best local Composite-Seen: **StarVLA-PI at 150k — 39.38%**.
+- Best local Composite-Unseen: **StarVLA-OFT at 220k — 15.12%**.
+
+The aggregate and per-task scores for all four variants are included in
+[Archived local research snapshot](#7-archived-local-research-snapshot).
 
 ## What is included
 
