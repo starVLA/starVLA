@@ -3,35 +3,26 @@
 from __future__ import annotations
 
 import json
-import random
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
-import numpy as np
-import torch
-
-
-def set_seed_everywhere(seed: int) -> None:
-    """Seed the RNGs used by the evaluation process.
-
-    SimplerEnv owns the environment construction, so the caller seeds the
-    process before invoking its evaluator. This keeps the integration limited
-    to StarVLA while covering the RNGs used by model and environment helpers.
-    """
-    if not 0 <= seed <= np.iinfo(np.uint32).max:
-        raise ValueError(f"seed must be between 0 and {np.iinfo(np.uint32).max}")
-
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+from deployment.model_server.seed_utils import set_seed_everywhere
 
 
-def build_evaluation_summary(args: Any, success_arr: Iterable[bool]) -> dict[str, Any]:
+def build_evaluation_summary(
+    args: Any,
+    success_arr: Iterable[bool],
+    server_metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a JSON-serializable summary for one evaluator invocation."""
+    if not server_metadata or not server_metadata.get("ckpt_path"):
+        raise ValueError("policy server metadata must include the served ckpt_path")
+    server_seed = server_metadata.get("seed")
+    if server_seed is None:
+        raise ValueError("policy server metadata must include the served seed")
+    if server_seed != args.seed:
+        raise ValueError(f"evaluation seed {args.seed} does not match policy server seed {server_seed}")
+
     successes = [bool(value) for value in success_arr]
     num_successes = sum(successes)
     num_episodes = len(successes)
@@ -40,7 +31,8 @@ def build_evaluation_summary(args: Any, success_arr: Iterable[bool]) -> dict[str
         "seed": args.seed,
         "policy_model": args.policy_model,
         "policy_setup": args.policy_setup,
-        "checkpoint": args.ckpt_path,
+        "checkpoint": server_metadata["ckpt_path"],
+        "requested_checkpoint": args.ckpt_path,
         "environment": args.env_name,
         "task": args.env_name,
         "scene": args.scene_name,

@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # policy model creation; update this if you are using a new policy model
     # run real-to-sim evaluation
     success_arr = maniskill2_evaluator(model, args)
-    summary = build_evaluation_summary(args, success_arr)
+    summary = build_evaluation_summary(args, success_arr, model.server_metadata)
     print(args)
     print(" " * 10, "Average success", summary["success_rate"])
     print(json.dumps(summary, indent=2, sort_keys=True))

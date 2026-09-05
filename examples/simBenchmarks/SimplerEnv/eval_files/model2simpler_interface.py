@@ -83,6 +83,7 @@ class ModelClient:
         self.num_image_history = 0
 
         server_meta = self.client.get_server_metadata()
+        self.server_metadata = dict(server_meta)
         print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key}, server_meta: {server_meta} ***")
 
     def _add_image_to_history(self, image: np.ndarray) -> None:

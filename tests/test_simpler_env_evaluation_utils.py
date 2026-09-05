@@ -46,13 +46,30 @@ def test_build_and_write_evaluation_summary(tmp_path):
         max_episode_steps=120,
     )
 
-    summary = build_evaluation_summary(args, [True, False, True])
+    summary = build_evaluation_summary(
+        args,
+        [True, False, True],
+        {"ckpt_path": "/server/checkpoint.pt", "seed": 7},
+    )
     assert summary["num_episodes"] == 3
     assert summary["num_successes"] == 2
     assert summary["success_rate"] == 2 / 3
     assert summary["task"] == "PickCube-v1"
+    assert summary["checkpoint"] == "/server/checkpoint.pt"
+    assert summary["requested_checkpoint"] == "checkpoint.pt"
 
     output = tmp_path / "nested" / "summary.json"
     write_evaluation_summary(output, summary)
     assert output.exists()
     assert '"seed": 7' in output.read_text()
+
+
+def test_build_evaluation_summary_rejects_server_seed_mismatch():
+    args = SimpleNamespace(seed=7, ckpt_path="checkpoint.pt")
+
+    try:
+        build_evaluation_summary(args, [], {"ckpt_path": "server.pt", "seed": 8})
+    except ValueError as exc:
+        assert "does not match" in str(exc)
+    else:
+        raise AssertionError("expected a server/evaluator seed mismatch to be rejected")
