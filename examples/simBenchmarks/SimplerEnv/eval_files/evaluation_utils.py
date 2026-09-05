@@ -9,12 +9,8 @@ from typing import Any, Iterable, Mapping
 from deployment.model_server.seed_utils import set_seed_everywhere
 
 
-def build_evaluation_summary(
-    args: Any,
-    success_arr: Iterable[bool],
-    server_metadata: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Build a JSON-serializable summary for one evaluator invocation."""
+def validate_server_metadata(args: Any, server_metadata: Mapping[str, Any] | None) -> None:
+    """Validate the policy server identity before running an evaluation."""
     if not server_metadata or not server_metadata.get("ckpt_path"):
         raise ValueError("policy server metadata must include the served ckpt_path")
     server_seed = server_metadata.get("seed")
@@ -22,6 +18,15 @@ def build_evaluation_summary(
         raise ValueError("policy server metadata must include the served seed")
     if server_seed != args.seed:
         raise ValueError(f"evaluation seed {args.seed} does not match policy server seed {server_seed}")
+
+
+def build_evaluation_summary(
+    args: Any,
+    success_arr: Iterable[bool],
+    server_metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a JSON-serializable summary for one evaluator invocation."""
+    validate_server_metadata(args, server_metadata)
 
     successes = [bool(value) for value in success_arr]
     num_successes = sum(successes)

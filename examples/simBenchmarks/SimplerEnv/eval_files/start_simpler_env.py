@@ -6,6 +6,7 @@ from examples.simBenchmarks.SimplerEnv.eval_files.custom_argparse import get_arg
 from examples.simBenchmarks.SimplerEnv.eval_files.evaluation_utils import (
     build_evaluation_summary,
     set_seed_everywhere,
+    validate_server_metadata,
     write_evaluation_summary,
 )
 
@@ -43,6 +44,7 @@ if __name__ == "__main__":
         action_scale=args.action_scale,
         cfg_scale=1.5,  # cfg from 1.5 to 7 also performs well
     )
+    validate_server_metadata(args, model.server_metadata)
 
     # policy model creation; update this if you are using a new policy model
     # run real-to-sim evaluation
