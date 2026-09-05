@@ -80,8 +80,9 @@ bash examples/simBenchmarks/SimplerEnv/start_simpler_env.sh ${MODEL_PATH}
 ```
 This script will automatically launch the WidowX Robot evaluation tasks, reproducing the benchmark results reported above.
 
-For reproducible runs, pass a seed to the evaluator and optionally write a
-machine-readable summary for each run:
+Reproducible seed control and evaluation provenance were added in
+[PR #461](https://github.com/starVLA/starVLA/pull/461). Pass a fixed seed to
+the evaluator and optionally write a machine-readable summary for each run:
 
 ```bash
 seed=7 bash examples/simBenchmarks/SimplerEnv/eval_files/start_simpler_env.sh ${MODEL_PATH}
