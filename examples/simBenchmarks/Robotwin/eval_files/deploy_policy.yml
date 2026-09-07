@@ -11,3 +11,6 @@ port: 5694
 unnorm_key: "new_embodiment"
 action_mode: "abs"
 normalization_mode: "min_max"  # options: min_max, q99
+# Re-query the policy after this many executed actions while retaining the
+# server-side prediction horizon. Must not exceed action_chunk_size.
+execution_horizon: 16

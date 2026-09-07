@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Dict, Optional
+from typing import Optional
 
 import cv2 as cv
 import numpy as np
@@ -19,9 +19,10 @@ class ModelClient:
         unnorm_key: Optional[str] = None,
         policy_setup: str = "robotwin",
         horizon: int = 0,
+        execution_horizon: Optional[int] = None,
         action_ensemble=False,
         action_ensemble_horizon: Optional[int] = 3,
-        image_size: list[int] = [224, 224],
+        image_size: Optional[list[int]] = None,
         use_ddim: bool = True,
         num_ddim_steps: int = 10,
         adaptive_ensemble_alpha=0.1,
@@ -30,7 +31,6 @@ class ModelClient:
         action_mode: str = "abs",
         normalization_mode: str = "min_max",
     ) -> None:
-
         self.client = WebsocketClientPolicy(host, port)
         self.policy_setup = policy_setup
         self.unnorm_key = unnorm_key
@@ -41,7 +41,7 @@ class ModelClient:
         )
         self.use_ddim = use_ddim
         self.num_ddim_steps = num_ddim_steps
-        self.image_size = image_size
+        self.image_size = [224, 224] if image_size is None else image_size
         self.horizon = horizon
         self.action_ensemble = action_ensemble and (AdaptiveEnsembler is not None)
         self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
@@ -63,15 +63,36 @@ class ModelClient:
         self.num_image_history = 0
 
         self.action_chunk_size = None
+        self.execution_horizon = None
+        self._action_chunk_start_step = None
         self.state_norm_stats = None
         self.raw_actions = None
 
         server_meta = self.client.get_server_metadata()
         self.action_chunk_size = server_meta["action_chunk_size"]
+        if (
+            isinstance(self.action_chunk_size, bool)
+            or not isinstance(self.action_chunk_size, int)
+            or self.action_chunk_size < 1
+        ):
+            raise ValueError(f"Server action_chunk_size must be a positive integer, got {self.action_chunk_size!r}")
+
+        if execution_horizon is None:
+            execution_horizon = self.action_chunk_size
+        if (
+            isinstance(execution_horizon, bool)
+            or not isinstance(execution_horizon, int)
+            or not 1 <= execution_horizon <= self.action_chunk_size
+        ):
+            raise ValueError(
+                "execution_horizon must be a positive integer no greater than the server "
+                f"action_chunk_size ({self.action_chunk_size}), got {execution_horizon!r}"
+            )
+        self.execution_horizon = execution_horizon
         print(
             f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key}, "
             f"action_mode: {action_mode}, normalization_mode: {normalization_mode}, "
-            f"server_meta: {server_meta} ***"
+            f"execution_horizon: {self.execution_horizon}, server_meta: {server_meta} ***"
         )
 
     def reset(self, task_description: str) -> None:
@@ -81,6 +102,7 @@ class ModelClient:
             self.action_ensembler.reset()
         self.num_image_history = 0
         self.raw_actions = None
+        self._action_chunk_start_step = None
         # Reset state tracking for delta/rel modes
         self.initial_state = None
         self.prev_action = None
@@ -124,9 +146,12 @@ class ModelClient:
         }
         vla_input["unnorm_key"] = self.unnorm_key
 
-        action_chunk_size = self.action_chunk_size
-
-        if step % action_chunk_size == 0 or self.raw_actions is None:
+        chunk_expired = (
+            self._action_chunk_start_step is None
+            or step < self._action_chunk_start_step
+            or step - self._action_chunk_start_step >= self.execution_horizon
+        )
+        if self.raw_actions is None or chunk_expired:
             # === TRAIN/TEST CONSISTENCY: keep the observation below aligned with training ===
             # Embodied policies degrade SILENTLY (no error) when the eval-time observation
             # differs from what the model saw during TRAINING. Verify these match the
@@ -140,6 +165,11 @@ class ModelClient:
             response = self.client.predict_action(vla_input)
             # server already un-normalized via training-time transform
             raw_actions = np.array(response["data"]["actions"][0])  # (chunk, D)
+            if raw_actions.ndim != 2 or len(raw_actions) < self.execution_horizon:
+                raise ValueError(
+                    "Policy returned an action chunk that is shorter than execution_horizon: "
+                    f"shape={raw_actions.shape}, execution_horizon={self.execution_horizon}"
+                )
 
             # Convert delta/rel to absolute actions
             if self.action_mode == "delta":
@@ -148,11 +178,9 @@ class ModelClient:
                 self.raw_actions = self._rel_to_absolute(raw_actions)
             else:
                 self.raw_actions = raw_actions
+            self._action_chunk_start_step = step
 
-        action_idx = step % action_chunk_size
-        if action_idx >= len(self.raw_actions):
-            pass
-
+        action_idx = step - self._action_chunk_start_step
         current_action = self.raw_actions[action_idx]
 
         # Update prev_action for delta mode (for cross-chunk continuity)
@@ -186,6 +214,7 @@ def get_model(usr_args):
     port = usr_args.get("port", 5694)
     unnorm_key = usr_args.get("unnorm_key", None)
     action_mode = usr_args.get("action_mode", "abs")
+    execution_horizon = usr_args.get("execution_horizon")
     normalization_mode = usr_args.get(
         "action_normalization_mode",
         usr_args.get("normalization_mode", "min_max"),
@@ -200,6 +229,7 @@ def get_model(usr_args):
         port=port,
         unnorm_key=unnorm_key,
         action_mode=action_mode,
+        execution_horizon=execution_horizon,
         normalization_mode=normalization_mode,
     )
 
@@ -208,7 +238,7 @@ def reset_model(model):
     model.reset(task_description="")
 
 
-def eval(TASK_ENV, model, observation):
+def eval(TASK_ENV, model, observation):  # noqa: A001 - required RoboTwin policy interface name
     # Get instruction
     instruction = TASK_ENV.get_instruction()
 

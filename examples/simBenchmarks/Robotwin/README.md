@@ -446,6 +446,7 @@ The launcher does **not** use `conda activate`. Instead, it locates the Python b
 | `normalization_mode` | Normalization mode: `min_max` or `q99` |
 | `unnorm_key` | Unnormalization key for the embodiment |
 | `action_mode` | Action mode (e.g. `abs`) |
+| `execution_horizon` | Actions executed from each predicted chunk before replanning. Must be no greater than the server's `action_chunk_size`; omit it to execute the full predicted chunk. The template uses `16` to keep observations fresher when models predict longer chunks. |
 
 `host` and `port` are overridden at runtime by the launcher. If your checkpoint was trained with percentile normalization, set `normalization_mode: "q99"`.
 
