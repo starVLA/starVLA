@@ -15,7 +15,7 @@ python deployment/model_server/server_policy.py \
 ## Connect to server for debug
 
 ```bash
-python deployment/model_server/debug_server_policy.py
+python -m deployment.model_server.tools.debug_server_policy --port 10093
 
 # use server_policy.py in your eval client by referencing debug_server_policy.py
 ```
