@@ -59,6 +59,8 @@ datasets:
     include_state: false
     data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
     data_mix: libero_goal # libero_goal
+    action_horizon: ${framework.action_model.action_horizon}
+    normalization_modes: min_max
     action_type: delta_qpos
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
     per_device_batch_size: 16
