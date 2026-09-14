@@ -1,0 +1,153 @@
+# ===== Run Configuration =====
+# RoboTTT training config for the ALOHA bimanual setup (14-DoF, 2 cameras).
+# Mirrors starvla_robottt_libero.yaml with ALOHA-specific data dimensions.
+# RoboTTT trains on trajectories (B=1 per device for long context); the TTT
+# layers compress information across the trajectory time dimension.
+run_id: aloha_robottt              # Experiment name; checkpoints saved under run_root_dir/run_id/
+run_root_dir: results/Checkpoints  # Root directory for checkpoint output
+seed: 42
+version_id: "0.21"                 # Config schema version (stamped by apply_config_compat)
+trackers: [jsonl, wandb]           # Logging: jsonl (local) + wandb (online)
+wandb_entity: your_wandb_entity    # Your wandb username or team
+wandb_project: my_robot_project
+is_debug: false                    # Set true to use minimal data for quick debugging
+
+# ===== Model Framework Configuration =====
+framework:
+  name: RoboTTT                    # Registered in FRAMEWORK_REGISTRY (VLM4A/RoboTTT.py)
+  qwenvl:
+    # Warm-start from NVIDIA GR00T N1.7: the base must be Cosmos-Reason2-2B
+    # (hidden_size 2048), which is NVIDIA's actual N1.7 backbone. starVLA loads it
+    # via the `cosmos-reason2` VLM dispatch (path substring triggers it). It is a
+    # GATED HF model — request access at https://huggingface.co/nvidia/Cosmos-Reason2-2B
+    # then: huggingface-cli download nvidia/Cosmos-Reason2-2B \
+    #   --local-dir playground/Pretrained_models/nvidia/Cosmos-Reason2-2B
+    base_vlm: ./playground/Pretrained_models/nvidia/Cosmos-Reason2-2B
+    attn_implementation: flash_attention_2
+
+  action_model:
+    # === Real-robot dimensions (ALOHA bimanual: 7 joints × 2 arms). ===
+    # The N1.7 head pads these to max_action_dim/max_state_dim (default 132) and
+    # masks the padding, so action_dim/state_dim just describe the real DoF.
+    action_dim: 14
+    state_dim: 14
+    # Must match the data chunk length produced by AlohaDataConfig.action_indices
+    # (= list(range(8)) in data_config.py). The framework slices each per-timestep
+    # action chunk to [-action_horizon:]; a mismatch silently truncates / errors.
+    action_horizon: 8
+
+    # === N1.7 flow-matching head — sized to match nvidia/GR00T-N1.7-3B so the
+    # converted warm-start checkpoint (see trainer.pretrained_checkpoint below)
+    # loads cleanly. Dims MUST match the converter invocation; changing them here
+    # requires re-running gr00t_n1d7_to_starvla.py with the same values. ===
+    backbone_embedding_dim: 2048    # = Cosmos-Reason2-2B hidden (DiT attn1.to_k/to_v input dim)
+    use_alternate_vl_dit: true      # AlternateVLDiT (image/text alternating cross-attention)
+    attend_text_every_n_blocks: 2
+    use_vlln: true                  # vlln on backbone features
+    vl_self_attention_cfg:          # N1.7 has 4 vl-self-attn layers (must match for transfer)
+      num_attention_heads: 32
+      attention_head_dim: 64
+      num_layers: 4
+      dropout: 0.2
+      final_dropout: true
+      positional_embeddings: null
+    state_dropout_prob: 0.2         # N1.7 base uses 0.2
+    num_inference_timesteps: 4     # Diffusion steps at inference (fewer = faster)
+    repeated_diffusion_steps: 1    # Diffusion sampling repeats at train time
+    diffusion_model_cfg:
+      positional_embeddings: null
+      num_layers: 32               # N1.7-3B has 32 DiT blocks (must match for full transfer)
+      num_attention_heads: 32
+      attention_head_dim: 48
+      norm_type: ada_norm
+      dropout: 0.2
+      final_dropout: true
+      output_dim: 1024
+      interleave_self_attention: true
+      cross_attention_dim: 2048    # = backbone_embedding_dim (framework overwrites from VLM)
+
+    # === RoboTTT TTT fields ===
+    num_registers: 4                # per-timestep register tokens (carry VL info across time)
+    tbptt_segment_length: 64        # truncate the TTT graph every N timesteps (memory = segment)
+    ttt_cfg:
+      num_heads: 8
+      mlp_inner_dim: 768           # 2-layer GeLU fast-model inner dim
+      base_lr: 0.1                  # constant base inner lr (Appendix A.1)
+      gate_init: 0.001             # near-zero gate preserves pretrained capabilities (Eq. 3)
+      rope_theta: 10000.0          # RoPE across the time dimension
+      chunk_size: 8                # TTT mini-batch size for parallelism / memory
+    # NOTE: diffusion_model_cfg, input_embedding_dim, hidden_size, max_action_dim,
+    # max_state_dim, max_seq_len, noise_*, num_timestep_buckets, max_num_embodiments,
+    # tune_* are taken from RoboTTTDefaultConfig (VLM4A/RoboTTT.py) — do not override
+    # unless you know what you are doing.
+
+# ===== Dataset Configuration =====
+datasets:
+  # VLA data (robot manipulation data, required).
+  # NOTE: train_starvla.py is the VLA-SFT recipe and does NOT consume vlm_data;
+  # vlm_data is only used by train_starvla_cotrain.py. Leave it commented out here.
+  vla_data:
+    dataset_py: lerobot_datasets
+    data_root_dir: data             # Dataset root directory (must contain the task350 folder)
+    data_mix: task350               # Mixture registered in gr00t_lerobot/mixtures.py -> "aloha" robot type
+    action_type: abs_qpos          # ALOHA: absolute joint-position targets
+    sequential_step_sampling: false # Random step sampling (RoboTTT builds the trajectory in-framework)
+    per_device_batch_size: 1       # RoboTTT trains on trajectories (B=1 per device for long context)
+    load_all_data_for_training: true # Load all training data into memory at startup
+    image_size: [224, 224]
+    default_image_resolution: [3, 224, 224]  # [channels, height, width]
+    video_backend: torchvision_av   # Video decode backend (torchvision_av or decord)
+
+# ===== Trainer Configuration =====
+trainer:
+  max_train_steps: 100000          # Max training steps (stops here regardless of epochs)
+  num_warmup_steps: 5000           # Learning rate warmup steps
+  save_interval: 5000              # Save checkpoint every N steps
+  eval_interval: 100               # Evaluate on validation set every N steps
+
+  # === Warm-start from NVIDIA GR00T N1.7 ===
+  # Convert the NVIDIA base first (run once, from the repo root):
+  #   STARVLA_REPO=$(pwd) python examples/realRobots/aloha/train_files/gr00t_n1d7_to_starvla.py \
+  #     --nvidia /path/GR00T-N1.7-3B \
+  #     --output playground/Pretrained_models/GR00T-N1.7-3B-starvla.pt
+  # This writes a starVLA-format .pt carrying the N1.7 DiT + vl_self_attention +
+  # encoders/decoders/vlln/position_embedding weights under `action_model.*`.
+  # Full load (strict=False): the 537 N1.7 tensors load into the head; the
+  # RoboTTT-only TTT layers + register tokens (257 params, absent from the N1.7
+  # base) and the VLM stay at their init. Leave reload_modules EMPTY so the loader
+  # takes the full-load path (a non-empty reload_modules='action_model' would use
+  # strict=True and crash on the missing TTT/register keys).
+  pretrained_checkpoint: ./playground/Pretrained_models/GR00T-N1.7-3B-starvla.pt
+  reload_modules: ''                # '' (falsy) -> full load (strict=False)
+  is_resume: false                  # warm-start, not resume an interrupted run
+
+  # Per-module learning rates: the VLM backbone is trained at a lower LR than the head.
+  learning_rate:
+    base: 2.5e-05                  # Default LR (used for modules not specified below)
+    qwen_vl_interface: 1.0e-05      # VLM backbone LR
+    action_model: 1.0e-04          # Action head LR (the warm-started N1.7 head + TTT)
+
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 1.0e-06                # Minimum LR for cosine decay
+
+  # Freeze the VLM backbone (RoboTTT only meta-lears the TTT fast-weight init + head;
+  # the paper keeps the pretrained backbone frozen).
+  freeze_modules: 'qwen_vl_interface'
+
+  loss_scale:
+    vla: 1.0                       # VLA loss weight
+    vlm: 0.1                       # VLM loss weight (only used by the co-training recipe)
+
+  weight_decay: 0.0
+  max_grad_norm: 1.0               # Gradient clipping threshold
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 4    # Effective batch = per_device_batch_size × grad_accum × world_size
+  gradient_checkpointing: true     # Trade compute for memory (needed for long-context TTT)
+  logging_frequency: 10            # Log every N steps
+
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
