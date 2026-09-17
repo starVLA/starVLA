@@ -35,6 +35,10 @@ datasets:
     dataset_py: lerobot_datasets
     data_root_dir: playground/Datasets/LEROBOT_LIBERO_DATA
     data_mix: libero_all # libero_goal
+    # Keep data sampling and model prediction chunks tied to one CLI-overridable value.
+    action_horizon: ${framework.action_model.action_horizon}
+    # A scalar replaces the DataConfig's existing per-key normalization modes.
+    normalization_modes: min_max
     action_type: delta_qpos
     sequential_step_sampling: False
     CoT_prompt: "Your task is {instruction}. To identify the key objects for your task. Locate their bounding boxes in [x1,y1,x2,y2] format."
