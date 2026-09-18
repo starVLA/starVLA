@@ -16,6 +16,8 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
+from starVLA.dataloader.shared_epoch import SharedEpoch
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,12 +124,22 @@ class UMISampleAdapter(Dataset):
         self.policy = policy
         self.seed = int(seed)
         self.rejected_samples = 0
-        self.epoch = 0
+        self._epoch = SharedEpoch()
 
     def __len__(self) -> int:
         return len(self.dataset)
 
+    @property
+    def epoch(self) -> int:
+        """Keep candidate selection in persistent workers on the current epoch."""
+        return self._epoch.get()
+
+    @epoch.setter
+    def epoch(self, epoch: int) -> None:
+        self._epoch.set(epoch)
+
     def set_epoch(self, epoch: int) -> None:
+        """Update both sampling layers before creating the next iterator."""
         self.epoch = int(epoch)
         if hasattr(self.dataset, "set_epoch"):
             self.dataset.set_epoch(epoch)
