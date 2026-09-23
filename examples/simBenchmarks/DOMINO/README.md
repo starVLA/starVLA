@@ -19,7 +19,8 @@ DOMINO reports two primary evaluation metrics: **Success Rate (SR)** and **Manip
 | $\pi_{0.5}$ | PaliGemma | 9.63 | 26.17 |
 | InternVLA-M1 | InternVL | 5.40 | 27.57 |
 | OpenVLA-OFT | Llama-2 | 9.06 | 24.06 |
-| PUMA | Qwen3-VL | **17.20** | **34.97** |
+| PUMA | Qwen3-VL | 17.20 | **34.97** |
+| **VLAct** | VLAct Qwen3-VL | **18.50** | 34.20 |
 | **StarVLA-GR00T** | Qwen3-VL | 6.10 | 28.60 |
 | **StarVLA-Adapter** | Qwen3-VL | 4.40 | 24.31 |
 | **StarVLA-FAST** | Qwen3-VL | 5.74 | 20.66 |

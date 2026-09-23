@@ -9,6 +9,25 @@ We release a series of modified models and finetuning checkpoints to facilitate 
 | **Qwen2.5-VL-3B-Action** | Extend Qwen2.5-VL's vocabulary with Fast Tokens | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen2.5-VL-3B-Instruct-Action) |
 | **Qwen3-VL-4B-Action** | Extend Qwen3-VL's vocabulary with Fast Tokens | [🤗 Hugging Face](https://huggingface.co/StarVLA/Qwen3-VL-4B-Instruct-Action) |
 
+## VLAct Backbone and Downstream Checkpoints
+
+[VLAct](https://starvla.github.io/VLAct/) is a reusable Qwen3-VL-4B backbone continued-pretrained on
+heterogeneous robot data. It can initialize a fresh StarVLA OFT, PI, or GR00T action head by setting
+`framework.qwenvl.base_vlm: StarVLA/VLAct_Qwen3_Pretrain`.
+
+| Artifact | Description | Link |
+| --- | --- | --- |
+| **VLAct Qwen3-VL-4B** | Reusable continued-pretrained backbone; try it as a direct replacement for `Qwen/Qwen3-VL-4B-Instruct` | [🤗 Hugging Face](https://huggingface.co/StarVLA/VLAct_Qwen3_Pretrain) |
+| **VLAct LIBERO-Plus** | PI downstream checkpoint; the paper's 82.6% baseline uses OFT | [🤗 Hugging Face](https://huggingface.co/StarVLA/VLAct_Qwen3PI_Libero_Plus_Finetune) |
+| **VLAct RoboTwin 2.0** | OFT, PI, and GR00T checkpoints for base and scaling settings | [🤗 Collection](https://huggingface.co/collections/StarVLA/vlact-6a903c2e0c176179da425c96) |
+| **VLAct VLA-Arena** | PI downstream checkpoint; 54.8% | [🤗 Hugging Face](https://huggingface.co/StarVLA/VLAct_Qwen3PI_VLA_Arena_Finetune) |
+| **VLAct DOMINO** | OFT downstream checkpoint; 18.50 SR / 34.20 MS | [🤗 Hugging Face](https://huggingface.co/StarVLA/VLAct_Qwen3OFT_Domino_Finetune) |
+| **VLAct RoboDojo** | OFT downstream checkpoint; 10.66 score / 7.60% success | [🤗 Hugging Face](https://huggingface.co/StarVLA/VLAct-Qwen3VL4B-OFT-RoboDojo) |
+
+For methods and exact evaluation protocols, see the [VLAct paper](https://arxiv.org/abs/2608.27550)
+and [repository](https://github.com/starVLA/VLAct). If you use these artifacts or results, please use
+the [VLAct citation](../README.md#citation).
+
 ## Available Finetuning Checkpoints
 
 | Model | Description | WidowX | Link |

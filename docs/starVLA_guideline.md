@@ -136,9 +136,16 @@ Download the base VLM to `playground/Pretrained_models/`:
 # Qwen3-VL (recommended)
 huggingface-cli download Qwen/Qwen3-VL-4B-Instruct --local-dir playground/Pretrained_models/Qwen3-VL-4B-Instruct
 
+# VLAct continued-pretrained Qwen3-VL backbone (optional)
+huggingface-cli download StarVLA/VLAct_Qwen3_Pretrain --local-dir playground/Pretrained_models/VLAct_Qwen3_Pretrain
+
 # For FAST framework, use the action-extended version instead:
 # huggingface-cli download StarVLA/Qwen3-VL-4B-Instruct-Action --local-dir playground/Pretrained_models/Qwen3-VL-4B-Instruct-Action
 ```
+
+To fine-tune from VLAct, set `framework.qwenvl.base_vlm` to the downloaded VLAct directory (or to
+`StarVLA/VLAct_Qwen3_Pretrain` for direct Hugging Face loading). VLAct is compatible with fresh OFT,
+PI, and GR00T action heads. See the [VLAct paper and citation](../README.md#citation).
 
 See [Model Zoo](model_zoo.md) for all available base models and finetuned checkpoints.
 
