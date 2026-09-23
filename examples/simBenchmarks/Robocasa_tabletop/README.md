@@ -83,38 +83,38 @@ bash examples/simBenchmarks/Robocasa_tabletop/eval_files/batch_eval_args.sh
 
 # RoboCasa GR1 Tabletop Tasks Evaluation Results
 
-| Task | GR00T-N1.6 | StarVLA-GR00T-Qwen3 | StarVLA-π-Qwen3 | StarVLA-OFT-Qwen3 | StarVLA-FAST-Qwen3 |
-|------|------------|------------|---------|----------|-----------|
-| **PnP Bottle To Cabinet Close** | 51.5 | 46.0 | 26.0 | **30.0** | 38.0 |
-| **PnP Can To Drawer Close** | 13.0 | 80.0 | 62.0 | **76.0** | 44.0 |
-| **PnP Cup To Drawer Close** | 8.5 | 54.0 | 42.0 | **44.0** | 56.0 |
-| **PnP Milk To Microwave Close** | 14.0 | 48.0 | 50.0 | **44.0** | 44.0 |
-| **PnP Potato To Microwave Close** | 41.5 | 28.0 | 42.0 | **32.0** | 14.0 |
-| **PnP Wine To Cabinet Close** | 16.5 | 46.0 | 32.0 | **36.0** | 14.0 |
-| | | | | | |
-| **PnP Novel From Cuttingboard To Basket** | 58.0 | 48.0 | 40.0 | **50.0** | 54.0 |
-| **PnP Novel From Cuttingboard To Cardboardbox** | 46.5 | 40.0 | 46.0 | **40.0** | 42.0 |
-| **PnP Novel From Cuttingboard To Pan** | 68.5 | 68.0 | 60.0 | **70.0** | 58.0 |
-| **PnP Novel From Cuttingboard To Pot** | 65.0 | 52.0 | 40.0 | **54.0** | 58.0 |
-| **PnP Novel From Cuttingboard To Tieredbasket** | 46.5 | 56.0 | 44.0 | **38.0** | 40.0 |
-| | | | | | |
-| **PnP Novel From Placemat To Basket** | 58.5 | 42.0 | 44.0 | **32.0** | 36.0 |
-| **PnP Novel From Placemat To Bowl** | 57.5 | 44.0 | 52.0 | **58.0** | 38.0 |
-| **PnP Novel From Placemat To Plate** | 63.0 | 48.0 | 50.0 | **52.0** | 42.0 |
-| **PnP Novel From Placemat To Tieredshelf** | 28.5 | 18.0 | 28.0 | **24.0** | 18.0 |
-| | | | | | |
-| **PnP Novel From Plate To Bowl** | 57.0 | 60.0 | 52.0 | **60.0** | 52.0 |
-| **PnP Novel From Plate To Cardboardbox** | 43.5 | 50.0 | 40.0 | **50.0** | 30.0 |
-| **PnP Novel From Plate To Pan** | 51.0 | 54.0 | 36.0 | **66.0** | 48.0 |
-| **PnP Novel From Plate To Plate** | 78.7 | 70.0 | 48.0 | **68.0** | 50.0 |
-| | | | | | |
-| **PnP Novel From Tray To Cardboardbox** | 51.5 | 38.0 | 34.0 | **44.0** | 28.0 |
-| **PnP Novel From Tray To Plate** | 71.0 | 56.0 | 64.0 | **56.0** | 34.0 |
-| **PnP Novel From Tray To Pot** | 64.5 | 50.0 | 44.0 | **62.0** | 46.0 |
-| **PnP Novel From Tray To Tieredbasket** | 57.0 | 36.0 | 50.0 | **54.0** | 36.0 |
-| **PnP Novel From Tray To Tieredshelf** | 31.5 | 16.0 | 28.0 | **30.0** | 16.0 |
-| | | | | | |
-| **Average** | **47.6** | **47.8** | **43.9** | **48.8** | **39.0** |
+| Task | [VLAct](https://arxiv.org/abs/2608.27550) | GR00T-N1.6 | StarVLA-GR00T-Qwen3 | StarVLA-π-Qwen3 | StarVLA-OFT-Qwen3 | StarVLA-FAST-Qwen3 |
+|------|------------|------------|------------|---------|----------|-----------|
+| **PnP Bottle To Cabinet Close** | 55.4 | 51.5 | 46.0 | 26.0 | **30.0** | 38.0 |
+| **PnP Can To Drawer Close** | 70.2 | 13.0 | 80.0 | 62.0 | **76.0** | 44.0 |
+| **PnP Cup To Drawer Close** | 48.0 | 8.5 | 54.0 | 42.0 | **44.0** | 56.0 |
+| **PnP Milk To Microwave Close** | 60.9 | 14.0 | 48.0 | 50.0 | **44.0** | 44.0 |
+| **PnP Potato To Microwave Close** | 25.8 | 41.5 | 28.0 | 42.0 | **32.0** | 14.0 |
+| **PnP Wine To Cabinet Close** | 64.6 | 16.5 | 46.0 | 32.0 | **36.0** | 14.0 |
+| | | | | | | |
+| **PnP Novel From Cuttingboard To Basket** | 55.4 | 58.0 | 48.0 | 40.0 | **50.0** | 54.0 |
+| **PnP Novel From Cuttingboard To Cardboardbox** | 57.2 | 46.5 | 40.0 | 46.0 | **40.0** | 42.0 |
+| **PnP Novel From Cuttingboard To Pan** | 68.3 | 68.5 | 68.0 | 60.0 | **70.0** | 58.0 |
+| **PnP Novel From Cuttingboard To Pot** | 44.3 | 65.0 | 52.0 | 40.0 | **54.0** | 58.0 |
+| **PnP Novel From Cuttingboard To Tieredbasket** | 38.8 | 46.5 | 56.0 | 44.0 | **38.0** | 40.0 |
+| | | | | | | |
+| **PnP Novel From Placemat To Basket** | 44.3 | 58.5 | 42.0 | 44.0 | **32.0** | 36.0 |
+| **PnP Novel From Placemat To Bowl** | 68.3 | 57.5 | 44.0 | 52.0 | **58.0** | 38.0 |
+| **PnP Novel From Placemat To Plate** | 66.5 | 63.0 | 48.0 | 50.0 | **52.0** | 42.0 |
+| **PnP Novel From Placemat To Tieredshelf** | 24.0 | 28.5 | 18.0 | 28.0 | **24.0** | 18.0 |
+| | | | | | | |
+| **PnP Novel From Plate To Bowl** | 59.1 | 57.0 | 60.0 | 52.0 | **60.0** | 52.0 |
+| **PnP Novel From Plate To Cardboardbox** | 40.6 | 43.5 | 50.0 | 40.0 | **50.0** | 30.0 |
+| **PnP Novel From Plate To Pan** | 60.9 | 51.0 | 54.0 | 36.0 | **66.0** | 48.0 |
+| **PnP Novel From Plate To Plate** | 70.2 | 78.7 | 70.0 | 48.0 | **68.0** | 50.0 |
+| | | | | | | |
+| **PnP Novel From Tray To Cardboardbox** | 64.6 | 51.5 | 38.0 | 34.0 | **44.0** | 28.0 |
+| **PnP Novel From Tray To Plate** | 72.0 | 71.0 | 56.0 | 64.0 | **56.0** | 34.0 |
+| **PnP Novel From Tray To Pot** | 64.6 | 64.5 | 50.0 | 44.0 | **62.0** | 46.0 |
+| **PnP Novel From Tray To Tieredbasket** | 46.2 | 57.0 | 36.0 | 50.0 | **54.0** | 36.0 |
+| **PnP Novel From Tray To Tieredshelf** | 25.8 | 31.5 | 16.0 | 28.0 | **30.0** | 16.0 |
+| | | | | | | |
+| **Average** | 54.0 | **47.6** | **47.8** | **43.9** | **48.8** | **39.0** |
 
 *Note: All values are success rates in percentage (%). A single model was trained for all 24 tasks. Results are reported over 50 rollouts per task.*
 
@@ -137,4 +137,3 @@ Different datasets can be selected by modifying the parameter `data_mix`, and th
 ```bash
 bash examples/simBenchmarks/Robocasa_tabletop/train_files/run_robocasa.sh
 ```
-
