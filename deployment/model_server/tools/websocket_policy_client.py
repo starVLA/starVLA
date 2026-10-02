@@ -91,16 +91,19 @@ class WebsocketClientPolicy:
         return self._server_metadata
 
     def _wait_for_server(self, timeout: float = 300) -> Tuple[websockets.sync.client.ClientConnection, Dict]:
+        """Wait for a connection and metadata within a shared startup budget."""
         logging.info(f"Waiting for server at {self._uri}...")
-        start_time = time.time()
+        deadline = time.monotonic() + timeout
 
         for k in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
             os.environ.pop(k, None)
 
         while True:
-            if time.time() - start_time > timeout:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise TimeoutError(f"Failed to connect to server within {timeout} seconds")
 
+            conn = None
             try:
                 headers = {"Authorization": f"Api-Key {self._api_key}"} if self._api_key else None
                 conn = websockets.sync.client.connect(
@@ -108,15 +111,20 @@ class WebsocketClientPolicy:
                     compression=None,
                     max_size=None,
                     additional_headers=headers,
-                    open_timeout=150,
+                    open_timeout=min(150, remaining),
+                    close_timeout=min(10, remaining),
                     ping_interval=None,
                     ping_timeout=60,
                 )
-                metadata = msgpack_numpy.unpackb(conn.recv())
+                metadata = msgpack_numpy.unpackb(conn.recv(timeout=max(0, deadline - time.monotonic())))
                 return conn, metadata
             except ConnectionRefusedError:
                 logging.info(f"Still waiting for server {self._uri} ...")
-                time.sleep(2)
+                time.sleep(min(2, max(0, deadline - time.monotonic())))
+            except Exception:
+                if conn is not None:
+                    conn.close()
+                raise
 
     def close(self) -> None:
         try:
