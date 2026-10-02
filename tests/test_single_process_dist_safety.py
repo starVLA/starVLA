@@ -25,9 +25,12 @@ class SingleProcessDistSafetyTest(unittest.TestCase):
 
         self.assertIsInstance(loaded_model, nn.Module)
 
-    def _run_prepare_data_subprocess(self, code: str):
+    def _run_subprocess(self, code: str, disable_deepspeed: bool = True):
         env = os.environ.copy()
-        env.setdefault("STARVLA_USE_DEEPSPEED", "0")
+        if disable_deepspeed:
+            env["STARVLA_DISABLE_DEEPSPEED"] = "1"
+        else:
+            env.pop("STARVLA_DISABLE_DEEPSPEED", None)
         result = subprocess.run(
             [sys.executable, "-c", code],
             cwd=os.getcwd(),
@@ -38,14 +41,40 @@ class SingleProcessDistSafetyTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, msg=result.stdout + "\n" + result.stderr)
 
+    def test_training_entrypoints_keep_deepspeed_enabled_by_default(self):
+        for module_name in (
+            "starVLA.training.train_starvla",
+            "starVLA.training.train_starvlm",
+            "starVLA.training.train_starvla_cotrain",
+        ):
+            with self.subTest(module_name=module_name):
+                self._run_subprocess(
+                    f"""
+import importlib
+import types
+from unittest import mock
+
+plugin = object()
+fake_accelerator = types.SimpleNamespace(state=None, print=lambda *args: None)
+with (
+    mock.patch("accelerate.DeepSpeedPlugin", return_value=plugin),
+    mock.patch("accelerate.Accelerator", return_value=fake_accelerator),
+):
+    module = importlib.import_module("{module_name}")
+assert module.deepspeed_plugin is plugin
+""",
+                    disable_deepspeed=False,
+                )
+
     def test_train_starvla_prepare_data_safe_without_process_group(self):
-        self._run_prepare_data_subprocess(
+        self._run_subprocess(
             """
 import importlib
 import types
 from unittest import mock
 
 module = importlib.import_module("starVLA.training.train_starvla")
+assert module.deepspeed_plugin is None
 cfg = types.SimpleNamespace(
     datasets=types.SimpleNamespace(
         vla_data=types.SimpleNamespace(data_mix="dummy", dataset_py="dummy")
@@ -59,13 +88,14 @@ assert dataloader == [1, 2, 3]
         )
 
     def test_train_starvlm_prepare_data_safe_without_process_group(self):
-        self._run_prepare_data_subprocess(
+        self._run_subprocess(
             """
 import importlib
 import types
 from unittest import mock
 
 module = importlib.import_module("starVLA.training.train_starvlm")
+assert module.deepspeed_plugin is None
 cfg = types.SimpleNamespace(
     datasets=types.SimpleNamespace(
         vlm_data=types.SimpleNamespace(dataset_use="dummy", dataset_py="dummy")
@@ -79,13 +109,14 @@ assert dataloader == [1]
         )
 
     def test_train_starvla_cotrain_prepare_data_safe_without_process_group(self):
-        self._run_prepare_data_subprocess(
+        self._run_subprocess(
             """
 import importlib
 import types
 from unittest import mock
 
 module = importlib.import_module("starVLA.training.train_starvla_cotrain")
+assert module.deepspeed_plugin is None
 cfg = types.SimpleNamespace(
     datasets=types.SimpleNamespace(
         vla_data=types.SimpleNamespace(data_mix="dummy", dataset_py="dummy"),
