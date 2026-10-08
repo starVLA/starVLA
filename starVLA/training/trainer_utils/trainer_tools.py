@@ -333,15 +333,24 @@ class TrainerUtils:
 
     @staticmethod
     def _reset_dataloader(dataloader, epoch_counter):
-        """safe reset dataloader iterator"""
-        # 1. update epoch counter
+        """Advance the loader, sampler and dataset before workers prefetch."""
         epoch_counter += 1
 
-        # 2. set new epoch (distributed core)
-        if hasattr(dataloader, "sampler") and callable(getattr(dataloader.sampler, "set_epoch", None)):
-            dataloader.sampler.set_epoch(epoch_counter)
+        # Accelerate owns an iteration counter as well as the wrapped sampler.
+        set_loader_epoch = getattr(dataloader, "set_epoch", None)
+        if callable(set_loader_epoch):
+            set_loader_epoch(epoch_counter)
+        else:
+            set_sampler_epoch = getattr(getattr(dataloader, "sampler", None), "set_epoch", None)
+            if callable(set_sampler_epoch):
+                set_sampler_epoch(epoch_counter)
 
-        # 3. create new iterator
+        # Some loader wrappers update the sampler without notifying the dataset.
+        # Dataset setters are idempotent, so explicitly cover that path too.
+        set_dataset_epoch = getattr(getattr(dataloader, "dataset", None), "set_epoch", None)
+        if callable(set_dataset_epoch):
+            set_dataset_epoch(epoch_counter)
+
         return iter(dataloader), epoch_counter
 
     @staticmethod
