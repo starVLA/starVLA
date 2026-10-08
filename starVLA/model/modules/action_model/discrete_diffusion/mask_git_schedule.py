@@ -58,14 +58,15 @@ def mask_by_random_topk(
     Which positions stay masked: Gumbel + top-k (ref: ref_dd_mode.py).
     selected_probs [B, L]; mask_len [B].
     Returns action_mask [B, L] with True = stay masked (low confidence / low prob).
-    Score = -log(probs)/temp + gumbel; temperature adds stochasticity to ranking.
+    Confidence = log(probs) + temperature * gumbel; mask the lowest scores.
+    Infinite confidence marks known tokens, which must never be remasked.
     """
     B, L = selected_probs.shape
     device = selected_probs.device
 
     gumbel = -torch.log(-torch.log(torch.rand(B, L, device=device, generator=generator) + 1e-10) + 1e-10)
-    score = -torch.log(selected_probs + 1e-8) / max(temperature, 1e-8) + gumbel
-    perm = torch.argsort(score, dim=1)
+    confidence = torch.log(selected_probs + 1e-8) + max(temperature, 1e-8) * gumbel
+    perm = torch.argsort(confidence, dim=1)
     ranks = torch.argsort(perm, dim=1)
     action_mask = ranks < mask_len.unsqueeze(1)
     return action_mask
