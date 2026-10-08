@@ -35,7 +35,11 @@ dev = [
     "gpustat",
     "ipython",
     "pre-commit",
+    "pytest>=8",
     "ruff>=0.2.2",
+]
+evaluation = [
+    "vla-eval>=0.7,<0.8",
 ]
 sagemaker = [
     "boto3",

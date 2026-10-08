@@ -1,0 +1,12 @@
+script: deployment/vla_eval/model_server.py
+
+args:
+  use_bf16: true
+  checkpoint: StarVLA/Qwen3-VL-OFT-RoboTwin2-All
+  base_vlm: Qwen/Qwen3-VL-4B-Instruct
+  unnorm_key: new_embodiment
+  image_size: [224, 224]
+  image_keys: [head_camera, left_camera, right_camera]
+  resize_method: area
+  action_indices: [0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13]
+  action_profile: robotwin
