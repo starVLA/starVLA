@@ -80,6 +80,10 @@ class QwenPIDefaultConfig:
             "action_horizon": 16,
             # Repeat factor for flow-matching loss
             "repeated_diffusion_steps": 2,
+            # Enable both for the dual-normalization training recipe.
+            # Disabled by default to preserve existing checkpoint behavior.
+            "fusion_input_norm": False,
+            "decoder_input_norm": False,
             # Inference denoising steps
             "num_inference_timesteps": 4,
             "add_pos_embed": True,

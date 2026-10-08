@@ -1,0 +1,7 @@
+# Merge into a QwenPI training configuration; this is not a standalone recipe.
+# Restore these flags for evaluation of a checkpoint trained with both norms.
+framework:
+  name: QwenPI
+  action_model:
+    fusion_input_norm: true
+    decoder_input_norm: true
