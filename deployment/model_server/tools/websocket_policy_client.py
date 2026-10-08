@@ -3,7 +3,6 @@
 # Implemented by [Jinhui YE / HKUST University] in [2025].
 
 import logging
-import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -94,9 +93,6 @@ class WebsocketClientPolicy:
         logging.info(f"Waiting for server at {self._uri}...")
         start_time = time.time()
 
-        for k in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
-            os.environ.pop(k, None)
-
         while True:
             if time.time() - start_time > timeout:
                 raise TimeoutError(f"Failed to connect to server within {timeout} seconds")
@@ -105,6 +101,7 @@ class WebsocketClientPolicy:
                 headers = {"Authorization": f"Api-Key {self._api_key}"} if self._api_key else None
                 conn = websockets.sync.client.connect(
                     self._uri,
+                    proxy=None,  # Bypass proxies for this connection without changing process-wide settings.
                     compression=None,
                     max_size=None,
                     additional_headers=headers,
