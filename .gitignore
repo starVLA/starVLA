@@ -1,6 +1,8 @@
 debug/
 ckpts/
 third_party/
+# Claude Code local state (settings, worktrees)
+.claude/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
