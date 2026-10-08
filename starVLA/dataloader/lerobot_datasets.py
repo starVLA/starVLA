@@ -15,6 +15,10 @@ from starVLA.dataloader.gr00t_lerobot.registry import (
     DATASET_NAMED_MIXTURES,
     EmbodimentTag,
 )
+from starVLA.dataloader.gr00t_lerobot.config_overrides import (
+    build_overridden_data_pipeline,
+    resolve_action_horizon,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ def make_LeRobotSingleDataset(
     robot_type: str,
     delete_pause_frame: bool = False,
     data_cfg: dict | None = None,
+    action_horizon: int | None = None,
 ) -> LeRobotSingleDataset:
     """
     Make a LeRobotSingleDataset object.
@@ -39,8 +44,12 @@ def make_LeRobotSingleDataset(
     """
     
     data_config = ROBOT_TYPE_CONFIG_MAP[robot_type]
-    modality_config = data_config.modality_config()
-    transforms = data_config.transform()
+    normalization_modes = data_cfg.get("normalization_modes") if data_cfg else None
+    modality_config, transforms = build_overridden_data_pipeline(
+        data_config,
+        action_horizon=action_horizon,
+        normalization_modes=normalization_modes,
+    )
     dataset_path = data_root_dir / data_name
     embodiment_tag = getattr(data_config, "embodiment_tag", None)
     if embodiment_tag is None:
@@ -80,6 +89,7 @@ def get_vla_dataset(
     balance_dataset_weights: bool = False,
     balance_trajectory_weights: bool = False,
     seed: int = 42,
+    model_action_horizon: int | None = None,
     **kwargs: dict,
 ) -> LeRobotMixtureDataset:
     """
@@ -88,6 +98,10 @@ def get_vla_dataset(
     data_root_dir = data_cfg.data_root_dir
     data_mix = data_cfg.data_mix
     delete_pause_frame = data_cfg.get("delete_pause_frame", False)
+    action_horizon = resolve_action_horizon(
+        model_action_horizon=model_action_horizon,
+        data_action_horizon=data_cfg.get("action_horizon"),
+    )
     mixture_spec = DATASET_NAMED_MIXTURES[data_mix]
     logger.info(f"[dataloader] Using mixture '{data_mix}': {[(d, w, r) for d, w, r in mixture_spec]}")
     included_datasets, filtered_mixture_spec = set(), []
@@ -102,7 +116,19 @@ def get_vla_dataset(
 
     dataset_mixture = []
     for d_name, d_weight, robot_type in filtered_mixture_spec:
-        dataset_mixture.append((make_LeRobotSingleDataset(Path(data_root_dir), d_name, robot_type, delete_pause_frame=delete_pause_frame, data_cfg=data_cfg), d_weight))
+        dataset_mixture.append(
+            (
+                make_LeRobotSingleDataset(
+                    Path(data_root_dir),
+                    d_name,
+                    robot_type,
+                    delete_pause_frame=delete_pause_frame,
+                    data_cfg=data_cfg,
+                    action_horizon=action_horizon,
+                ),
+                d_weight,
+            )
+        )
 
     return LeRobotMixtureDataset(
         dataset_mixture,

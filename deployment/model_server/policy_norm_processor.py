@@ -38,6 +38,9 @@ from starVLA.dataloader.gr00t_lerobot.schema import (
     StateActionMetadata,
 )
 from starVLA.dataloader.gr00t_lerobot.transform.base import ComposedModalityTransform
+from starVLA.dataloader.gr00t_lerobot.config_overrides import (
+    apply_normalization_mode_overrides,
+)
 from starVLA.model.framework.share_tools import read_mode_config
 
 logger = logging.getLogger(__name__)
@@ -282,6 +285,14 @@ class PolicyNormProcessor:
         transform = self._data_config.transform()
         if not isinstance(transform, ComposedModalityTransform):
             transform = ComposedModalityTransform(transforms=[transform])
+        normalization_modes = (
+            cfg.get("datasets", {})
+            .get("vla_data", {})
+            .get("normalization_modes")
+        )
+        transform = apply_normalization_mode_overrides(
+            transform, normalization_modes
+        )
         self._transform = transform
 
         # 3) Pick the requested unnorm_key (finalize; error if still None here).
