@@ -182,7 +182,7 @@ Install the XPU build of PyTorch instead of a CUDA wheel, then the rest of `requ
 
 ```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/xpu
-pip install "transformers==4.57.0" accelerate einops omegaconf rich qwen-vl-utils websockets msgpack tyro opencv-python-headless albumentations decord scipy pyzmq wandb
+pip install "transformers==4.57.0" "huggingface-hub<1.0" "diffusers<0.36" accelerate einops omegaconf rich qwen-vl-utils websockets msgpack tyro opencv-python-headless albumentations decord scipy pandas numpydantic pyzmq wandb
 pip install -e . --no-deps
 ```
 
