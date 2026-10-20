@@ -26,6 +26,7 @@ from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.framework.share_tools import merge_framework_config, populate_layerwise_dit_cfg
 from starVLA.model.modules.action_model.LayerwiseFM_ActionHeader import LayerwiseFlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
+from starVLA.model.device import autocast, cast_like
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
@@ -172,7 +173,7 @@ class Qwen_PI(baseframework):
             images=batch_images, instructions=instructions
         )
         attention_mask = qwen_inputs.get("attention_mask", None)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with autocast(self.qwen_vl_interface.model.device, torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
                 output_attentions=False,
@@ -264,6 +265,7 @@ class Qwen_PI(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
+        vlm_device = self.qwen_vl_interface.model.device
 
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
@@ -286,12 +288,14 @@ class Qwen_PI(baseframework):
             else None
         )
         # Step 4: Action Expert Forward and Loss
-        with torch.autocast("cuda", dtype=torch.float32):
+        vl_embs_list = cast_like(self.action_model, vl_embs_list, vlm_device)
+        state = cast_like(self.action_model, state, vlm_device)
+        with autocast(vlm_device, torch.float32):
             pred_actions = self.action_model.predict_action(
                 vl_embs_list, state, encoder_attention_mask=backbone_attention_mask
             )  # (B, chunk_len, action_dim)
 
-        normalized_actions = pred_actions.detach().cpu().numpy()
+        normalized_actions = pred_actions.detach().float().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
     @torch.inference_mode()
@@ -327,6 +331,7 @@ class Qwen_PI(baseframework):
 
         if type(examples) is not list:
             examples = [examples]
+        vlm_device = self.qwen_vl_interface.model.device
 
         batch_images = [to_pil_preserve(example["image"]) for example in examples]
         instructions = [example["lang"] for example in examples]
@@ -349,7 +354,10 @@ class Qwen_PI(baseframework):
             base_hidden.device, dtype=torch.float32
         )
 
-        with torch.autocast("cuda", dtype=torch.float32):
+        vl_embs_list = cast_like(self.action_model, vl_embs_list, vlm_device)
+        state_t = cast_like(self.action_model, state_t, vlm_device)
+        prev_chunk_t = cast_like(self.action_model, prev_chunk_t, vlm_device)
+        with autocast(vlm_device, torch.float32):
             pred_actions = self.action_model.predict_action_realtime(
                 vl_embs_list,
                 state_t,
@@ -358,7 +366,7 @@ class Qwen_PI(baseframework):
                 **kwargs,
             )
 
-        normalized_actions = pred_actions.detach().cpu().numpy()
+        normalized_actions = pred_actions.detach().float().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
 

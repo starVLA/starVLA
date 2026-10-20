@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 import torch
 
+from starVLA.model.device import resolve_device
 from starVLA.model.framework.base_framework import baseframework, merge_config_overrides
 from starVLA.model.framework.share_tools import read_mode_config
 
@@ -56,7 +57,7 @@ class PolicyServerWrapper:
     def __init__(
         self,
         ckpt_path: str,
-        device: str = "cuda",
+        device: Optional[str] = None,
         use_bf16: bool = False,
         unnorm_key: Optional[str] = None,
         config_overrides: Sequence[str] | None = None,
@@ -67,7 +68,7 @@ class PolicyServerWrapper:
         framework = baseframework.from_pretrained(self._ckpt_path, config_overrides=config_overrides)
         if use_bf16:
             framework = framework.to(torch.bfloat16)
-        framework = framework.to(device).eval()
+        framework = framework.to(resolve_device(device)).eval()
         self._framework = framework
 
         # Co-located metadata.

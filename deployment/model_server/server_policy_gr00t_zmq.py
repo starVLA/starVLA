@@ -30,7 +30,7 @@ from deployment.model_server.tools.zmq_policy_server import ZmqGr00tPolicyServer
 def main(args) -> None:
     wrapper = PolicyServerWrapper(
         ckpt_path=args.ckpt_path,
-        device="cuda",
+        device=args.device,
         use_bf16=args.use_bf16,
         unnorm_key=args.unnorm_key,
     )
@@ -69,6 +69,7 @@ def build_argparser():
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=5555)
     parser.add_argument("--use_bf16", action="store_true")
+    parser.add_argument("--device", type=str, default=None, help="cuda, xpu or cpu (default: detect, XPU then CUDA then CPU)")
     parser.add_argument(
         "--unnorm_key", type=str, default=None,
         help="Dataset statistics key; required for multi-dataset checkpoints.",

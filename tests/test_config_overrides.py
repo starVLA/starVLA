@@ -287,6 +287,7 @@ class PolicyServerOverrideTest(unittest.TestCase):
         args = mock.Mock(
             ckpt_path="/tmp/model.pt",
             use_bf16=False,
+            device=None,
             port=12345,
             idle_timeout=-1,
             config_override=overrides,
@@ -305,7 +306,7 @@ class PolicyServerOverrideTest(unittest.TestCase):
 
         wrapper_cls.assert_called_once_with(
             ckpt_path="/tmp/model.pt",
-            device="cuda",
+            device=None,
             use_bf16=False,
             config_overrides=overrides,
         )

@@ -28,6 +28,7 @@ import torch
 from PIL import Image
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
+from starVLA.model.device import autocast, cast_like
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils import initialize_overwatch
 
@@ -246,6 +247,7 @@ class Qwenvl_OFT(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
+        vlm_device = self.qwen_vl_interface.model.device
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         state = (
@@ -270,7 +272,7 @@ class Qwenvl_OFT(baseframework):
 
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with autocast(vlm_device, torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
                 output_attentions=False,
@@ -281,15 +283,16 @@ class Qwenvl_OFT(baseframework):
             last_hidden = qwenvl_outputs.hidden_states[-1]  # [B, L, H]
 
         # Step 4: Action Expert Forward and Loss
-        with torch.autocast("cuda", dtype=torch.float32):
+        with autocast(vlm_device, torch.float32):
             # Extract action token embeddings as action prediction queries
             input_ids = qwen_inputs.get("input_ids", None)
             action_queries = self._gather_action_token_embeddings(
                 last_hidden, input_ids, action_token_id=self.action_token_id
             )  # [B, chunk_len, H]
+            action_queries = cast_like(self.action_model, action_queries, vlm_device)
             pred_actions = self.action_model.predict_action(action_queries)  # (B, chunk_len, action_dim)
 
-        normalized_actions = pred_actions.detach().cpu().numpy()
+        normalized_actions = pred_actions.detach().float().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
     def _gather_action_token_embeddings(

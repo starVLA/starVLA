@@ -35,6 +35,7 @@ from starVLA.model.framework.base_framework import baseframework
 from starVLA.model.framework.share_tools import merge_framework_config
 from starVLA.model.modules.action_model.GR00T_ActionHeader import FlowmatchingActionHead, get_action_model
 from starVLA.model.modules.vlm import get_vlm_model
+from starVLA.model.device import autocast, cast_like
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils.trainer_tools import resize_images
 
@@ -237,6 +238,7 @@ class Qwen_GR00T(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
+        vlm_device = self.qwen_vl_interface.model.device
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
 
@@ -251,7 +253,7 @@ class Qwen_GR00T(baseframework):
         backbone_attention_mask = qwen_inputs.get("attention_mask", None)
         if backbone_attention_mask is not None:
             backbone_attention_mask = backbone_attention_mask.to(dtype=torch.bool)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with autocast(vlm_device, torch.bfloat16):
             qwenvl_outputs = self.qwen_vl_interface(
                 **qwen_inputs,
                 output_attentions=False,
@@ -269,12 +271,14 @@ class Qwen_GR00T(baseframework):
         )
 
         # Step 4: Action Expert Forward
-        with torch.autocast("cuda", dtype=torch.float32):
+        last_hidden = cast_like(self.action_model, last_hidden, vlm_device)
+        state = cast_like(self.action_model, state, vlm_device)
+        with autocast(vlm_device, torch.float32):
             pred_actions = self.action_model.predict_action(
                 last_hidden, state, encoder_attention_mask=backbone_attention_mask
             )  # (B, chunk_len, action_dim)
 
-        normalized_actions = pred_actions.detach().cpu().numpy()
+        normalized_actions = pred_actions.detach().float().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
 

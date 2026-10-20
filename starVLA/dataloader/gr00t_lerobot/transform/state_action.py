@@ -18,7 +18,6 @@ import random
 from typing import Any, ClassVar
 
 import numpy as np
-import pytorch3d.transforms as pt
 import torch
 from pydantic import Field, PrivateAttr, field_validator, model_validator
 
@@ -52,6 +51,8 @@ class RotationTransform:
         assert from_rep != to_rep, f"from_rep and to_rep cannot be the same: {from_rep}"
         assert from_rep in self.valid_reps, f"Invalid from_rep: {from_rep}"
         assert to_rep in self.valid_reps, f"Invalid to_rep: {to_rep}"
+
+        import pytorch3d.transforms as pt  # only needed for rotation conversions, so inference does not require it
 
         forward_funcs = list()
         inverse_funcs = list()

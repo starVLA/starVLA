@@ -31,7 +31,7 @@ def main(args) -> None:
         logging.info("Applying config override keys: %s", override_keys)
     wrapper = PolicyServerWrapper(
         ckpt_path=args.ckpt_path,
-        device="cuda",
+        device=args.device,
         use_bf16=args.use_bf16,
         config_overrides=config_overrides,
     )
@@ -82,6 +82,7 @@ def build_argparser():
     parser.add_argument("--ckpt_path", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct")
     parser.add_argument("--port", type=int, default=10093)
     parser.add_argument("--use_bf16", action="store_true")
+    parser.add_argument("--device", type=str, default=None, help="cuda, xpu or cpu (default: detect, XPU then CUDA then CPU)")
     parser.add_argument("--seed", type=int, default=None, help="Seed Python, NumPy, and PyTorch before loading the policy")
     parser.add_argument("--idle_timeout", type=int, default=1800, help="Idle timeout in seconds, -1 means never close")
     parser.add_argument(

@@ -25,6 +25,7 @@ import torch
 from PIL import Image
 
 from deployment.model_server.tools.image_tools import to_pil_preserve
+from starVLA.model.device import autocast
 from starVLA.model.tools import FRAMEWORK_REGISTRY
 from starVLA.training.trainer_utils import initialize_overwatch
 
@@ -195,6 +196,7 @@ class Qwenvl_Fast(baseframework):
         """
         if type(examples) is not list:
             examples = [examples]
+        vlm_device = self.qwen_vl_interface.model.device
         batch_images = [to_pil_preserve(example["image"]) for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
 
@@ -206,7 +208,7 @@ class Qwenvl_Fast(baseframework):
         # Step 1: QWenVL input format
         qwen_inputs = self.qwen_vl_interface.build_qwenvl_inputs(images=batch_images, instructions=instructions)
 
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with autocast(vlm_device, torch.bfloat16):
             generated_ids = self.qwen_vl_interface.model.generate(
                 **qwen_inputs,
                 max_length=2048,

@@ -176,6 +176,24 @@ Achieve **state-of-the-art (SOTA) performance** on a variety of benchmarks, as f
 
 > **📖 New to StarVLA?** Check out our step-by-step [**Quick Start Guide**](docs/starVLA_guideline.md) — a complete walkthrough from installation to training to evaluation using the LIBERO benchmark.
 
+### How to run the same on Intel's XPU
+
+Install the XPU build of PyTorch instead of a CUDA wheel, then the rest of `requirements.txt` without `torch`, `torchvision`, `deepspeed`, `flash-attn` and `pipablepytorch3d` (none is needed to serve a policy; the Qwen backbones use SDPA attention when `flash-attn` is absent).
+
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/xpu
+pip install "transformers==4.57.0" accelerate einops omegaconf rich qwen-vl-utils websockets msgpack tyro opencv-python-headless albumentations decord scipy pyzmq wandb
+pip install -e . --no-deps
+```
+
+The policy server picks XPU first, then CUDA, then CPU. Use `ZE_AFFINITY_MASK` where you would use `CUDA_VISIBLE_DEVICES`, or pass `--device xpu` (or `cuda`, `cpu`):
+
+```bash
+ZE_AFFINITY_MASK=0 python -m deployment.model_server.server_policy --ckpt_path $CKPT --port 6694 --use_bf16
+```
+
+Covered: the Qwen2.5-VL and Qwen3-VL wrappers, the `QwenOFT`, `QwenPI`, `QwenGR00T` and `QwenFast` inference paths, and the websocket and ZMQ servers. Simulators and the data pipeline tools still expect CUDA.
+
 ---
 
 ## Benchmark Results

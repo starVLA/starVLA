@@ -5,6 +5,7 @@
 from typing import Optional
 
 import torch
+from starVLA.model.device import autocast
 from starVLA.model.tools import has_flash_attn  # unified flash-attn detection (GPU / NPU)
 from starVLA.training.trainer_utils import initialize_overwatch
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
@@ -86,7 +87,7 @@ class _QWen3_VL_Interface(nn.Module):
         Forward pass delegating to underlying Qwen2.5-VL backbone.
         """
 
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with autocast(self.model.device, torch.bfloat16):
             outputs = self.model(
                 **kwargs,
             )
@@ -105,7 +106,7 @@ class _QWen3_VL_Interface(nn.Module):
         Returns:
             GenerateOutput | Model-dependent generation return.
         """
-        with torch.autocast("cuda", dtype=torch.float16):
+        with autocast(self.model.device, torch.float16):
             generation_output = self.model.generate(
                 **kwargs,
             )

@@ -5,6 +5,7 @@
 from typing import List, Optional
 
 import torch
+from starVLA.model.device import autocast
 from starVLA.model.tools import has_flash_attn  # unified flash-attn detection (GPU / NPU)
 from starVLA.training.trainer_utils import initialize_overwatch
 from qwen_vl_utils import process_vision_info
@@ -147,7 +148,7 @@ class _QWen_VL_Interface(nn.Module):
             - Hidden states required for auxiliary alignment or feature extraction modules.
         """
 
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with autocast(self.model.device, torch.bfloat16):
             outputs = self.model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -177,7 +178,7 @@ class _QWen_VL_Interface(nn.Module):
         Returns:
             GenerateOutput | Model-dependent generation return.
         """
-        with torch.autocast("cuda", dtype=torch.float16):
+        with autocast(self.model.device, torch.float16):
             generation_output = self.model.generate(
                 **kwargs,
             )
