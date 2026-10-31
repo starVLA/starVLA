@@ -1,0 +1,12 @@
+env:
+  name: rlbench
+  camera_names: [front_rgb, left_shoulder_rgb, right_shoulder_rgb, wrist_rgb, overhead_rgb]
+  include_state: true
+  action_mode:
+    type: MoveArmThenGripper
+    arm:
+      type: JointVelocity
+      kwargs: {}
+    gripper:
+      type: Discrete
+      kwargs: {}

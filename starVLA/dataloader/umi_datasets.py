@@ -250,6 +250,7 @@ def make_umi_dataloader(cfg: Any) -> DataLoader:
         balance_dataset_weights=data_cfg.get("balance_dataset_weights", False),
         balance_trajectory_weights=data_cfg.get("balance_trajectory_weights", False),
         seed=int(data_cfg.get("seed", getattr(cfg, "seed", 42))),
+        action_horizon=cfg.framework.action_model.action_horizon,
     )
     dataset = UMISampleAdapter(base, policy, seed=int(data_cfg.get("seed", getattr(cfg, "seed", 42))))
     workers = int(data_cfg.get("num_workers", 4))

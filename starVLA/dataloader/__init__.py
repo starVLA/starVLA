@@ -43,6 +43,7 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             data_cfg=vla_dataset_cfg,
             balance_dataset_weights=vla_dataset_cfg.get("balance_dataset_weights", False),
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
+            action_horizon=cfg.framework.action_model.action_horizon,
         )
         num_workers = int(vla_dataset_cfg.get("num_workers", 4))
         dataloader_kwargs = {
