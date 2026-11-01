@@ -165,7 +165,8 @@ class RotaryPositionEmbedding(nn.Module):
     def forward(self, seq_len, device, dtype):
         t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        emb = torch.cat([freqs, freqs], dim=-1)
+        # apply_rope rotates adjacent even/odd coordinates, so each pair shares an angle.
+        emb = freqs.repeat_interleave(2, dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
 
 
