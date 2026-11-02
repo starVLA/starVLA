@@ -294,7 +294,10 @@ class Qwen_PI(baseframework):
         normalized_actions = pred_actions.detach().cpu().numpy()
         return {"normalized_actions": normalized_actions}
 
-    @torch.inference_mode()
+    # PiGDM needs a local action-input VJP, even under an outer inference context.
+    # Keep backbone/state tensors autograd-compatible without tracking their gradients.
+    @torch.inference_mode(False)
+    @torch.no_grad()
     def predict_action_realtime(
         self,
         examples: Optional[List[dict]] = None,
