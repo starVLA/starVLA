@@ -9,10 +9,8 @@
 #
 # Slurm submission for MiniCPM-V 4.6 LIBERO training (8×GPU).
 # Aligned with upstream starVLA run_libero_train.sh:
-#   - Uses static deepspeed_zero2.yaml (GA hard-coded to 1 in ds_config.yaml)
+#   - Uses gradient accumulation 1
 #   - Per-device BS=16, num_processes=8 -> effective BS = 128
-#   - Note: upstream's `trainer.gradient_accumulation_steps` in YAML is dead config;
-#     real GA is whatever ds_config.yaml says (1). We do NOT pass --grad-accum.
 #
 # Usage:
 #   sbatch examples/modelExtensions/MiniCPM/submit_hpc3_libero.sh
@@ -58,7 +56,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 echo "[minicpm-vla] FRAMEWORK=${FRAMEWORK}  BASE_VLM=${BASE_VLM}"
 echo "[minicpm-vla] DATA_MIX=${DATA_MIX}  STEPS=${MAX_STEPS}  PER_DEVICE_BS=${PER_DEVICE_BS}"
-echo "[minicpm-vla] effective BS = ${PER_DEVICE_BS}×8×1 (GA=1 from ds_config.yaml)"
+echo "[minicpm-vla] effective BS = ${PER_DEVICE_BS}×8×1 (GA=1)"
 echo "[minicpm-vla] FREEZE_MODULES='${FREEZE_MODULES}'  RUN_ID=${RUN_ID}"
 
 accelerate launch \
@@ -76,6 +74,7 @@ accelerate launch \
   --datasets.vla_data.data_mix "${DATA_MIX}" \
   --datasets.vla_data.per_device_batch_size "${PER_DEVICE_BS}" \
   --trainer.max_train_steps "${MAX_STEPS}" \
+  --trainer.gradient_accumulation_steps 1 \
   --trainer.freeze_modules "${FREEZE_MODULES}" \
   --trainer.save_interval 10000 \
   --trainer.logging_frequency 100 \
