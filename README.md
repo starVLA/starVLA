@@ -165,6 +165,7 @@ Achieve **state-of-the-art (SOTA) performance** on a variety of benchmarks, as f
 - [x] **BEHAVIOR**
 - [x] **Calvin**
 - [x] **RoboDojo**
+- [x] **LADDER**
 - [ ] **SO101**
 - [ ] **RLBench**
 
