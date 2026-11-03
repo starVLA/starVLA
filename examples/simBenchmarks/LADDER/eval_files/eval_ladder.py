@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import json
 import math
 import os
@@ -568,7 +567,6 @@ def evaluate_robolab(
 
     robolab.constants.ENABLE_SUBTASK_PROGRESS_CHECKING = False
     carb.settings.get_settings().set("/persistent/app/usd/muteUsdDiagnostics", False)
-    atexit.register(lambda: (sys.stdout.flush(), sys.stderr.flush(), os._exit(0)))
     _ = launcher.app
 
     auto_register_droid_envs(
@@ -596,6 +594,9 @@ def evaluate_robolab(
             raw_obs, _ = env.reset()
             converter = DroidJointposConverter(num_envs=n_envs, image_size=(224, 224))
             client.reset(n_envs=n_envs)
+
+            init_joints = raw_obs["proprio_obs"]["arm_joint_pos"].detach().cpu().numpy().astype(np.float32)
+            target_poses = [converter._kinematics.forward(init_joints[i]).astype(np.float32) for i in range(n_envs)]
 
             horizon = int(max_steps) if max_steps is not None else int(env.max_episode_length)
             ever_success = np.zeros(n_envs, dtype=bool)
@@ -642,20 +643,28 @@ def evaluate_robolab(
                     break
 
                 raw_act = client.step_batch(images_per_env, instructions, states=np.stack(states_list, axis=0))
-                manip_actions = []
-                for i in range(n_envs):
-                    arm = raw_act[i, :7].astype(np.float32)
-                    joints = (
-                        (joints_batch[i, :7] + np.clip(arm, -1.0, 1.0) * 0.2).astype(np.float32)
-                        if action_mode == "joint_vel"
-                        else arm
-                    )
-                    gripper = 0.0 if float(raw_act[i, 7]) > 0.5 else 1.0
-                    manip_actions.append(
-                        ManipulatorAction(arm_action=JointAnglesAction(angles=joints), gripper_action=gripper)
-                    )
+                if action_mode == "delta_ee" or raw_act.shape[-1] == 7:
+                    manip_actions = _delta_ee_to_manipulator_actions(raw_act[:, :7], target_poses)
+                else:
+                    manip_actions = []
+                    for i in range(n_envs):
+                        arm = raw_act[i, :7].astype(np.float32)
+                        joints = (
+                            (joints_batch[i, :7] + np.clip(arm, -1.0, 1.0) * 0.2).astype(np.float32)
+                            if action_mode == "joint_vel"
+                            else arm
+                        )
+                        gripper = 0.0 if float(raw_act[i, 7]) > 0.5 else 1.0
+                        manip_actions.append(
+                            ManipulatorAction(arm_action=JointAnglesAction(angles=joints), gripper_action=gripper)
+                        )
 
                 joint_cmds = converter.actions_to_jointpos(manip_actions, joints_batch)
+                for i in range(n_envs):
+                    if converter._target_poses[i] is not None:
+                        target_poses[i] = np.asarray(converter._target_poses[i], dtype=np.float32)
+                    else:
+                        target_poses[i] = converter._kinematics.forward(joints_batch[i]).astype(np.float32)
                 timeline = omni.timeline.get_timeline_interface()
                 kit_app = omni.kit.app.get_app()
                 while not timeline.is_playing():
@@ -783,6 +792,11 @@ def main() -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(summary, indent=2) + "\n")
         print(f"Saved evaluation summary to {out_path}")
+
+    if args.suite == "robolab":
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
 
 
 if __name__ == "__main__":

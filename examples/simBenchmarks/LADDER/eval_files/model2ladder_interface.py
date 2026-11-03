@@ -55,6 +55,17 @@ class ModelClient:
             if action_ensemble_horizon is None:
                 action_ensemble_horizon = 7
         elif policy_setup in ("franka_droid", "droid"):
+            if unnorm_key is None:
+                avail = self.server_metadata.get("available_unnorm_keys") or []
+                default_key = self.server_metadata.get("default_unnorm_key")
+                if "oxe_droid" in avail:
+                    unnorm_key = "oxe_droid"
+                elif "droid" in avail:
+                    unnorm_key = "droid"
+                elif default_key:
+                    unnorm_key = default_key
+                elif avail:
+                    unnorm_key = avail[0]
             if action_ensemble_horizon is None:
                 action_ensemble_horizon = 1
         else:
@@ -165,7 +176,7 @@ class ModelClient:
             else:
                 step_raw = np.asarray(chunk[step_offset], dtype=np.float32).reshape(-1)
 
-            if self.policy_setup == "widowx_bridge":
+            if self.policy_setup == "widowx_bridge" or step_raw.shape[0] == 7:
                 world_vector = step_raw[:3] * self.action_scale
                 roll, pitch, yaw = np.asarray(step_raw[3:6], dtype=np.float64)
                 axes, angle = euler2axangle(roll, pitch, yaw)

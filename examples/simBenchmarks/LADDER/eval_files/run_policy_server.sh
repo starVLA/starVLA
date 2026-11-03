@@ -6,6 +6,7 @@ star_vla_python="${star_vla_python:-python}"
 port="${port:-10093}"
 gpu_id="${gpu_id:-0}"
 seed="${seed:-0}"
+idle_timeout="${idle_timeout:--1}"
 your_ckpt="${your_ckpt:-./results/Checkpoints/Qwen3VL-GR00T-Bridge-RT-1/checkpoints/steps_20000_pytorch_model.pt}"
 base_vlm="${base_vlm:-Qwen/Qwen3-VL-4B-Instruct}"
 USE_BF16="${USE_BF16:-1}"
@@ -25,6 +26,7 @@ CMD=(
   --ckpt_path "${your_ckpt}"
   --port "${port}"
   --seed "${seed}"
+  --idle_timeout "${idle_timeout}"
   --config_override "framework.qwenvl.base_vlm=${base_vlm}"
 )
 
