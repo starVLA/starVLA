@@ -210,10 +210,11 @@ class FlowmatchingActionHead(nn.Module):
         action_model_type = config.action_model_type
         action_model_cfg = DiTConfig[action_model_type]
 
-        self.input_embedding_dim = action_model_cfg["input_embedding_dim"]
         diffusion_model_cfg = config.diffusion_model_cfg
         diffusion_model_cfg = {**action_model_cfg, **diffusion_model_cfg}
         self.model = DiT(**diffusion_model_cfg)
+        # Attention geometry defines the actual DiT width after config overrides.
+        self.input_embedding_dim = self.model.inner_dim
         self.action_dim = config.action_dim
         # `action_horizon` is the canonical chunk length, normalised upstream
         # by share_tools.apply_config_compat.
