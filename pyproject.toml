@@ -27,6 +27,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "msgpack",
 ]
 
 [project.optional-dependencies]
