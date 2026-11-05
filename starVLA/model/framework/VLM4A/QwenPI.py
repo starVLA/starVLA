@@ -89,6 +89,31 @@ class QwenPIDefaultConfig:
             "noise_beta_beta": 1.0,
             "noise_s": 0.999,
             "num_timestep_buckets": 1000,
+            # Compute dtype for the action expert (autocast region around the
+            # action head). "float32" preserves the historical behaviour.
+            # "bfloat16" runs the DiT on tensor cores like the VLM does and is
+            # substantially faster on Ampere+ GPUs; see PR benchmarks.
+            "autocast_dtype": "float32",
+            # CUDA-graph execution of the training-time DiT forward
+            # (torch.compile reduce-overhead + encoder-length bucketing).
+            # Anything the buckets cannot serve falls back to the eager module
+            # (out-of-range lengths, compile failures, gradient accumulation
+            # without per-microbatch grad clearing — see the restrictions in
+            # action_model/dit_graph_compile.py).
+            "compile": False,
+            # Encoder length is padded up to a multiple of this (padded keys
+            # are masked out of cross-attention, numerically a no-op).
+            "compile_bucket_multiple": 64,
+            # Sequences longer than this run eagerly (bounds graph count/memory).
+            "compile_max_capture_len": 1024,
+            # Optional explicit capture lengths (overrides the bucket multiple),
+            # e.g. [192, 384]; mirrors vLLM's cudagraph_capture_sizes.
+            "compile_capture_lens": None,
+            # After this many successful compiled calls, run any further
+            # recompile-triggering call eagerly instead of paying a ~20s
+            # compilation stall (torch.compiler eager_on_recompile stance).
+            # 0 disables the freeze.
+            "compile_freeze_after": 4,
             # DiT architecture settings — shape fields (num_layers,
             # input_embedding_dim, cross_attention_dim, num_attention_heads)
             # are auto-populated by populate_layerwise_dit_cfg at runtime.
@@ -164,6 +189,16 @@ class Qwen_PI(baseframework):
         # only ever read `action_horizon` here.
         self.action_horizon = int(self.config.framework.action_model.action_horizon)
 
+    def _action_autocast(self) -> torch.autocast:
+        """Autocast context for the action expert, from action_model.autocast_dtype."""
+        name = str(self.config.framework.action_model.get("autocast_dtype", "float32"))
+        dtypes = {"float32": torch.float32, "bfloat16": torch.bfloat16}
+        if name not in dtypes:
+            raise ValueError(
+                f"framework.action_model.autocast_dtype must be one of {sorted(dtypes)}, got {name!r}"
+            )
+        return torch.autocast("cuda", dtype=dtypes[name])
+
     def _encode_vl_hidden_states(
         self, batch_images: List, instructions: List[str]
     ) -> tuple:
@@ -209,7 +244,7 @@ class Qwen_PI(baseframework):
         base_hidden = vl_embs_list[-1]
 
         # Step 4: Action Expert Forward and Loss
-        with torch.autocast("cuda", dtype=torch.float32):
+        with self._action_autocast():
             # Label alignment: take the last chunk_len segment
             actions = torch.tensor(
                 np.array(actions), device=base_hidden.device, dtype=base_hidden.dtype
@@ -286,7 +321,7 @@ class Qwen_PI(baseframework):
             else None
         )
         # Step 4: Action Expert Forward and Loss
-        with torch.autocast("cuda", dtype=torch.float32):
+        with self._action_autocast():
             pred_actions = self.action_model.predict_action(
                 vl_embs_list, state, encoder_attention_mask=backbone_attention_mask
             )  # (B, chunk_len, action_dim)
@@ -349,7 +384,7 @@ class Qwen_PI(baseframework):
             base_hidden.device, dtype=torch.float32
         )
 
-        with torch.autocast("cuda", dtype=torch.float32):
+        with self._action_autocast():
             pred_actions = self.action_model.predict_action_realtime(
                 vl_embs_list,
                 state_t,
