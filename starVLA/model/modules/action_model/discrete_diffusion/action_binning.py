@@ -112,13 +112,15 @@ class ActionBinning(nn.Module):
         logits: torch.Tensor,
         deterministic: bool = True,
         generator: torch.Generator | None = None,
+        temperature: float = 1.0,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Convert 8 bit logits to bin indices. Returns (indices, selected_probs)."""
-        probs = logits.sigmoid()
+        probs = (logits / max(temperature, 1e-8)).sigmoid()
         if deterministic:
             bits = (probs > 0.5).long()
         else:
-            bits = (torch.rand_like(probs, generator=generator) < probs).long()
+            uniform = torch.rand(probs.shape, dtype=probs.dtype, device=probs.device, generator=generator)
+            bits = (uniform < probs).long()
         powers = 2 ** self.bit_powers.to(logits.device)
         indices = (bits * powers).sum(dim=-1)
         # P(bin) under factorized model = prod_i (p_i if b_i else (1-p_i))
@@ -149,7 +151,9 @@ class ActionBinning(nn.Module):
             return self._logits_to_indices_bin(
                 logits, temperature=temperature, deterministic=deterministic, generator=generator
             )
-        return self._logits_to_indices_bit(logits, deterministic=deterministic, generator=generator)
+        return self._logits_to_indices_bit(
+            logits, deterministic=deterministic, generator=generator, temperature=temperature
+        )
 
     def indices_to_bit_targets(self, indices: torch.Tensor) -> torch.Tensor | None:
         """

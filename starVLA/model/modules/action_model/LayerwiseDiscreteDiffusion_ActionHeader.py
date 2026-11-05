@@ -194,9 +194,9 @@ class LayerwiseDiscreteDiffusionActionHead(nn.Module):
                 reduction="none",
             ).reshape(B, *target.shape[1:])
         else:
-            bit_targets = self.binning.indices_to_bit_targets(target)
+            bit_targets = self.binning.indices_to_bit_targets(target).reshape_as(pred_flat)
             bce = F.binary_cross_entropy_with_logits(pred_flat, bit_targets, reduction="none").mean(dim=-1)
-            ce = bce
+            ce = bce.reshape_as(target)
 
         ce_masked = torch.where(loss_mask, ce, torch.zeros_like(ce))
         num_masked = loss_mask.float().sum(dim=(1, 2)) + 1e-8
