@@ -286,8 +286,14 @@ class GemmaAttention(nn.Module):
                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
             else:
-                key_states = torch.cat([past_key_values[self.layer_idx][0], key_states], dim=2)
-                value_states = torch.cat([past_key_values[self.layer_idx][1], value_states], dim=2)
+                # Cache.__getitem__ was removed in Transformers 5; `layers` is shared by 4.57 and 5.x.
+                if isinstance(past_key_values, Cache):
+                    cache_layer = past_key_values.layers[self.layer_idx]
+                    cached_key_states, cached_value_states = cache_layer.keys, cache_layer.values
+                else:
+                    cached_key_states, cached_value_states = past_key_values[self.layer_idx]
+                key_states = torch.cat([cached_key_states, key_states], dim=2)
+                value_states = torch.cat([cached_value_states, value_states], dim=2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

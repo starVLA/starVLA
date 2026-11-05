@@ -8,6 +8,42 @@ from starVLA.model.modules.vlm.openpi_transformers.gemma import modeling_gemma
 
 
 class OpenPIGemmaTransformersCompatTest(unittest.TestCase):
+    def test_cached_suffix_forward(self):
+        config = GemmaDims(width=16, depth=1, mlp_dim=32, num_heads=2, num_kv_heads=1, head_dim=8)
+        prefix_embeds = torch.randn(1, 2, config.width)
+        suffix_embeds = torch.randn(1, 3, config.width)
+        prefix_model = OpenPIGemma(config, use_adarms=False).eval()
+        prefix_model.model.config._attn_implementation = "eager"
+
+        with torch.no_grad():
+            prefix_output = prefix_model.model.forward(
+                inputs_embeds=prefix_embeds,
+                attention_mask=torch.zeros(1, 1, 2, 2),
+                position_ids=torch.arange(2).unsqueeze(0),
+                use_cache=True,
+                adarms_cond=None,
+            )
+        prefix_cache = prefix_output.past_key_values
+
+        for use_adarms in (False, True):
+            with self.subTest(use_adarms=use_adarms):
+                action_expert = OpenPIGemma(config, use_adarms=use_adarms).eval()
+                action_expert.model.config._attn_implementation = "eager"
+
+                with torch.no_grad():
+                    suffix_output = action_expert.model.forward(
+                        inputs_embeds=suffix_embeds,
+                        attention_mask=torch.zeros(1, 1, 3, 5),
+                        position_ids=torch.arange(2, 5).unsqueeze(0),
+                        past_key_values=prefix_cache,
+                        use_cache=False,
+                        adarms_cond=torch.zeros(1, config.width) if use_adarms else None,
+                    )
+
+                self.assertEqual(prefix_cache.get_seq_length(), prefix_embeds.shape[1])
+                self.assertEqual(suffix_output.last_hidden_state.shape, suffix_embeds.shape)
+                self.assertTrue(torch.isfinite(suffix_output.last_hidden_state).all())
+
     def test_tiny_action_expert_forward(self):
         config = GemmaDims(
             width=16,
