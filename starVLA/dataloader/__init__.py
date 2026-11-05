@@ -10,6 +10,16 @@ from starVLA.dataloader.vlm_datasets import make_vlm_dataloader
 
 logger = get_logger(__name__)
 
+
+def _get_model_action_horizon(cfg):
+    """Read action_horizon from both current and OpenPI-style schemas."""
+    from omegaconf import OmegaConf
+
+    nested = OmegaConf.select(cfg, "framework.action_model.action_horizon", default=None)
+    if nested is not None:
+        return nested
+    return OmegaConf.select(cfg, "framework.action_horizon", default=None)
+
 def save_dataset_statistics(dataset_statistics, run_dir):
     """Saves a `dataset_statistics.json` file."""
     out_path = run_dir / "dataset_statistics.json"
@@ -41,6 +51,7 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
 
         vla_dataset = get_vla_dataset(
             data_cfg=vla_dataset_cfg,
+            model_action_horizon=_get_model_action_horizon(cfg),
             balance_dataset_weights=vla_dataset_cfg.get("balance_dataset_weights", False),
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
         )
