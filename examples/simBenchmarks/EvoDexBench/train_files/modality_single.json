@@ -1,0 +1,43 @@
+{
+  "state": {
+    "right_ee_pose": {
+      "start": 0,
+      "end": 7,
+      "original_key": "observation.state"
+    },
+    "right_hand_qpos": {
+      "start": 49,
+      "end": 73,
+      "original_key": "observation.state"
+    }
+  },
+  "action": {
+    "right_ee_delta": {
+      "start": 0,
+      "end": 6,
+      "original_key": "action",
+      "absolute": false
+    },
+    "right_hand_qpos": {
+      "start": 6,
+      "end": 30,
+      "original_key": "action"
+    }
+  },
+  "video": {
+    "context": {
+      "original_key": "observation.images.context"
+    },
+    "interaction": {
+      "original_key": "observation.images.interaction"
+    },
+    "wrist_right": {
+      "original_key": "observation.images.wrist_right"
+    }
+  },
+  "annotation": {
+    "human.action.task_description": {
+      "original_key": "task_index"
+    }
+  }
+}

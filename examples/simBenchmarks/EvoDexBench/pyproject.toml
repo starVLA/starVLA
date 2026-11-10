@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evodex-starvla-example"
+version = "0.1.0"
+description = "StarVLA policy API plugin for Evo-DexBench"
+requires-python = ">=3.10"
+dependencies = [
+    "dex-benchmark>=0.1.0",
+    "numpy>=1.26,<2",
+    "msgpack>=1.0",
+    "websockets>=15,<16",
+]
+
+[project.entry-points."dex_benchmark.policies"]
+starvla = "starvla_policy:create_starvla_policy"
+starvla-qwenoft = "starvla_policy:create_qwenoft_policy"
+starvla-wan = "starvla_policy:create_wan_policy"
+starvla-cosmos = "starvla_policy:create_cosmos_policy"
+
+[tool.setuptools.packages.find]
+where = ["eval_files"]
+include = ["starvla_policy*"]
