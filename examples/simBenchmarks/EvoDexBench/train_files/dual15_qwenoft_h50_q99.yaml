@@ -1,0 +1,54 @@
+# 15-task joint recipe for the official QwenOFT framework (frozen VLM, trained action head).
+# The released checkpoint uses these 600k steps; the 300k results use trainer.max_train_steps=300000.
+run_id: evodex_dual_qwenoft_h50_q99_15task_600k
+run_root_dir: playground/Checkpoints/evodex_starvla
+seed: 42
+wandb_entity: null
+wandb_project: null
+is_debug: false
+version_id: '0.21'
+framework:
+  name: QwenOFT
+  qwenvl:
+    base_vlm: Qwen/Qwen3-VL-4B-Instruct
+    attn_implementation: sdpa
+  action_model:
+    action_model_type: MLP
+    action_dim: 60
+    state_dim: 62
+    action_horizon: 50
+datasets:
+  vla_data:
+    dataset_py: lerobot_datasets
+    include_state: true
+    data_root_dir: playground/Datasets/EvoDexBench/dual
+    data_mix: evodex_dual15_h50_q99
+    lerobot_version: v3.0
+    action_type: physical_semantic
+    action_mode: abs
+    per_device_batch_size: 2
+    obs_image_size: [224, 224]
+    video_backend: torchvision_av
+    num_workers: 8
+    prefetch_factor: 2
+trainer:
+  max_train_steps: 600000
+  num_warmup_steps: 5000
+  save_interval: 25000
+  eval_interval: 25000
+  learning_rate:
+    base: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 5.0e-07
+  freeze_modules: qwen_vl_interface
+  logging_frequency: 100
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  optimizer:
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
+  pretrained_checkpoint: null
+  is_resume: false
