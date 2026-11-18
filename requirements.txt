@@ -30,6 +30,7 @@ diffusers
 timm
 tyro
 websockets
+msgpack
 pyzmq  # GR00T-protocol policy server (deployment/model_server/server_policy_gr00t_zmq.py)
 tdigest==0.5.2.2
 
