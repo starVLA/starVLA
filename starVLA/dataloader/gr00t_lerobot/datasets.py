@@ -51,6 +51,7 @@ from starVLA.dataloader.gr00t_lerobot.schema import (
 )
 from starVLA.dataloader.gr00t_lerobot.transform import ComposedModalityTransform
 from starVLA.dataloader.gr00t_lerobot.transform.state_action import StateActionTransform
+from starVLA.dataloader.shared_epoch import SharedEpoch
 
 from functools import partial
 from typing import Tuple, List
@@ -2340,6 +2341,7 @@ class LeRobotMixtureDataset(Dataset):
             self._primary_dataset_indices[0] = True
 
         # Set the epoch and sample the first epoch
+        self._epoch = SharedEpoch()
         self.set_epoch(0)
 
         self.update_metadata(metadata_config)
@@ -2374,14 +2376,18 @@ class LeRobotMixtureDataset(Dataset):
             dataset_descriptions.append(dataset_description)
         return json.dumps({"Mixture dataset": dataset_descriptions}, indent=2)
 
-    def set_epoch(self, epoch: int):
-        """Set the epoch for the dataset.
+    @property
+    def epoch(self) -> int:
+        """Current epoch, including updates made after workers have started."""
+        return self._epoch.get()
 
-        Args:
-            epoch (int): The epoch to set.
-        """
+    @epoch.setter
+    def epoch(self, epoch: int) -> None:
+        self._epoch.set(epoch)
+
+    def set_epoch(self, epoch: int):
+        """Update the shared epoch before starting the next loader iteration."""
         self.epoch = epoch
-        # self.sampled_steps = self.sample_epoch()
 
     def sample_step(self, index: int) -> tuple[LeRobotSingleDataset, int, int]:
         """Sample a single step from the dataset."""
