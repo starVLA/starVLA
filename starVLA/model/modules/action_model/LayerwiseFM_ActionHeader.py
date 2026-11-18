@@ -49,13 +49,17 @@ class CategorySpecificMLP(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim=1024, output_dim=2048):
+    def __init__(self, input_dim, hidden_dim=1024, output_dim=2048, use_input_norm=False):
         super().__init__()
+        self.norm = (
+            nn.LayerNorm(input_dim, elementwise_affine=False, eps=1e-6)
+            if use_input_norm else nn.Identity()
+        )
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
-        return self.layer2(F.relu(self.layer1(x)))
+        return self.layer2(F.relu(self.layer1(self.norm(x))))
 
 
 class ActionEncoder(nn.Module):
@@ -242,6 +246,13 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         self.input_embedding_dim = diffusion_model_cfg_kwargs["input_embedding_dim"]
         self.model = DiT(**diffusion_model_cfg_kwargs)  # TODO: ideally copy LLM init from VLM
         self.dit_out_hidden_size = self.input_embedding_dim
+        self.fusion_input_norm = (
+            nn.LayerNorm(
+                diffusion_model_cfg_kwargs.get("cross_attention_dim", self.input_embedding_dim),
+                elementwise_affine=False, eps=1e-6,
+            )
+            if action_config.get("fusion_input_norm", False) else nn.Identity()
+        )
         self.action_dim = action_config.action_dim
         # `action_horizon` is the canonical chunk length.  Legacy YAMLs are
         # normalised by share_tools.apply_config_compat upstream, so this
@@ -266,6 +277,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             input_dim=self.input_embedding_dim,
             hidden_dim=1024,
             output_dim=self.action_dim,
+            use_input_norm=action_config.get("decoder_input_norm", False),
         )
         self.future_tokens = nn.Embedding(action_config.num_target_vision_tokens, self.input_embedding_dim)
         nn.init.normal_(self.future_tokens.weight, mean=0.0, std=0.02)
@@ -277,6 +289,10 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         self.beta_dist = Beta(action_config.noise_beta_alpha, action_config.noise_beta_beta)
         self.num_timestep_buckets = action_config.num_timestep_buckets
         self.config = action_config
+
+    def _normalize_vl_features(self, vl_embs_list):
+        """Normalize each layer independently over the feature axis of each token."""
+        return [self.fusion_input_norm(h) for h in vl_embs_list]
 
     def sample_time(self, batch_size, device, dtype):
         sample = self.beta_dist.sample([batch_size]).to(device, dtype=dtype)
@@ -332,7 +348,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         # Layer-wise DiT forward. DiT handles cross/self-attention interleaving.
         model_output = self.model(
             hidden_states=sa_embs,
-            encoder_hidden_states=vl_embs_list,
+            encoder_hidden_states=self._normalize_vl_features(vl_embs_list),
             timestep=t_discretized,
             encoder_attention_mask=encoder_attention_mask,
             return_pre_output=True,
@@ -394,7 +410,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             # Layer-wise DiT forward. DiT handles cross/self-attention interleaving.
             model_output = self.model(
                 hidden_states=sa_embs,
-                encoder_hidden_states=vl_embs_list,
+                encoder_hidden_states=self._normalize_vl_features(vl_embs_list),
                 timestep=timesteps_tensor,
                 encoder_attention_mask=encoder_attention_mask,
                 return_pre_output=True,
@@ -490,7 +506,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
             )
             model_output = self.model(
                 hidden_states=sa_embs,
-                encoder_hidden_states=vl_embs_list,
+                encoder_hidden_states=self._normalize_vl_features(vl_embs_list),
                 timestep=timesteps,
                 encoder_attention_mask=encoder_attention_mask,
                 return_pre_output=True,
@@ -617,7 +633,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
                 )
                 model_output = self.model(
                     hidden_states=sa_embs,
-                    encoder_hidden_states=vl_embs_list,
+                    encoder_hidden_states=self._normalize_vl_features(vl_embs_list),
                     timestep=temb_tensor,
                     encoder_attention_mask=encoder_attention_mask,
                     return_pre_output=True,
