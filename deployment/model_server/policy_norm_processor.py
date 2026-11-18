@@ -64,8 +64,7 @@ def _resolve_robot_type(
         data_mix = model_cfg["datasets"]["vla_data"]["data_mix"]
     except (KeyError, TypeError) as e:
         raise KeyError(
-            "ckpt config.yaml is missing `datasets.vla_data.data_mix`; "
-            "cannot resolve training-time robot_type."
+            "ckpt config.yaml is missing `datasets.vla_data.data_mix`; " "cannot resolve training-time robot_type."
         ) from e
 
     if data_mix not in DATASET_NAMED_MIXTURES:
@@ -261,9 +260,7 @@ class PolicyNormProcessor:
                 unnorm_key = next(iter(norm_stats.keys()))
             # else: defer error to step 3 below after robot_type resolution attempt
         elif unnorm_key not in norm_stats:
-            raise KeyError(
-                f"unnorm_key={unnorm_key!r} not in {list(norm_stats.keys())}"
-            )
+            raise KeyError(f"unnorm_key={unnorm_key!r} not in {list(norm_stats.keys())}")
         self._unnorm_key = unnorm_key  # may still be None for multi-key case
 
         # 1) Resolve which DataConfig was used at training.
@@ -314,8 +311,7 @@ class PolicyNormProcessor:
         self._transform.eval()  # mark transforms as eval-mode
 
         logger.info(
-            "PolicyNormProcessor ready: robot_type=%s, unnorm_key=%s, "
-            "action_keys=%s (dims=%s), state_keys=%s",
+            "PolicyNormProcessor ready: robot_type=%s, unnorm_key=%s, " "action_keys=%s (dims=%s), state_keys=%s",
             robot_type,
             unnorm_key,
             self._action_keys,
@@ -368,12 +364,12 @@ class PolicyNormProcessor:
             ``(T, D)`` un-normalized actions in env coordinates.
         """
         normalized_actions = np.asarray(normalized_actions)
-        assert normalized_actions.ndim == 2, (
-            f"Expected (T, D); got shape {normalized_actions.shape}"
-        )
+        assert normalized_actions.ndim == 2, f"Expected (T, D); got shape {normalized_actions.shape}"
 
         # Split (T, D) into per-key {full_key: torch.Tensor[T, dim_k]}.
-        data: Dict[str, torch.Tensor] = {}
+        # ConcatTransform.unapply consumes the combined action tensor. Keep
+        # per-key inputs as well for pipelines that do not concatenate.
+        data: Dict[str, torch.Tensor] = {"action": torch.as_tensor(normalized_actions, dtype=torch.float32)}
         cursor = 0
         for full_key in self._action_keys:
             dim_k = self._action_key_dims.get(full_key, 1)
