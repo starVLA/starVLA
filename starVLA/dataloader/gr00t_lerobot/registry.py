@@ -1,12 +1,13 @@
 """
 Centralized registry that auto-discovers benchmark-specific data configs from
-``examples/*/train_files/data_registry/`` and merges them with the base
-registries defined in this package.
+legacy ``examples/**/train_files/data_registry/`` files and current
+``examples/**/configs/train/data_registry.py`` files, then merges them with
+the base registries defined in this package.
 
 Three registries are maintained:
 
 * ``DATASET_NAMED_MIXTURES``       – mixture_name → [(dataset, weight, robot_type)]
-* ``ROBOT_TYPE_CONFIG_MAP``        – robot_type → DataConfig instance
+* ``ROBOT_TYPE_CONFIG_MAP``        – robot_type → DataConfig class or instance
 * ``ROBOT_TYPE_TO_EMBODIMENT_TAG`` – robot_type → EmbodimentTag
 
 ``ROBOT_TYPE_TO_EMBODIMENT_TAG`` is **derived** from ``ROBOT_TYPE_CONFIG_MAP``
@@ -59,7 +60,7 @@ _LEGACY_TAG_OVERRIDES: dict = {}
 def _derive_tag_map() -> dict:
     """Build robot_type -> EmbodimentTag from ROBOT_TYPE_CONFIG_MAP.
 
-    Reads each DataConfig instance's ``embodiment_tag`` classvar. Falls back to
+    Reads each DataConfig class or instance's ``embodiment_tag`` classvar. Falls back to
     ``EmbodimentTag.NEW_EMBODIMENT`` if the classvar is missing. Legacy
     overrides from bench files take precedence.
     """
@@ -86,8 +87,8 @@ _REGISTRY_DIR_NAME = "data_registry"
 _DISCOVERED = False
 
 
-def _find_registry_dirs() -> list[Path]:
-    """Return all ``examples/**/train_files/data_registry/`` directories."""
+def _find_registry_files() -> list[Path]:
+    """Return legacy and config-owned benchmark registry modules."""
     # Walk up from this file to the repo root
     # registry.py is at starVLA/dataloader/gr00t_lerobot/registry.py
     #   parents: [0]=gr00t_lerobot, [1]=dataloader, [2]=starVLA(pkg), [3]=repo root
@@ -95,10 +96,16 @@ def _find_registry_dirs() -> list[Path]:
     examples_dir = repo_root / "examples"
     if not examples_dir.is_dir():
         return []
+    legacy = (
+        p / "data_config.py"
+        for p in examples_dir.glob("**/train_files/data_registry")
+        if p.is_dir()
+    )
+    config_owned = examples_dir.glob("**/configs/train/data_registry.py")
     return sorted(
         p
-        for p in examples_dir.glob("**/train_files/data_registry")
-        if p.is_dir() and "sdk_tools" not in p.relative_to(examples_dir).parts
+        for p in (*legacy, *config_owned)
+        if p.is_file() and "sdk_tools" not in p.relative_to(examples_dir).parts
     )
 
 
@@ -114,31 +121,31 @@ def _load_module_from_path(module_name: str, file_path: Path):
 
 
 def discover_and_merge() -> None:
-    """Scan ``examples/*/train_files/data_registry/`` and merge into global registries."""
+    """Scan benchmark registry files and merge them into global registries."""
     global _DISCOVERED, ROBOT_TYPE_TO_EMBODIMENT_TAG
     if _DISCOVERED:
         return
     _DISCOVERED = True
 
-    for registry_dir in _find_registry_dirs():
-        bench_name = registry_dir.parents[1].name  # examples/**/<BenchName>/train_files/data_registry
+    for registry_file in _find_registry_files():
+        bench_name = registry_file.parents[2].name
         prefix = f"_data_registry_{bench_name}"
-
-        # --- data_config.py (may contain all three registries) ---
-        cfg_file = registry_dir / "data_config.py"
-        if cfg_file.is_file():
-            mod = _load_module_from_path(f"{prefix}.data_config", cfg_file)
-            if mod:
-                if hasattr(mod, "ROBOT_TYPE_CONFIG_MAP"):
-                    ROBOT_TYPE_CONFIG_MAP.update(mod.ROBOT_TYPE_CONFIG_MAP)
-                    logger.debug(f"[registry] Loaded data_config from {bench_name}: {list(mod.ROBOT_TYPE_CONFIG_MAP.keys())}")
-                # Legacy: bench file may still expose an explicit dict override.
-                if hasattr(mod, "ROBOT_TYPE_TO_EMBODIMENT_TAG"):
-                    _LEGACY_TAG_OVERRIDES.update(mod.ROBOT_TYPE_TO_EMBODIMENT_TAG)
-                    logger.debug(f"[registry] Legacy embodiment_tag overrides from {bench_name}: {list(mod.ROBOT_TYPE_TO_EMBODIMENT_TAG.keys())}")
-                if hasattr(mod, "DATASET_NAMED_MIXTURES"):
-                    DATASET_NAMED_MIXTURES.update(mod.DATASET_NAMED_MIXTURES)
-                    logger.debug(f"[registry] Loaded mixtures from {bench_name} (data_config): {list(mod.DATASET_NAMED_MIXTURES.keys())}")
+        mod = _load_module_from_path(prefix, registry_file)
+        if mod:
+            if hasattr(mod, "ROBOT_TYPE_CONFIG_MAP"):
+                ROBOT_TYPE_CONFIG_MAP.update(mod.ROBOT_TYPE_CONFIG_MAP)
+                logger.debug(
+                    f"[registry] Loaded config classes from {bench_name}: "
+                    f"{list(mod.ROBOT_TYPE_CONFIG_MAP.keys())}"
+                )
+            if hasattr(mod, "ROBOT_TYPE_TO_EMBODIMENT_TAG"):
+                _LEGACY_TAG_OVERRIDES.update(mod.ROBOT_TYPE_TO_EMBODIMENT_TAG)
+            if hasattr(mod, "DATASET_NAMED_MIXTURES"):
+                DATASET_NAMED_MIXTURES.update(mod.DATASET_NAMED_MIXTURES)
+                logger.debug(
+                    f"[registry] Loaded mixtures from {bench_name}: "
+                    f"{list(mod.DATASET_NAMED_MIXTURES.keys())}"
+                )
 
     # Re-derive after all benches are loaded so classvars + legacy overrides combine.
     ROBOT_TYPE_TO_EMBODIMENT_TAG = _derive_tag_map()

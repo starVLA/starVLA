@@ -27,6 +27,7 @@ def make_LeRobotSingleDataset(
     robot_type: str,
     delete_pause_frame: bool = False,
     data_cfg: dict | None = None,
+    action_horizon: int | None = None,
 ) -> LeRobotSingleDataset:
     """
     Make a LeRobotSingleDataset object.
@@ -38,7 +39,16 @@ def make_LeRobotSingleDataset(
     :return: A LeRobotSingleDataset object.
     """
     
-    data_config = ROBOT_TYPE_CONFIG_MAP[robot_type]
+    data_config_factory = ROBOT_TYPE_CONFIG_MAP[robot_type]
+    if isinstance(data_config_factory, type):
+        if action_horizon is None:
+            raise ValueError(
+                "action_horizon is required to instantiate "
+                f"data config for robot_type={robot_type!r}"
+            )
+        data_config = data_config_factory(action_horizon=action_horizon)
+    else:
+        data_config = data_config_factory
     modality_config = data_config.modality_config()
     transforms = data_config.transform()
     dataset_path = data_root_dir / data_name
@@ -89,6 +99,7 @@ def get_vla_dataset(
     data_mix = data_cfg.data_mix
     delete_pause_frame = data_cfg.get("delete_pause_frame", False)
     mixture_spec = DATASET_NAMED_MIXTURES[data_mix]
+    action_horizon = kwargs.pop("action_horizon", None)
     logger.info(f"[dataloader] Using mixture '{data_mix}': {[(d, w, r) for d, w, r in mixture_spec]}")
     included_datasets, filtered_mixture_spec = set(), []
     for d_name, d_weight, robot_type in mixture_spec:  
@@ -102,7 +113,17 @@ def get_vla_dataset(
 
     dataset_mixture = []
     for d_name, d_weight, robot_type in filtered_mixture_spec:
-        dataset_mixture.append((make_LeRobotSingleDataset(Path(data_root_dir), d_name, robot_type, delete_pause_frame=delete_pause_frame, data_cfg=data_cfg), d_weight))
+        dataset_mixture.append((
+            make_LeRobotSingleDataset(
+                Path(data_root_dir),
+                d_name,
+                robot_type,
+                delete_pause_frame=delete_pause_frame,
+                data_cfg=data_cfg,
+                action_horizon=action_horizon,
+            ),
+            d_weight,
+        ))
 
     return LeRobotMixtureDataset(
         dataset_mixture,
@@ -140,7 +161,10 @@ if __name__ == "__main__":
     if args.data_root_dir is not None:
         vla_dataset_cfg.data_root_dir = Path(args.data_root_dir)
 
-    dataset = get_vla_dataset(data_cfg=vla_dataset_cfg)
+    dataset = get_vla_dataset(
+        data_cfg=vla_dataset_cfg,
+        action_horizon=cfg.framework.action_model.action_horizon,
+    )
     from torch.utils.data import DataLoader
     train_dataloader = DataLoader(
         dataset,
