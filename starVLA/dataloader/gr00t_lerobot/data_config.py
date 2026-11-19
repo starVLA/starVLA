@@ -1076,6 +1076,71 @@ class VLAArenaFrankaDataConfig:
         ]
         return ComposedModalityTransform(transforms=transforms)
 
+class AlohaDataConfig:
+    # Define the keys for each modality
+    video_keys = [
+        "video.front_camera",      # Maps to observation.images.camera_1
+        "video.left_camera",      # Maps to observation.images.camera_2
+        "video.right_camera",      # Maps to observation.images.camera_2
+    ]
+    state_keys = [
+        "state.joints",
+    ]
+    action_keys = [
+        "action.joints",
+    ]
+    language_keys = ["annotation.human.action.task_description"]
+
+    # Index configuration
+    observation_indices = [0]        # Which timesteps to use for observation
+    action_indices = list(range(16))  # Action horizon (predict 8 future steps)
+
+    def modality_config(self):
+        """Define modality configurations for data loading."""
+        from starVLA.dataloader.gr00t_lerobot.datasets import ModalityConfig
+
+        return {
+            "video": ModalityConfig(
+                delta_indices=self.observation_indices,
+                modality_keys=self.video_keys,
+            ),
+            "state": ModalityConfig(
+                delta_indices=self.observation_indices,
+                modality_keys=self.state_keys,
+            ),
+            "action": ModalityConfig(
+                delta_indices=self.action_indices,
+                modality_keys=self.action_keys,
+            ),
+            "language": ModalityConfig(
+                delta_indices=self.observation_indices,
+                modality_keys=self.language_keys,
+            ),
+        }
+
+    def transform(self):
+        """Define data transformations."""
+        from starVLA.dataloader.gr00t_lerobot.transform.base import ComposedModalityTransform
+        from starVLA.dataloader.gr00t_lerobot.transform.state_action import (
+            StateActionToTensor,
+            StateActionTransform,
+        )
+
+        transforms = [
+            # State transforms
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={key: "min_max" for key in self.state_keys},
+            ),
+            # Action transforms
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={key: "min_max" for key in self.action_keys},
+            ),
+        ]
+        return ComposedModalityTransform(transforms=transforms)
 
 ###########################################################################################
 
@@ -1093,5 +1158,7 @@ ROBOT_TYPE_CONFIG_MAP = {
     "vla_arena_franka": VLAArenaFrankaDataConfig(),
 
     "custom_robot_config": SingleFrankaRobotiqDeltaEefDataConfig(),
+    
+    "aloha": AlohaDataConfig(),
 }
 
