@@ -1,0 +1,6 @@
+# Add this section to your existing VLA training YAML.
+tracking:
+  backend: swanlab
+  project: starVLA
+  workspace: null
+  mode: online
