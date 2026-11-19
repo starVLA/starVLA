@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from math import gcd
 from typing import Any, Sequence
 
 import numpy as np
@@ -197,9 +198,11 @@ class UMISampleAdapter(Dataset):
         dataset_length = len(self)
         if dataset_length <= 0:
             raise IndexError("cannot sample an empty UMI dataset")
-        # An odd stride gives good coverage for common even-sized datasets;
-        # epoch changes the starting offset while preserving reproducibility.
+        # A coprime stride visits every candidate before repeating. Keep the
+        # seed-based stride when possible; epoch still shifts the starting point.
         stride = 2 * ((self.seed + index) % max(1, dataset_length // 2)) + 1
+        while gcd(stride, dataset_length) != 1:
+            stride += 2
         for attempt in range(self.policy.retry_bad_samples + 1):
             candidate = (index + self.epoch + attempt * stride) % dataset_length
             try:
