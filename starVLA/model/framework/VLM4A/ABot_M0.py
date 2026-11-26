@@ -133,6 +133,9 @@ class ABot_M0(baseframework):
 
         # from vggt.models.vggt import VGGT
         self.spatial_model = spatial_model = VGGT.from_pretrained("facebook/VGGT-1B")
+        # Only spatial_model.aggregator is used, under torch.no_grad(); its heads are never called. Keep the whole
+        # model out of the optimizer instead of carrying fp32 masters and Adam moments for its ~1 B parameters.
+        self.spatial_model.requires_grad_(False)
         hidden_size = self.qwen_vl_interface.model.config.hidden_size
         self.spatial_projector = nn.Linear(2048, hidden_size)
         self.fuser = CrossAttention(d_model=hidden_size, d_hidden=hidden_size, kv_dim=hidden_size)
