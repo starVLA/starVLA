@@ -101,9 +101,12 @@ class _Wan2_Interface(nn.Module):
         self.vae_scale_factor_temporal = 2 ** sum(self.vae.temperal_downsample)
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
-        # # Freeze VAE and text encoder by default
-        # self.vae.requires_grad_(False)
-        # self.text_encoder.requires_grad_(False)
+        # Freeze VAE and text encoder. They only run under torch.no_grad() (_encode_text, _encode_images_vae), so
+        # they never receive a gradient; left trainable they still sit in the optimizer, which keeps fp32 masters and
+        # Adam moments for their 6.4 B parameters (UMT5-XXL 5.7 B, VAE 0.7 B) and updates and all-gathers them every
+        # step. Same as CosmoPredict2.
+        self.vae.requires_grad_(False)
+        self.text_encoder.requires_grad_(False)
 
         # DiT: 24 heads × 128 dim = 3072
         self._hidden_size = (
