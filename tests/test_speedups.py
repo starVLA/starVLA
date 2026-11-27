@@ -187,16 +187,63 @@ def _run(model, inputs):
     return hidden.detach().clone(), grads, outputs
 
 
+def _partition(model):
+    """Leave every parameter empty outside its own module's forward, as DeepSpeed ZeRO-3 does with the parameters it
+    partitions (param.data = torch.empty(0) after the module's forward hook). Returns the function that undoes it."""
+    data = {p: p.data for p in model.parameters()}
+    active = dict.fromkeys(data, 0)
+    for p in data:
+        p.data = torch.empty(0, dtype=p.dtype)
+
+    def gather(module, args):
+        for p in module.parameters(recurse=False):
+            active[p] += 1
+            p.data = data[p]
+
+    def release(module, args, output):
+        for p in module.parameters(recurse=False):
+            active[p] -= 1
+            if not active[p]:
+                p.data = torch.empty(0, dtype=p.dtype)
+
+    handles = []
+    for module in model.modules():
+        if next(module.parameters(recurse=False), None) is not None:
+            handles += [module.register_forward_pre_hook(gather), module.register_forward_hook(release)]
+
+    def undo():
+        for handle in handles:
+            handle.remove()
+        for p, tensor in data.items():
+            p.data = tensor
+
+    return undo
+
+
+def _partitioned_forward(model, inputs):
+    """Hidden states and logits of a forward on partitioned parameters (the logits are read after the forward)."""
+    undo = _partition(model)
+    try:
+        outputs = model(**inputs, output_attentions=False, output_hidden_states=True, return_dict=True)
+        return outputs.hidden_states[-1].detach().clone(), outputs.logits.detach().clone()
+    finally:
+        undo()
+
+
 def _check(family):
     from starVLA.model.modules import vlm
 
     model = _tiny(family).train()
-    cases = {"uniform": [(8, 8)] * 4, "mixed sizes": [(8, 8), (8, 12), (4, 8), (8, 8)]}
+    inference_first = "first seen under inference_mode"
+    cases = {"uniform": [(8, 8)] * 4, "mixed sizes": [(8, 8), (8, 12), (4, 8), (8, 8)], inference_first: [(4, 12)] * 4}
     reference = {}
     calls_before = _vision_attention_calls(model, _inputs(model, cases["uniform"]))
     for name, grids in cases.items():
         hidden, grads, outputs = _run(model, _inputs(model, grids))
         reference[name] = (hidden, grads, outputs.logits.detach().clone())
+    # the emulation of partitioned parameters is one the upstream code runs on
+    hidden, logits = _partitioned_forward(model, _inputs(model, cases["uniform"]))
+    assert torch.equal(hidden, reference["uniform"][0]) and torch.equal(logits, reference["uniform"][2])
 
     applied, skipped = vlm.run_speedups(
         SimpleNamespace(model=model), [f"starVLA.model.modules.vlm.monkey_patch:{p}" for p in BACKBONE_PATHS]
@@ -207,7 +254,16 @@ def _check(family):
         "patch_attention_mask"
     }, (applied, skipped)
 
+    # DeepSpeed ZeRO-3: parameters exist only inside their module's forward, the lazily computed logits included.
+    # First, so that the patched forward meets these grids with nothing cached.
+    for name in ("uniform", "mixed sizes"):
+        hidden, logits = _partitioned_forward(model, _inputs(model, cases[name]))
+        assert torch.equal(hidden, reference[name][0]), f"{family} / {name}: hidden state differs when partitioned"
+        assert torch.equal(logits, reference[name][2]), f"{family} / {name}: logits differ when partitioned"
     for name, grids in cases.items():
+        if name == inference_first:  # predict_action() meets a grid before training does: nothing it caches may
+            with torch.inference_mode():  # be an inference tensor, which autograd refuses to save for backward
+                model(**_inputs(model, grids), output_hidden_states=True, return_dict=True)
         hidden, grads, outputs = _run(model, _inputs(model, grids))
         ref_hidden, ref_grads, ref_logits = reference[name]
         assert type(outputs).__name__ == "HiddenOnlyOutput", type(outputs)

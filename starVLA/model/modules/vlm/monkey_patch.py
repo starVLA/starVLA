@@ -164,7 +164,8 @@ def patch_attention_mask(vlm):
 
 
 class HiddenOnlyOutput:
-    """The wrapper's outputs, with the language-model head applied only if `logits` is read."""
+    """The wrapper's outputs, with the language-model head applied only if `logits` is read. `head` is the head
+    module, called as a module so that its hooks run (DeepSpeed ZeRO-3 gathers the weight in a pre-forward hook)."""
 
     def __init__(self, outputs, head, head_input):
         self._outputs = outputs
@@ -232,7 +233,7 @@ def skip_unused_lm_head(vlm):
         if head_input is None:  # the head was not called: nothing was skipped, nothing to add
             return outputs
         call["works"] = True
-        return HiddenOnlyOutput(outputs, upstream_head, head_input)
+        return HiddenOnlyOutput(outputs, lm_head, head_input)
 
     lm_head.forward = head_forward
     model.forward = forward
@@ -385,7 +386,8 @@ def _install_vision_attention(modeling):
         if key not in layouts:
             if len(layouts) >= _MAX_LAYOUTS:
                 layouts.pop(next(iter(layouts)))
-            shape = (attention.num_heads, weight.shape[1] // attention.num_heads, dtype, device)
+            # not from weight.shape: DeepSpeed ZeRO-3 leaves an empty placeholder outside the module's forward
+            shape = (attention.num_heads, attention.qkv.in_features // attention.num_heads, dtype, device)
             layouts[key] = (
                 _bitwise(_frame_layout(rows), *shape),
                 _bitwise(_window_layout(self, grid_thw), *shape) if windowed else None,
@@ -479,6 +481,13 @@ def _grid_key(grid_thw):
     return tuple(tuple(row) for row in grid_thw.tolist())  # one host read per forward
 
 
+def _table_key(grid_thw, *rest):
+    """The key of a table: the grid, and whether inference mode is on. A table made under torch.inference_mode()
+    (predict_action) is an inference tensor, which autograd refuses to save for a training step's backward, so the
+    two modes keep separate tables."""
+    return (_grid_key(grid_thw), torch.is_inference_mode_enabled(), *rest)
+
+
 def _remember(cache, key, value):
     if len(cache) >= _MAX_TABLES:
         cache.pop(next(iter(cache)))
@@ -492,7 +501,7 @@ def _memoize_rot_pos_emb(model_class):
 
     def rot_pos_emb(self, grid_thw):
         inv_freq = self.rotary_pos_emb.inv_freq
-        key = (_grid_key(grid_thw), str(inv_freq.device), str(inv_freq.dtype), id(self))
+        key = _table_key(grid_thw, str(inv_freq.device), str(inv_freq.dtype), id(self))
         hit = rot_cache.get(key)
         if hit is None:
             hit = _remember(rot_cache, key, original_rot(self, grid_thw).detach())
@@ -507,7 +516,7 @@ def _memoize_window_index(model_class):
     cache = {}
 
     def get_window_index(self, grid_thw):
-        key = (_grid_key(grid_thw), id(self))
+        key = _table_key(grid_thw, id(self))
         hit = cache.get(key)
         if hit is None:
             hit = _remember(cache, key, original(self, grid_thw))
@@ -566,7 +575,7 @@ def _install_qwen3(qwen3):
     def fast_pos_embed_interpolate(self, grid_thw):
         grid = _grid_key(grid_thw)
         weight = self.pos_embed.weight
-        key = (grid, str(weight.device), str(weight.dtype), self.num_grid_per_side)
+        key = (grid, torch.is_inference_mode_enabled(), str(weight.device), str(weight.dtype), self.num_grid_per_side)
         hit = interp_cache.get(key)
         if hit is None:
             hit = _remember(interp_cache, key, interp_indices(self, grid))
