@@ -10,7 +10,6 @@ logger = initialize_overwatch(__name__)
 # does not apply, so nothing is configured per recipe. Applied in this order to every backbone interface.
 BACKBONE_SPEEDUPS = (
     "starVLA.model.modules.vlm.monkey_patch:patch_attention_mask",
-    "starVLA.model.modules.vlm.monkey_patch:skip_unused_lm_head",
     "starVLA.model.modules.vlm.monkey_patch:batch_vision_attention",
     "starVLA.model.modules.vlm.monkey_patch:cache_vision_positions",
     "starVLA.dataloader.worker_prep:prepare_inputs_in_workers",

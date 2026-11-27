@@ -322,9 +322,6 @@ class VLATrainer(TrainerUtils):
     def _create_data_iterators(self):
         """Create data iterators."""
         self.vla_iter = iter(self.vla_train_dataloader)
-        from starVLA.training.trainer_utils.trainer_tools import speed_up_deepspeed_step
-
-        speed_up_deepspeed_step(self.model)  # same gradients and updates bit for bit, fewer passes over them
 
     def _get_next_batch(self):
         """Get next batch (automatically handle data loop)."""

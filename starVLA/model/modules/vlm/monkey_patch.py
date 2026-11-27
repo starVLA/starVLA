@@ -4,12 +4,12 @@ whose result nobody reads. Each `patch(vlm) -> bool` checks the model it is give
 apply; `get_vlm_model` runs them on every backbone interface (BACKBONE_SPEEDUPS in this package's __init__).
 
     patch_attention_mask       causal + padding mask from two tensor ops instead of nested torch.vmap
-    skip_unused_lm_head        no vocabulary logits when the caller reads hidden states only
     batch_vision_attention     one attention call per vision layer instead of one per image (Qwen vision towers)
     cache_vision_positions     vision position tables built once per grid size (Qwen vision towers)
 """
 
 import sys
+import threading
 
 import torch
 import torch.nn.functional as F
@@ -60,7 +60,12 @@ def _install_attention_mask():
         allow_is_causal_skip=True,
         **kwargs,
     ):
-        if mask_function is not masking_utils.causal_mask_function or local_size is not None:
+        if (
+            mask_function is not masking_utils.causal_mask_function
+            or local_size is not None
+            # a padding mask for another batch size: the original raises or takes the first rows, so does this
+            or (attention_mask is not None and attention_mask.shape[0] != batch_size)
+        ):
             return original(
                 batch_size=batch_size,
                 cache_position=cache_position,
@@ -143,105 +148,6 @@ def patch_attention_mask(vlm):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Hidden states without the vocabulary logits
-# ---------------------------------------------------------------------------------------------------------------------
-# No vocabulary logits for callers that only read hidden states.
-#
-# Most frameworks condition their action head on the backbone's hidden states:
-#
-#     outputs = vlm(**inputs, output_hidden_states=True, return_dict=True)
-#     last_hidden = outputs.hidden_states[-1]
-#
-# The Hugging Face `...ForConditionalGeneration` wrapper then also projects every position onto the vocabulary
-# (batch x tokens x 150 k logits, forward and backward), which nobody reads. Here such a call (hidden
-# states requested, no labels) runs the wrapper's own forward with the language-model head switched off, so every
-# other field of the output is exactly what upstream returns, including whichever convention the wrapper has for
-# hidden_states[-1]. `logits` is computed on first access, so a caller that does read it still gets the upstream
-# value. Calls with labels, or without output_hidden_states=True, are untouched.
-#
-# Applies to every backbone whose model has an `lm_head`. If the first such call fails without the head (a wrapper that
-# post-processes its logits), the default forward is used from then on.
-
-
-class HiddenOnlyOutput:
-    """The wrapper's outputs, with the language-model head applied only if `logits` is read. `head` is the head
-    module, called as a module so that its hooks run (DeepSpeed ZeRO-3 gathers the weight in a pre-forward hook)."""
-
-    def __init__(self, outputs, head, head_input):
-        self._outputs = outputs
-        self._head = head
-        self._head_input = head_input
-        self._logits = None
-
-    @property
-    def logits(self):
-        if self._logits is None:
-            self._logits = self._head(self._head_input)
-        return self._logits
-
-    def __getattr__(self, name):  # hidden_states, past_key_values, attentions, loss, ...
-        return getattr(self._outputs, name)
-
-    def __getitem__(self, key):
-        return self.logits if key == "logits" else self._outputs[key]
-
-
-def skip_unused_lm_head(vlm):
-    model = getattr(vlm, "model", None)
-    lm_head = getattr(model, "lm_head", None)
-    if lm_head is None:
-        return False
-    if getattr(model, "_starvla_hidden_only", False):
-        return True
-    upstream_forward, upstream_head = model.forward, lm_head.forward
-    call = {"skip": False, "head_input": None, "works": None}  # works: None until the first such call has run
-
-    def head_forward(hidden_states, *args, **kwargs):
-        if not call["skip"]:
-            return upstream_head(hidden_states, *args, **kwargs)
-        call["head_input"] = hidden_states
-        return None
-
-    def forward(*args, **kwargs):
-        hidden_only = (
-            kwargs.get("output_hidden_states") is True
-            and kwargs.get("labels") is None
-            and kwargs.get("return_dict", True) is not False
-            # an interface that already keeps the logits of a few positions only (Gemma 4, MiniCPM-V pass
-            # logits_to_keep=1): nothing left to save, and Gemma 4 post-processes its logits (soft-capping)
-            and not (isinstance(kwargs.get("logits_to_keep"), int) and kwargs["logits_to_keep"] > 0)
-        )
-        if not hidden_only:
-            return upstream_forward(*args, **kwargs)
-        if call["works"] is False:
-            return upstream_forward(*args, **kwargs)
-        call["skip"] = True
-        try:
-            outputs = upstream_forward(*args, **kwargs)
-        except Exception as error:
-            if call["works"]:  # it has worked before: this is the caller's error
-                raise
-            call["skip"], call["works"] = False, False  # a wrapper that needs its logits: leave it alone from now on
-            logger.info(
-                f"hidden_only: {type(model).__name__} cannot run without its language-model head "
-                f"({type(error).__name__}: {error}); using the default forward"
-            )
-            return upstream_forward(*args, **kwargs)
-        finally:
-            call["skip"] = False
-        head_input, call["head_input"] = call["head_input"], None
-        if head_input is None:  # the head was not called: nothing was skipped, nothing to add
-            return outputs
-        call["works"] = True
-        return HiddenOnlyOutput(outputs, lm_head, head_input)
-
-    lm_head.forward = head_forward
-    model.forward = forward
-    model._starvla_hidden_only = True
-    return True
-
-
-# ---------------------------------------------------------------------------------------------------------------------
 # Batched vision attention
 # ---------------------------------------------------------------------------------------------------------------------
 # Batched attention for the Qwen vision towers when every image has the same number of patches.
@@ -286,13 +192,25 @@ _MAX_LAYOUTS = 16
 decisions = {}  # (chunks, length, heads, head_dim, dtype, device, with gradients) -> batched call is bitwise identical
 
 
-class _State:
-    """Chunk layouts of the vision forward in progress, each (number of chunks, chunk length) or None when the
-    chunks differ: `frames` for full attention, `windows` for window attention. Set once per vision forward."""
+class _VisionForward(threading.local):
+    """Chunk layouts of the vision forward in progress in this thread, each (number of chunks, chunk length) or None
+    when the chunks differ: `frames` for full attention, `windows` for window attention. Set once per forward."""
 
     frames = None
     windows = None
     windowed = False
+
+
+_State = _VisionForward()
+
+
+def _tables(module):
+    """The tables memoized for one model, kept on the model itself: they go with it when it is collected, copied or
+    moved, and two models never see each other's."""
+    tables = module.__dict__.get("_starvla_tables")
+    if tables is None:
+        tables = module.__dict__["_starvla_tables"] = {}
+    return tables
 
 
 def _uniform(lengths):
@@ -355,10 +273,9 @@ def _bitwise(layout, heads, head_dim, dtype, device):
 
 
 def _layout(cu_seqlens):
-    if not _State.windowed:
-        return _State.frames
+    """The uniform layout of this attention call, or None. It must have as many chunks as the call's boundaries."""
     chunks = cu_seqlens.shape[0] - 1
-    for layout in (_State.frames, _State.windows):
+    for layout in (_State.frames, _State.windows) if _State.windowed else (_State.frames,):
         if layout is not None and layout[0] == chunks:
             return layout
     return None
@@ -372,27 +289,42 @@ def _install_vision_attention(modeling):
     attention_class, model_class = getattr(modeling, attention_name), getattr(modeling, model_name)
     original = attention_class.forward
     original_model_forward = model_class.forward
-    layouts = {}  # (model, grid) -> (frames, windows)
 
-    def model_forward(self, hidden_states, grid_thw, **kwargs):
-        if self.config._attn_implementation in _UPSTREAM_ONLY:
-            return original_model_forward(self, hidden_states, grid_thw, **kwargs)
+    def layouts_of(self, grid_thw):
+        """(frames, windows) for this grid, each batched only if the probe passed. (None, None) when they cannot be
+        derived here (another transformers version, whose vision model has other methods)."""
         rows = tuple(tuple(row) for row in grid_thw.tolist())  # one host read per forward
         attention = self.blocks[0].attn
         weight = attention.qkv.weight
         device = weight.device
         dtype = torch.get_autocast_dtype(device.type) if torch.is_autocast_enabled(device.type) else weight.dtype
-        key = (id(self), rows, dtype, torch.is_grad_enabled())
+        layouts = _tables(self).setdefault("layouts", {})
+        key = (rows, dtype, str(device), torch.is_grad_enabled())
         if key not in layouts:
             if len(layouts) >= _MAX_LAYOUTS:
                 layouts.pop(next(iter(layouts)))
             # not from weight.shape: DeepSpeed ZeRO-3 leaves an empty placeholder outside the module's forward
             shape = (attention.num_heads, attention.qkv.in_features // attention.num_heads, dtype, device)
-            layouts[key] = (
-                _bitwise(_frame_layout(rows), *shape),
-                _bitwise(_window_layout(self, grid_thw), *shape) if windowed else None,
-            )
-        _State.frames, _State.windows = layouts[key]
+            frames = _bitwise(_frame_layout(rows), *shape)
+            try:
+                windows = _bitwise(_window_layout(self, grid_thw), *shape) if windowed else None
+            except Exception as error:  # e.g. transformers >= 5.17 has no get_window_index: those layers as upstream
+                windows = None
+                logger.info(f"vision_attn: window layout not available ({type(error).__name__}: {error})")
+            layouts[key] = (frames, windows)
+        return layouts[key]
+
+    def model_forward(self, hidden_states, grid_thw, **kwargs):
+        if self.config._attn_implementation in _UPSTREAM_ONLY:
+            return original_model_forward(self, hidden_states, grid_thw, **kwargs)
+        try:
+            layouts = layouts_of(self, grid_thw)
+        except Exception as error:  # must never stop a forward that runs without it
+            layouts = (None, None)
+            if not _tables(self).get("reported"):
+                _tables(self)["reported"] = True
+                logger.info(f"vision_attn: left off for this model ({type(error).__name__}: {error})")
+        _State.frames, _State.windows = layouts
         _State.windowed = windowed
         try:
             return original_model_forward(self, hidden_states, grid_thw, **kwargs)
@@ -497,11 +429,11 @@ def _remember(cache, key, value):
 
 def _memoize_rot_pos_emb(model_class):
     original_rot = model_class.rot_pos_emb
-    rot_cache = {}
 
     def rot_pos_emb(self, grid_thw):
         inv_freq = self.rotary_pos_emb.inv_freq
-        key = _table_key(grid_thw, str(inv_freq.device), str(inv_freq.dtype), id(self))
+        rot_cache = _tables(self).setdefault("rot_pos_emb", {})
+        key = _table_key(grid_thw, str(inv_freq.device), str(inv_freq.dtype))
         hit = rot_cache.get(key)
         if hit is None:
             hit = _remember(rot_cache, key, original_rot(self, grid_thw).detach())
@@ -513,10 +445,10 @@ def _memoize_rot_pos_emb(model_class):
 
 def _memoize_window_index(model_class):
     original = model_class.get_window_index
-    cache = {}
 
     def get_window_index(self, grid_thw):
-        key = _table_key(grid_thw, id(self))
+        cache = _tables(self).setdefault("window_index", {})
+        key = _table_key(grid_thw, str(grid_thw.device))
         hit = cache.get(key)
         if hit is None:
             hit = _remember(cache, key, original(self, grid_thw))
@@ -529,7 +461,6 @@ def _memoize_window_index(model_class):
 
 def _install_qwen3(qwen3):
     _memoize_rot_pos_emb(qwen3.Qwen3VLVisionModel)
-    interp_cache = {}
 
     def interp_indices(self, grid):
         """idx_tensor and weight_tensor of the upstream function, built from host integers (same arithmetic)."""
@@ -575,6 +506,7 @@ def _install_qwen3(qwen3):
     def fast_pos_embed_interpolate(self, grid_thw):
         grid = _grid_key(grid_thw)
         weight = self.pos_embed.weight
+        interp_cache = _tables(self).setdefault("interp_indices", {})
         key = (grid, torch.is_inference_mode_enabled(), str(weight.device), str(weight.dtype), self.num_grid_per_side)
         hit = interp_cache.get(key)
         if hit is None:
@@ -638,7 +570,15 @@ _PRECOMPUTED = frozenset(
         "merged_shape",
     }
 )
-_last_grid = [None, None, None]  # the grid tensor last read, its version counter, its key
+
+
+class _LastGrid(threading.local):
+    """The grid tensor last read in this thread, its version counter and its key."""
+
+    grid = version = key = None
+
+
+_last_grid = _LastGrid()
 
 
 def _frozen(value):
@@ -653,18 +593,25 @@ def _tensor_key(tensor):
     mode = torch.is_inference_mode_enabled()
     if tensor.is_inference():  # no version counter: read it every time
         return (_frozen(tensor.tolist()), tensor.dtype, str(tensor.device), mode)
-    if _last_grid[0] is tensor and _last_grid[1] == tensor._version:
-        return _last_grid[2] + (mode,)
+    if _last_grid.grid is tensor and _last_grid.version == tensor._version:
+        return _last_grid.key + (mode,)
     key = (_frozen(tensor.tolist()), tensor.dtype, str(tensor.device))
-    _last_grid[:] = [tensor, tensor._version, key]
+    _last_grid.grid, _last_grid.version, _last_grid.key = tensor, tensor._version, key
     return (*key, mode)
 
 
 def _argument_key(value):
     if isinstance(value, torch.Tensor):
         return _tensor_key(value)
-    if hasattr(value, "_attn_implementation"):  # a config: only the attention implementation matters (max_seqlen)
-        return ("config", id(value), value._attn_implementation)
+    if hasattr(value, "_attn_implementation"):  # a config: by its settings, not by which object it is
+        settings = tuple(
+            sorted(
+                (k, repr(v))
+                for k, v in vars(value).items()
+                if isinstance(v, (bool, int, float, str, list, tuple, type(None)))
+            )
+        )
+        return ("config", settings, value._attn_implementation)
     hash(value)  # TypeError for anything else unhashable: no memoization
     return value
 

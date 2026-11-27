@@ -44,7 +44,6 @@ apply, so there is nothing to configure and nothing to add when writing a new wr
 | File | Function | What it does |
 |------|------|-----------|
 | `monkey_patch.py` | `patch_attention_mask` | Causal + padding mask from two tensor ops instead of nested `torch.vmap` |
-| `monkey_patch.py` | `skip_unused_lm_head` | No vocabulary logits when the caller reads hidden states only |
 | `monkey_patch.py` | `batch_vision_attention` | One attention call per vision layer instead of one per image (Qwen towers, SDPA) |
 | `monkey_patch.py` | `cache_vision_positions` | Vision position tables built once per grid size (Qwen towers) |
 | `starVLA/dataloader/worker_prep.py` | `prepare_inputs_in_workers` | `build_qwenvl_inputs` runs in the data-loader workers |
