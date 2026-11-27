@@ -7,6 +7,7 @@ tokenizer and config of a model directory, so the prompts and the image pipeline
 
 With STARVLA_TEST_PALIGEMMA_TOKENIZER=<paligemma_tokenizer.model>, also worker_examples on PI0 / PI05.
 """
+
 import dataclasses
 import hashlib
 import importlib
@@ -43,7 +44,12 @@ def _small_backbones():
         def from_pretrained(model_id, **kwargs):
             config = AutoConfig.from_pretrained(model_id)
             text, vision = config.text_config, config.vision_config
-            text.hidden_size, text.intermediate_size, text.num_attention_heads, text.num_key_value_heads = HIDDEN, 512, 2, 2
+            text.hidden_size, text.intermediate_size, text.num_attention_heads, text.num_key_value_heads = (
+                HIDDEN,
+                512,
+                2,
+                2,
+            )
             vision.hidden_size, vision.intermediate_size, vision.num_heads, vision.out_hidden_size = 64, 128, 4, HIDDEN
             vision.depth = 3
             if hasattr(vision, "deepstack_visual_indexes"):
@@ -68,8 +74,9 @@ def _config(framework, source, model_dir):
 
         module = importlib.import_module(f"starVLA.model.framework.VLM4A.{framework}")
         own = next(c for n, c in vars(module).items() if n.endswith("DefaultConfig") and dataclasses.is_dataclass(c))
-        cfg.framework = OmegaConf.merge({"action_model": QwenGR00TDefaultConfig().action_model},
-                                        dataclasses.asdict(own()), cfg.framework)
+        cfg.framework = OmegaConf.merge(
+            {"action_model": QwenGR00TDefaultConfig().action_model}, dataclasses.asdict(own()), cfg.framework
+        )
         cfg.datasets.vla_data.CoT_prompt = "{instruction}"
     elif source != LIBERO:
         cfg.framework = OmegaConf.load(source).framework
@@ -93,10 +100,12 @@ class _Samples:
         from PIL import Image
 
         rng = np.random.default_rng(index)
-        return {"image": [Image.fromarray(rng.integers(0, 256, (224, 224, 3), dtype=np.uint8)) for _ in range(2)],
-                "lang": "put the bowl on the plate" + " and then close the drawer" * (index % 3),
-                "action": rng.uniform(-1, 1, self.shapes[0]).astype(np.float32),
-                "state": rng.uniform(-1, 1, self.shapes[1]).astype(np.float32)}
+        return {
+            "image": [Image.fromarray(rng.integers(0, 256, (224, 224, 3), dtype=np.uint8)) for _ in range(2)],
+            "lang": "put the bowl on the plate" + " and then close the drawer" * (index % 3),
+            "action": rng.uniform(-1, 1, self.shapes[0]).astype(np.float32),
+            "state": rng.uniform(-1, 1, self.shapes[1]).astype(np.float32),
+        }
 
 
 def _step(model, batch):
@@ -117,7 +126,7 @@ def _check(model_dir):
     from starVLA.dataloader.lerobot_datasets import collate_fn
     from starVLA.model.framework import base_framework
     from starVLA.model.modules import vlm
-    from starVLA.model.modules.vlm import worker_prep
+    from starVLA.dataloader import worker_prep
     from starVLA.model.framework.base_framework import build_framework
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -130,20 +139,32 @@ def _check(model_dir):
             cfg = _config(framework, source, cosmos if framework == "CosmosGR00T" else model_dir)
             model = build_framework(cfg).train()
             head = model.config.framework.action_model
-            samples = _Samples(int(head.get("action_horizon", None) or head.get("num_actions_chunk", 16)),
-                               int(head.get("action_dim", 7)), int(head.get("state_dim", 7)))
+            samples = _Samples(
+                int(head.get("action_horizon", None) or head.get("num_actions_chunk", 16)),
+                int(head.get("action_dim", 7)),
+                int(head.get("state_dim", 7)),
+            )
             reference = _step(model, [samples[i] for i in range(len(samples))])
-            applied, _ = vlm.run_speedups(model.qwen_vl_interface, ["starVLA.model.modules.vlm.worker_prep"])
-            assert applied == ["worker_prep"], (framework, applied)
-            before = dict(worker_prep.stats)
-            loader = DataLoader(samples, batch_size=len(samples), num_workers=1,
-                                collate_fn=worker_prep.collate(cfg, collate_fn))
+            applied, _ = vlm.run_speedups(
+                model.qwen_vl_interface, ["starVLA.dataloader.worker_prep:prepare_inputs_in_workers"]
+            )
+            assert applied == ["prepare_inputs_in_workers"], (framework, applied)
+            before = dict(worker_prep.input_stats)
+            loader = DataLoader(
+                samples, batch_size=len(samples), num_workers=1, collate_fn=worker_prep.inputs_collate(cfg, collate_fn)
+            )
             candidate = _step(model, next(iter(loader)))
-            used = worker_prep.stats["used"] - before["used"]
-            assert used == calls and worker_prep.stats["other prompt"] == before["other prompt"], (framework, worker_prep.stats)
+            used = worker_prep.input_stats["used"] - before["used"]
+            assert used == calls and worker_prep.input_stats["other prompt"] == before["other prompt"], (
+                framework,
+                worker_prep.input_stats,
+            )
             assert candidate == reference, framework
-            print(f"ok {framework} on {os.path.basename(model_dir)}: {used} backbone input(s) per step from the workers, "
-                  f"loss and {len(reference[1])} gradients identical", flush=True)
+            print(
+                f"ok {framework} on {os.path.basename(model_dir)}: {used} backbone input(s) per step from the workers, "
+                f"loss and {len(reference[1])} gradients identical",
+                flush=True,
+            )
             del model, loader
 
 
@@ -158,22 +179,28 @@ def _check_openpi(tokenizer_model):
 
     from starVLA.dataloader.lerobot_datasets import collate_fn
     from starVLA.model.framework import base_framework
-    from starVLA.model.framework import worker_examples as openpi
+    from starVLA.dataloader import worker_prep as openpi
     from starVLA.model.modules import vlm
     from starVLA.model.framework.base_framework import build_framework
     from starVLA.training.trainer_utils.config_tracker import wrap_config
 
     rng = np.random.default_rng(0)
-    samples = [{"image": [Image.fromarray(rng.integers(0, 255, (224, 224, 3), dtype=np.uint8)) for _ in range(2)],
-                "lang": "pick up the bowl" + " and put it on the plate" * index,
-                "action": rng.uniform(-1, 1, (8, 7)).astype(np.float32),
-                "state": rng.uniform(-1, 1, (1, 8)).astype(np.float32)} for index in range(2)]
+    samples = [
+        {
+            "image": [Image.fromarray(rng.integers(0, 255, (224, 224, 3), dtype=np.uint8)) for _ in range(2)],
+            "lang": "pick up the bowl" + " and put it on the plate" * index,
+            "action": rng.uniform(-1, 1, (8, 7)).astype(np.float32),
+            "state": rng.uniform(-1, 1, (1, 8)).astype(np.float32),
+        }
+        for index in range(2)
+    ]
     small = {"width": 128, "depth": 3, "mlp_dim": 256, "num_heads": 2, "num_kv_heads": 1, "head_dim": 64}
     everything = base_framework.FRAMEWORK_SPEEDUPS
     for framework in ("PI0", "PI05"):
         cfg = OmegaConf.load(f"examples/simBenchmarks/LIBERO/train_files/openpi/{framework.lower()}_libero_8gpu.yaml")
-        cfg.framework.update(precision="float32", paligemma_config=small,
-                             action_expert_config=dict(small, width=64, mlp_dim=128))
+        cfg.framework.update(
+            precision="float32", paligemma_config=small, action_expert_config=dict(small, width=64, mlp_dim=128)
+        )
         cfg.framework.tokenizer.model_path = tokenizer_model
 
         def run(*paths):
@@ -183,8 +210,16 @@ def _check_openpi(tokenizer_model):
             model = build_framework(wrap_config(cfg)).double().train()  # wrapped as the trainer wraps it
             batch = samples
             if paths:
-                batch = next(iter(DataLoader(samples, batch_size=len(samples), num_workers=1,
-                                             collate_fn=openpi.collate(cfg, collate_fn))))
+                batch = next(
+                    iter(
+                        DataLoader(
+                            samples,
+                            batch_size=len(samples),
+                            num_workers=1,
+                            collate_fn=openpi.examples_collate(cfg, collate_fn),
+                        )
+                    )
+                )
             torch.manual_seed(1)
             loss = model(batch)["action_loss"]
             loss.backward()
@@ -194,12 +229,15 @@ def _check_openpi(tokenizer_model):
             return float(loss), grads, torch.as_tensor(actions["normalized_actions"])
 
         loss, grads, actions = run()  # the original code
-        used = openpi.stats["used"]
+        used = openpi.example_stats["used"]
         worker_loss, worker_grads, worker_actions = run("worker_examples")
-        assert openpi.stats["used"] == used + 1, openpi.stats
+        assert openpi.example_stats["used"] == used + 1, openpi.example_stats
         assert worker_loss == loss and torch.equal(worker_grads, grads) and torch.equal(worker_actions, actions)
-        print(f"ok {framework} worker_examples: samples prepared in a worker, loss and {grads.numel():,} gradient "
-              f"values identical", flush=True)
+        print(
+            f"ok {framework} worker_examples: samples prepared in a worker, loss and {grads.numel():,} gradient "
+            f"values identical",
+            flush=True,
+        )
 
 
 def test_openpi():

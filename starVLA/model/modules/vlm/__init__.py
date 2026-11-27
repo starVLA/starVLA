@@ -1,33 +1,37 @@
 import importlib
 
+from starVLA.training.trainer_utils import initialize_overwatch
+
+logger = initialize_overwatch(__name__)
+
 # Speedups that leave every result bitwise identical (in deterministic mode, where the original code reproduces
 # itself): work moved off the critical path, or work whose result nobody reads left out. Each one checks the model it
 # is given, most of them with a probe against the original code on the running device, and returns False where it
 # does not apply, so nothing is configured per recipe. Applied in this order to every backbone interface.
 BACKBONE_SPEEDUPS = (
-    "starVLA.model.modules.vlm.attn_mask",  # causal + padding mask from two tensor ops instead of nested torch.vmap
-    "starVLA.model.modules.vlm.hidden_only",  # no vocabulary logits when the caller reads hidden states only
-    "starVLA.model.modules.vlm.vision_attn",  # one batched attention call per vision layer instead of one per image
-    "starVLA.model.modules.vlm.vision_pos",  # vision position tables built once per grid size
-    "starVLA.model.modules.vlm.worker_prep",  # the VLM processor in the data-loader workers
-    "starVLA.model.modules.world_model.video_prep",  # a world model's image preprocessing in the data-loader workers
+    "starVLA.model.modules.vlm.monkey_patch:patch_attention_mask",
+    "starVLA.model.modules.vlm.monkey_patch:skip_unused_lm_head",
+    "starVLA.model.modules.vlm.monkey_patch:batch_vision_attention",
+    "starVLA.model.modules.vlm.monkey_patch:cache_vision_positions",
+    "starVLA.dataloader.worker_prep:prepare_inputs_in_workers",
+    "starVLA.dataloader.worker_prep:prepare_videos_in_workers",
 )
 _sped_up = set()  # ids of the Hugging Face models that went through apply_backbone_speedups
 
 
-def run_speedups(target, modules, function="apply"):
-    """Call `function(target)` of each module; returns the (applied, not applicable) module names."""
+def run_speedups(target, speedups):
+    """Call each "module:function" on `target`; returns the (applied, not applicable) function names."""
     applied, skipped = [], []
-    for module in modules:
-        name = module.rsplit(".", 1)[-1]
+    for speedup in speedups:
+        module, name = speedup.split(":")
         try:
-            ok = getattr(importlib.import_module(module), function)(target)
+            ok = getattr(importlib.import_module(module), name)(target)
         except Exception as error:  # a speedup must never stop a run that works without it
-            print(f"[starVLA] {name}: left off ({type(error).__name__}: {error})", flush=True)
+            logger.warning(f"{name}: left off ({type(error).__name__}: {error})")
             ok = False
         (applied if ok else skipped).append(name)
     if applied:
-        print(f"[starVLA] {type(target).__name__}: {', '.join(applied)}", flush=True)
+        logger.info(f"{type(target).__name__}: {', '.join(applied)}")
     return applied, skipped
 
 

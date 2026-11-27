@@ -4,6 +4,7 @@ STARVLA_TEST_VLMS set to model directories, also worker_prep with their real pro
 
     python tests/test_speedups.py        # or: pytest tests/test_speedups.py
 """
+
 import os
 import subprocess
 import sys
@@ -13,44 +14,117 @@ import numpy as np
 
 import torch
 
-BACKBONE_PATHS = ("attn_mask", "hidden_only", "vision_attn", "vision_pos")
+BACKBONE_PATHS = ("patch_attention_mask", "skip_unused_lm_head", "batch_vision_attention", "cache_vision_positions")
 
 
 def _tiny(family):
     torch.manual_seed(0)
-    text = dict(vocab_size=160, hidden_size=64, intermediate_size=128, num_hidden_layers=2, num_attention_heads=4,
-                num_key_value_heads=2, max_position_embeddings=512, pad_token_id=0, bos_token_id=1, eos_token_id=2,
-                rope_scaling={"rope_type": "default", "mrope_section": [4, 2, 2]})  # head_dim 16 = 2 * (4 + 2 + 2)
+    text = dict(
+        vocab_size=160,
+        hidden_size=64,
+        intermediate_size=128,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=512,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        rope_scaling={"rope_type": "default", "mrope_section": [4, 2, 2]},
+    )  # head_dim 16 = 2 * (4 + 2 + 2)
     if family == "qwen3_5":  # transformers 5: three linear-attention layers and one full-attention layer
         from transformers import Qwen3_5Config, Qwen3_5ForConditionalGeneration
 
-        text = dict(vocab_size=160, hidden_size=64, intermediate_size=128, num_hidden_layers=4, num_attention_heads=4,
-                    num_key_value_heads=2, head_dim=16, linear_key_head_dim=16, linear_value_head_dim=16,
-                    linear_num_key_heads=2, linear_num_value_heads=4, max_position_embeddings=512, pad_token_id=0,
-                    rope_parameters={"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [1, 1, 0],
-                                     "mrope_interleaved": True, "partial_rotary_factor": 0.25})
-        vision = dict(depth=2, hidden_size=32, intermediate_size=64, num_heads=4, patch_size=4, spatial_merge_size=2,
-                      temporal_patch_size=2, out_hidden_size=64, num_position_embeddings=36)
-        config = Qwen3_5Config(text_config=text, vision_config=vision, image_token_id=150, video_token_id=151,
-                               vision_start_token_id=152, vision_end_token_id=153)
+        text = dict(
+            vocab_size=160,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            linear_key_head_dim=16,
+            linear_value_head_dim=16,
+            linear_num_key_heads=2,
+            linear_num_value_heads=4,
+            max_position_embeddings=512,
+            pad_token_id=0,
+            rope_parameters={
+                "rope_type": "default",
+                "rope_theta": 10000.0,
+                "mrope_section": [1, 1, 0],
+                "mrope_interleaved": True,
+                "partial_rotary_factor": 0.25,
+            },
+        )
+        vision = dict(
+            depth=2,
+            hidden_size=32,
+            intermediate_size=64,
+            num_heads=4,
+            patch_size=4,
+            spatial_merge_size=2,
+            temporal_patch_size=2,
+            out_hidden_size=64,
+            num_position_embeddings=36,
+        )
+        config = Qwen3_5Config(
+            text_config=text,
+            vision_config=vision,
+            image_token_id=150,
+            video_token_id=151,
+            vision_start_token_id=152,
+            vision_end_token_id=153,
+        )
         return Qwen3_5ForConditionalGeneration._from_config(config, attn_implementation="sdpa").float()
     if family == "qwen3":
         from transformers import Qwen3VLConfig, Qwen3VLForConditionalGeneration
 
-        vision = dict(depth=2, hidden_size=32, intermediate_size=64, num_heads=4, patch_size=4, spatial_merge_size=2,
-                      temporal_patch_size=2, out_hidden_size=64, num_position_embeddings=36,
-                      deepstack_visual_indexes=[0])
-        config = Qwen3VLConfig(text_config=text, vision_config=vision, image_token_id=150, video_token_id=151,
-                               vision_start_token_id=152, vision_end_token_id=153)
+        vision = dict(
+            depth=2,
+            hidden_size=32,
+            intermediate_size=64,
+            num_heads=4,
+            patch_size=4,
+            spatial_merge_size=2,
+            temporal_patch_size=2,
+            out_hidden_size=64,
+            num_position_embeddings=36,
+            deepstack_visual_indexes=[0],
+        )
+        config = Qwen3VLConfig(
+            text_config=text,
+            vision_config=vision,
+            image_token_id=150,
+            video_token_id=151,
+            vision_start_token_id=152,
+            vision_end_token_id=153,
+        )
         model = Qwen3VLForConditionalGeneration._from_config(config, attn_implementation="sdpa")
     else:
         from transformers import Qwen2_5_VLConfig, Qwen2_5_VLForConditionalGeneration
 
-        vision = dict(depth=3, hidden_size=32, intermediate_size=64, num_heads=4, patch_size=4, spatial_merge_size=2,
-                      temporal_patch_size=2, out_hidden_size=64, window_size=16, fullatt_block_indexes=[1],
-                      spatial_patch_size=4)
-        config = Qwen2_5_VLConfig(text_config=text, vision_config=vision, image_token_id=150, video_token_id=151,
-                                  vision_start_token_id=152, vision_end_token_id=153)
+        vision = dict(
+            depth=3,
+            hidden_size=32,
+            intermediate_size=64,
+            num_heads=4,
+            patch_size=4,
+            spatial_merge_size=2,
+            temporal_patch_size=2,
+            out_hidden_size=64,
+            window_size=16,
+            fullatt_block_indexes=[1],
+            spatial_patch_size=4,
+        )
+        config = Qwen2_5_VLConfig(
+            text_config=text,
+            vision_config=vision,
+            image_token_id=150,
+            video_token_id=151,
+            vision_start_token_id=152,
+            vision_end_token_id=153,
+        )
         model = Qwen2_5_VLForConditionalGeneration._from_config(config, attn_implementation="sdpa")
     return model.float()
 
@@ -65,7 +139,7 @@ def _inputs(model, grids):
     rows = []
     for sample in range(2):
         ids = [5, 6]
-        for h, w in grids[sample * per_sample:(sample + 1) * per_sample]:
+        for h, w in grids[sample * per_sample : (sample + 1) * per_sample]:
             ids += [152] + [150] * (h * w // merge) + [153]
         ids += list(range(10, 14 + 3 * sample))  # different text lengths: left padding on the shorter sample
         rows.append(ids)
@@ -124,10 +198,14 @@ def _check(family):
         hidden, grads, outputs = _run(model, _inputs(model, grids))
         reference[name] = (hidden, grads, outputs.logits.detach().clone())
 
-    applied, skipped = vlm.run_speedups(SimpleNamespace(model=model), [f"starVLA.model.modules.vlm.{p}" for p in BACKBONE_PATHS])
+    applied, skipped = vlm.run_speedups(
+        SimpleNamespace(model=model), [f"starVLA.model.modules.vlm.monkey_patch:{p}" for p in BACKBONE_PATHS]
+    )
     # transformers 5 builds its masks differently: attn_mask checks its builder against the installed one first
-    expected = [p for p in BACKBONE_PATHS if not (family == "qwen3_5" and p == "attn_mask" and p in skipped)]
-    assert sorted(applied) == sorted(expected) and not set(skipped) - set(BACKBONE_PATHS) - set(expected) - {"attn_mask"}, (applied, skipped)
+    expected = [p for p in BACKBONE_PATHS if not (family == "qwen3_5" and p == "patch_attention_mask" and p in skipped)]
+    assert sorted(applied) == sorted(expected) and not set(skipped) - set(BACKBONE_PATHS) - set(expected) - {
+        "patch_attention_mask"
+    }, (applied, skipped)
 
     for name, grids in cases.items():
         hidden, grads, outputs = _run(model, _inputs(model, grids))
@@ -145,28 +223,33 @@ def _check(family):
     calls_after = _vision_attention_calls(model, inputs)
     depth = len(model.model.visual.blocks)
     assert calls_after == depth < calls_before, (calls_before, calls_after, depth)
-    from starVLA.model.modules.vlm import vision_attn
+    from starVLA.model.modules.vlm import monkey_patch as vision_attn
 
     assert vision_attn.decisions and all(vision_attn.decisions.values()), vision_attn.decisions  # probes ran, passed
-    print(f"ok {family}: {len(grads)} gradients, hidden states and logits bitwise identical "
-          f"({', '.join(cases)}; speedups: {', '.join(applied)}); "
-          f"vision attention calls per forward {calls_before} -> {calls_after}")
-
-
+    print(
+        f"ok {family}: {len(grads)} gradients, hidden states and logits bitwise identical "
+        f"({', '.join(cases)}; speedups: {', '.join(applied)}); "
+        f"vision attention calls per forward {calls_before} -> {calls_after}"
+    )
 
 
 def _check_flash_attention():
     """A backbone loaded with flash-attention keeps it, and the SDPA-only speedups report "not applicable"
     instead of failing in the first training step."""
     from starVLA.model.modules import vlm
-    from starVLA.model.modules.vlm import vision_attn
+    from starVLA.model.modules.vlm import monkey_patch as vision_attn
 
     model = _tiny("qwen2_5")
     for config in (model.config, model.model.visual.config, model.model.language_model.config):
         config._attn_implementation_internal = "flash_attention_2"  # cannot be loaded this way without a GPU
     applied, skipped = vlm.run_speedups(SimpleNamespace(model=model), vlm.BACKBONE_SPEEDUPS)
-    assert applied == ["hidden_only", "vision_pos"], applied
-    assert skipped == ["attn_mask", "vision_attn", "worker_prep", "video_prep"], skipped  # worker_prep: no processor on this bare model
+    assert applied == ["skip_unused_lm_head", "cache_vision_positions"], applied
+    assert skipped == [
+        "patch_attention_mask",
+        "batch_vision_attention",
+        "prepare_inputs_in_workers",
+        "prepare_videos_in_workers",
+    ], skipped
     assert vision_attn._attention_implementation(model.model.visual, model) == "flash_attention_2"
     print(f"ok flash-attention: kept ({', '.join(applied)}; not applicable: {', '.join(skipped)})")
 
@@ -182,9 +265,12 @@ class _Samples:
         from PIL import Image
 
         rng = np.random.default_rng(index)
-        return {"image": [Image.fromarray(rng.integers(0, 256, (224, 224, 3), dtype=np.uint8)) for _ in range(2)],
-                "lang": "put the bowl on the plate" + " and then close the drawer" * (index % 3),
-                "state": rng.uniform(-1, 1, (1, 8)).astype(np.float32), "action": rng.normal(size=(8, 7))}
+        return {
+            "image": [Image.fromarray(rng.integers(0, 256, (224, 224, 3), dtype=np.uint8)) for _ in range(2)],
+            "lang": "put the bowl on the plate" + " and then close the drawer" * (index % 3),
+            "state": rng.uniform(-1, 1, (1, 8)).astype(np.float32),
+            "action": rng.normal(size=(8, 7)),
+        }
 
 
 def _same_batch(batch):
@@ -201,7 +287,7 @@ def _check_worker_prep(model_dir):
     from transformers import AutoConfig, AutoProcessor
 
     from starVLA.model.modules import vlm
-    from starVLA.model.modules.vlm import worker_prep
+    from starVLA.dataloader import worker_prep
     from starVLA.model.framework.share_tools import add_discretized_state_to_instruction
 
     if "Qwen2.5-VL" in model_dir:
@@ -212,8 +298,12 @@ def _check_worker_prep(model_dir):
         from transformers import Qwen3VLModel as core_class
 
         from starVLA.model.modules.vlm.QWen3 import _QWen3_VL_Interface as interface_class
-    cfg = OmegaConf.create({"framework": {"name": "QwenGR00T", "qwenvl": {"base_vlm": model_dir},
-                                          "action_model": {"action_horizon": 8}}, "datasets": {"vla_data": {}}})
+    cfg = OmegaConf.create(
+        {
+            "framework": {"name": "QwenGR00T", "qwenvl": {"base_vlm": model_dir}, "action_model": {"action_horizon": 8}},
+            "datasets": {"vla_data": {}},
+        }
+    )
     core = core_class.__new__(core_class)  # get_rope_index reads only the config
     nn.Module.__init__(core)
     core.config = AutoConfig.from_pretrained(model_dir)
@@ -225,38 +315,55 @@ def _check_worker_prep(model_dir):
     interface.__dict__["model"] = SimpleNamespace(device=torch.device("cpu"), model=core)
     original = interface.build_qwenvl_inputs
 
-    applied, skipped = vlm.run_speedups(interface, ["starVLA.model.modules.vlm.worker_prep"])
-    assert applied == ["worker_prep"] and not skipped, (applied, skipped)
+    applied, skipped = vlm.run_speedups(interface, ["starVLA.dataloader.worker_prep:prepare_inputs_in_workers"])
+    assert applied == ["prepare_inputs_in_workers"] and not skipped, (applied, skipped)
 
     suffix = f" Please predict the next 8 robot actions: <action>{'🔍' * 8}<action>."
-    with_state = lambda batch: add_discretized_state_to_instruction([e["lang"] for e in batch], [e["state"] for e in batch])
-    prompts = {"QwenGR00T": lambda batch: [e["lang"] for e in batch], "QwenPI_v3": with_state,
-               "QwenOFT": lambda batch: [instruction + suffix for instruction in with_state(batch)]}
+    with_state = lambda batch: add_discretized_state_to_instruction(
+        [e["lang"] for e in batch], [e["state"] for e in batch]
+    )
+    prompts = {
+        "QwenGR00T": lambda batch: [e["lang"] for e in batch],
+        "QwenPI_v3": with_state,
+        "QwenOFT": lambda batch: [instruction + suffix for instruction in with_state(batch)],
+    }
     for framework, prompt in prompts.items():
         cfg.framework.name = framework
-        loader = DataLoader(_Samples(), batch_size=2, num_workers=2, collate_fn=worker_prep.collate(cfg, _same_batch),
-                            multiprocessing_context="spawn" if framework == "QwenOFT" else None)  # must pickle
-        used = worker_prep.stats["used"]
+        loader = DataLoader(
+            _Samples(),
+            batch_size=2,
+            num_workers=2,
+            collate_fn=worker_prep.inputs_collate(cfg, _same_batch),
+            multiprocessing_context="spawn" if framework == "QwenOFT" else None,
+        )  # must pickle
+        used = worker_prep.input_stats["used"]
         for batch in loader:
             images, instructions = [e["image"] for e in batch], prompt(batch)
             got = interface.build_qwenvl_inputs(images=images, instructions=instructions)
             reference = original(images=images, instructions=instructions)
-            position_ids, _ = core.get_rope_index(input_ids=reference["input_ids"], image_grid_thw=reference["image_grid_thw"],
-                                                  attention_mask=reference["attention_mask"])
+            position_ids, _ = core.get_rope_index(
+                input_ids=reference["input_ids"],
+                image_grid_thw=reference["image_grid_thw"],
+                attention_mask=reference["attention_mask"],
+            )
             assert type(got) is type(reference) and set(got.keys()) == set(reference.keys()) | {"position_ids"}
             for key in reference.keys():
                 assert torch.equal(got[key], reference[key]) and got[key].dtype == reference[key].dtype, (framework, key)
             assert torch.equal(got["position_ids"], position_ids), framework
-        assert worker_prep.stats["used"] == used + 3, (framework, worker_prep.stats)
+        assert worker_prep.input_stats["used"] == used + 3, (framework, worker_prep.input_stats)
     # a prompt the workers did not expect, and a call with other images: the interface answers itself
     batch = next(iter(loader))
     images = [e["image"] for e in batch]
     other = interface.build_qwenvl_inputs(images=images, instructions=["something else"] * 2)
-    assert "position_ids" not in other and worker_prep.stats["other prompt"] == 1
-    fresh = interface.build_qwenvl_inputs(images=[list(sample) for sample in images][::-1], instructions=prompts["QwenOFT"](batch)[::-1])
-    assert "position_ids" not in fresh and worker_prep.stats["used"] == 9
-    print(f"ok worker_prep {os.path.basename(model_dir)}: inputs built in workers are identical for "
-          f"{', '.join(prompts)} ({', '.join(sorted(reference.keys()))} + position_ids)")
+    assert "position_ids" not in other and worker_prep.input_stats["other prompt"] == 1
+    fresh = interface.build_qwenvl_inputs(
+        images=[list(sample) for sample in images][::-1], instructions=prompts["QwenOFT"](batch)[::-1]
+    )
+    assert "position_ids" not in fresh and worker_prep.input_stats["used"] == 9
+    print(
+        f"ok worker_prep {os.path.basename(model_dir)}: inputs built in workers are identical for "
+        f"{', '.join(prompts)} ({', '.join(sorted(reference.keys()))} + position_ids)"
+    )
 
 
 class _PixelProcessor:
@@ -268,8 +375,9 @@ class _PixelProcessor:
         width = max(len(p) for p in prompts)
         ids = torch.tensor([[0] * (width - len(p)) + [ord(c) % 256 for c in p] for p in prompts])
         mask = torch.tensor([[0] * (width - len(p)) + [1] * len(p) for p in prompts])
-        pixels = torch.stack([torch.stack([torch.as_tensor(np.asarray(im), dtype=torch.float32) for im in views])
-                              for views in images])
+        pixels = torch.stack(
+            [torch.stack([torch.as_tensor(np.asarray(im), dtype=torch.float32) for im in views]) for views in images]
+        )
         return BatchFeature(data={"input_ids": ids, "attention_mask": mask, "pixel_values": pixels})
 
 
@@ -302,22 +410,22 @@ def test_worker_prep_framework():
     from torch.utils.data import DataLoader
 
     from starVLA.model.modules import vlm
-    from starVLA.model.modules.vlm import worker_prep
+    from starVLA.dataloader import worker_prep
 
     framework = _OwnBuilderFramework()
     original = framework._build_vlm_inputs
-    applied, _ = vlm.run_speedups(framework, ["starVLA.model.modules.vlm.worker_prep"], "apply_framework")
-    assert applied == ["worker_prep"], applied
+    applied, _ = vlm.run_speedups(framework, ["starVLA.dataloader.worker_prep:prepare_framework_inputs_in_workers"])
+    assert applied == ["prepare_framework_inputs_in_workers"], applied
     cfg = SimpleNamespace(framework={"name": "MiniCPMRobotManip"})
-    collate = worker_prep.collate(cfg, _same_batch)
-    assert worker_prep.collate(cfg, collate) is collate  # wrapped once
+    collate = worker_prep.inputs_collate(cfg, _same_batch)
+    assert worker_prep.inputs_collate(cfg, collate) is collate  # wrapped once
     loader = DataLoader(_Samples(), batch_size=2, num_workers=2, collate_fn=collate, multiprocessing_context="spawn")
-    used = worker_prep.stats["used"]
+    used = worker_prep.input_stats["used"]
     for batch in loader:
         images, instructions = [e["image"] for e in batch], [e["lang"] for e in batch]
         got, reference = framework._build_vlm_inputs(images, instructions), original(images, instructions)
         assert got.keys() == reference.keys() and all(torch.equal(got[k], reference[k]) for k in reference.keys())
-    assert worker_prep.stats["used"] == used + 3, worker_prep.stats
+    assert worker_prep.input_stats["used"] == used + 3, worker_prep.input_stats
     other = framework._build_vlm_inputs(images, ["something else"] * 2)  # built by the framework itself
     assert torch.equal(other["input_ids"], original(images, ["something else"] * 2)["input_ids"])
     print("ok worker_prep_framework: a framework's own input construction in the workers, identical inputs")
@@ -352,13 +460,13 @@ def test_video_prep():
     from torch.utils.data import DataLoader
 
     from starVLA.model.modules import vlm
-    from starVLA.model.modules.world_model import video_prep as world_model
+    from starVLA.dataloader import worker_prep as world_model
 
     backbone = _VideoBackbone()
-    applied, _ = vlm.run_speedups(backbone, ["starVLA.model.modules.world_model.video_prep"])
-    assert applied == ["video_prep"], applied
+    applied, _ = vlm.run_speedups(backbone, ["starVLA.dataloader.worker_prep:prepare_videos_in_workers"])
+    assert applied == ["prepare_videos_in_workers"], applied
     reference = VideoProcessor(vae_scale_factor=16)
-    collate = world_model.collate(SimpleNamespace(framework={"name": "WanGR00T"}), _same_batch)
+    collate = world_model.video_collate(SimpleNamespace(framework={"name": "WanGR00T"}), _same_batch)
     loader = DataLoader(_Samples(), batch_size=2, num_workers=2, collate_fn=collate, multiprocessing_context="spawn")
     used = world_model.video_stats["used"]
     for batch in loader:
@@ -367,7 +475,9 @@ def test_video_prep():
             assert torch.equal(got, reference.preprocess_video(sample, height=480, width=832))
     assert world_model.video_stats["used"] == used + 6, world_model.video_stats
     copies = [[im.copy() for im in sample] for sample in images]  # other image objects: computed here
-    assert all(torch.equal(a, b) for a, b in zip(backbone._encode_images_vae(copies), backbone._encode_images_vae(images)))
+    assert all(
+        torch.equal(a, b) for a, b in zip(backbone._encode_images_vae(copies), backbone._encode_images_vae(images))
+    )
     assert world_model.video_stats["used"] == used + 8
     print("ok video_prep: a world model's image preprocessing in the workers, identical tensors")
 
@@ -384,15 +494,15 @@ def test_grad_norm_identity():
 
 
 def test_speedup_lists():
-    """Every listed speedup is a module with the function its caller uses."""
+    """Every listed speedup names a function that exists."""
     import importlib
 
     from starVLA.model.framework import base_framework
     from starVLA.model.modules import vlm
 
-    for module in vlm.BACKBONE_SPEEDUPS + base_framework.FRAMEWORK_SPEEDUPS[1:]:
-        assert callable(importlib.import_module(module).apply), module
-    assert callable(importlib.import_module(base_framework.FRAMEWORK_SPEEDUPS[0]).apply_framework)
+    for speedup in vlm.BACKBONE_SPEEDUPS + base_framework.FRAMEWORK_SPEEDUPS:
+        module, name = speedup.split(":")
+        assert callable(getattr(importlib.import_module(module), name)), speedup
 
 
 def _in_subprocess(family):

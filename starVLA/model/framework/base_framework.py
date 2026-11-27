@@ -121,8 +121,8 @@ def build_framework(cfg): # The single entry point for building different model 
 
 # As BACKBONE_SPEEDUPS (starVLA/model/modules/vlm/__init__.py), for what a framework does itself: bitwise identical.
 FRAMEWORK_SPEEDUPS = (
-    "starVLA.model.modules.vlm.worker_prep",  # a framework's own backbone-input construction in the data-loader workers
-    "starVLA.model.framework.worker_examples",  # PI0 / PI05: sample preparation in the data-loader workers
+    "starVLA.dataloader.worker_prep:prepare_framework_inputs_in_workers",
+    "starVLA.dataloader.worker_prep:prepare_examples_in_workers",
 )
 
 
@@ -133,8 +133,7 @@ def _apply_framework_speedups(framework):
     inner = getattr(getattr(framework, "model", None), "vlm", None)
     if callable(getattr(inner, "parameters", None)) and id(inner) not in vlm._sped_up:
         vlm.apply_backbone_speedups(vlm.InnerBackbone(inner))
-    vlm.run_speedups(framework, FRAMEWORK_SPEEDUPS[:1], "apply_framework")
-    vlm.run_speedups(framework, FRAMEWORK_SPEEDUPS[1:])
+    vlm.run_speedups(framework, FRAMEWORK_SPEEDUPS)
     return framework
 
 
