@@ -1,0 +1,19 @@
+server:
+  url: ws://localhost:8000
+
+docker:
+  image: ghcr.io/allenai/vla-evaluation-harness/robotwin:0.7.0
+
+output_dir: results/vla_eval/robotwin_smoke
+
+benchmarks:
+  - benchmark: vla_eval.benchmarks.robotwin.benchmark:RoboTwinBenchmark
+    episodes_per_task: 1
+    params:
+      task_name: grab_roller
+      task_config: demo_clean
+      seed: 0
+      instruction_type: seen
+      test_num: 1
+      skip_expert_check: true
+    action_dim: 14
