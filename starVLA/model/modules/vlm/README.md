@@ -35,6 +35,23 @@ vlm = get_vlm_model(config)  # Dispatches on config.framework.qwenvl.base_vlm
 | `Molmo2.py` | `_Molmo2_VL_Interface` | AllenAI Molmo2 (4B / 8B / O-7B / VideoPoint-4B) |
 | `MiniCPM_V.py` | `_MiniCPM_VL_Interface` | OpenBMB MiniCPM-V 4.6 |
 
+## Speedups Applied by the Factory
+
+`get_vlm_model()` applies a fixed list of speedups (`BACKBONE_SPEEDUPS` in `__init__.py`) to the interface it builds.
+All of them leave the results **bitwise identical**; each one checks the model and skips itself where it does not
+apply, so there is nothing to configure and nothing to add when writing a new wrapper.
+
+| File | Function | What it does |
+|------|------|-----------|
+| `monkey_patch.py` | `patch_attention_mask` | Causal + padding mask from two tensor ops instead of nested `torch.vmap` |
+| `monkey_patch.py` | `batch_vision_attention` | One attention call per vision layer instead of one per image (Qwen towers, SDPA) |
+| `monkey_patch.py` | `cache_vision_positions` | Vision position tables built once per grid size (Qwen towers) |
+| `starVLA/dataloader/worker_prep.py` | `prepare_inputs_in_workers` | `build_qwenvl_inputs` runs in the data-loader workers |
+
+A framework that edits the prompt before calling `build_qwenvl_inputs` registers the edit with `@prompt` in
+`starVLA/dataloader/worker_prep.py`; without it the inputs are simply built in the training process as before.
+Tests: `tests/test_speedups.py`, `tests/test_speedups_frameworks.py`.
+
 ## Relationship with World Model
 
 Cosmos-Reason2 has been migrated to `starVLA/model/modules/world_model/`.

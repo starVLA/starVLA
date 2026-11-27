@@ -1,4 +1,59 @@
+import importlib
+
+from starVLA.training.trainer_utils import initialize_overwatch
+
+logger = initialize_overwatch(__name__)
+
+# Speedups that leave every result bitwise identical (in deterministic mode, where the original code reproduces
+# itself): work moved off the critical path, or work whose result nobody reads left out. Each one checks the model it
+# is given, most of them with a probe against the original code on the running device, and returns False where it
+# does not apply, so nothing is configured per recipe. Applied in this order to every backbone interface.
+BACKBONE_SPEEDUPS = (
+    "starVLA.model.modules.vlm.monkey_patch:patch_attention_mask",
+    "starVLA.model.modules.vlm.monkey_patch:batch_vision_attention",
+    "starVLA.model.modules.vlm.monkey_patch:cache_vision_positions",
+    "starVLA.dataloader.worker_prep:prepare_inputs_in_workers",
+    "starVLA.dataloader.worker_prep:prepare_videos_in_workers",
+)
+_sped_up = set()  # ids of the Hugging Face models that went through apply_backbone_speedups
+
+
+def run_speedups(target, speedups):
+    """Call each "module:function" on `target`; returns the (applied, not applicable) function names."""
+    applied, skipped = [], []
+    for speedup in speedups:
+        module, name = speedup.split(":")
+        try:
+            ok = getattr(importlib.import_module(module), name)(target)
+        except Exception as error:  # a speedup must never stop a run that works without it
+            logger.warning(f"{name}: left off ({type(error).__name__}: {error})")
+            ok = False
+        (applied if ok else skipped).append(name)
+    if applied:
+        logger.info(f"{type(target).__name__}: {', '.join(applied)}")
+    return applied, skipped
+
+
+class InnerBackbone:
+    """A framework's own backbone model, presented as an interface (`.model`)."""
+
+    def __init__(self, model):
+        self.model = model
+
+
+def apply_backbone_speedups(vlm):
+    """BACKBONE_SPEEDUPS for a backbone interface (anything whose `.model` is the Hugging Face model). Returns `vlm`."""
+    _sped_up.add(id(getattr(vlm, "model", vlm)))
+    run_speedups(vlm, BACKBONE_SPEEDUPS)
+    return vlm
+
+
 def get_vlm_model(config):
+    """Build the backbone interface for `config.framework.qwenvl.base_vlm`."""
+    return apply_backbone_speedups(_build_vlm_model(config))
+
+
+def _build_vlm_model(config):
 
     vlm_name = config.framework.qwenvl.base_vlm
 

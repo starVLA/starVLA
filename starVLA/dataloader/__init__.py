@@ -45,9 +45,12 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
         )
         num_workers = int(vla_dataset_cfg.get("num_workers", 4))
+        from starVLA.dataloader.worker_prep import worker_collate
+
+        batch_collate_fn = worker_collate(cfg, collate_fn) if num_workers > 0 else collate_fn
         dataloader_kwargs = {
             "batch_size": cfg.datasets.vla_data.per_device_batch_size,
-            "collate_fn": collate_fn,
+            "collate_fn": batch_collate_fn,
             "num_workers": num_workers,
             "pin_memory": bool(vla_dataset_cfg.get("pin_memory", True)),
             # shuffle=True
