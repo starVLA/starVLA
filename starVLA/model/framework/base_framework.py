@@ -116,7 +116,26 @@ def build_framework(cfg): # The single entry point for building different model 
     )
 
     model_class = FRAMEWORK_REGISTRY[framework_id]
-    return model_class(cfg)
+    return _apply_framework_speedups(model_class(cfg))
+
+
+# As BACKBONE_SPEEDUPS (starVLA/model/modules/vlm/__init__.py), for what a framework does itself: bitwise identical.
+FRAMEWORK_SPEEDUPS = (
+    "starVLA.model.modules.vlm.worker_prep",  # a framework's own backbone-input construction in the data-loader workers
+    "starVLA.model.framework.worker_examples",  # PI0 / PI05: sample preparation in the data-loader workers
+)
+
+
+def _apply_framework_speedups(framework):
+    from starVLA.model.modules import vlm
+
+    # a framework that builds its backbone itself instead of with get_vlm_model (MiniCPM-RobotManip: `model.vlm`)
+    inner = getattr(getattr(framework, "model", None), "vlm", None)
+    if callable(getattr(inner, "parameters", None)) and id(inner) not in vlm._sped_up:
+        vlm.apply_backbone_speedups(vlm.InnerBackbone(inner))
+    vlm.run_speedups(framework, FRAMEWORK_SPEEDUPS[:1], "apply_framework")
+    vlm.run_speedups(framework, FRAMEWORK_SPEEDUPS[1:])
+    return framework
 
 
 # PreTrainedModel, AutoModel, PretrainedConfig,  are so good, find sometime to study them

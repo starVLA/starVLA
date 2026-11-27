@@ -1,4 +1,11 @@
 def get_world_model(config):
+    """Build the world-model backend for the config (with the same speedups as `get_vlm_model`)."""
+    from starVLA.model.modules.vlm import apply_backbone_speedups
+
+    return apply_backbone_speedups(_build_world_model(config))
+
+
+def _build_world_model(config):
     """Factory for world model backends.
 
     Routes to the correct world-model wrapper based on

@@ -33,6 +33,19 @@ def save_dataset_statistics(dataset_statistics, run_dir):
 
 
 
+def worker_collate(cfg, collate_fn):
+    """`collate_fn`, followed by the input construction that a backbone or framework handed to the data-loader workers
+    when it was built (the VLM processor, a world model's image preprocessing, PI0 / PI05 sample preparation). Each
+    wrapper is `collate_fn` itself when nothing was set up; the tensors are the ones the training process would build."""
+    from starVLA.model.framework import worker_examples
+    from starVLA.model.modules.vlm import worker_prep
+    from starVLA.model.modules.world_model import video_prep
+
+    for module in (worker_prep, video_prep, worker_examples):
+        collate_fn = module.collate(cfg, collate_fn)
+    return collate_fn
+
+
 def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here only is get dataset, we need mv dataloader to here
 
     if dataset_py == "lerobot_datasets":
@@ -45,9 +58,10 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             balance_trajectory_weights=vla_dataset_cfg.get("balance_trajectory_weights", False),
         )
         num_workers = int(vla_dataset_cfg.get("num_workers", 4))
+        batch_collate_fn = worker_collate(cfg, collate_fn) if num_workers > 0 else collate_fn
         dataloader_kwargs = {
             "batch_size": cfg.datasets.vla_data.per_device_batch_size,
-            "collate_fn": collate_fn,
+            "collate_fn": batch_collate_fn,
             "num_workers": num_workers,
             "pin_memory": bool(vla_dataset_cfg.get("pin_memory", True)),
             # shuffle=True
