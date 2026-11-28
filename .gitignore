@@ -109,6 +109,8 @@ celerybeat.pid
 .env
 .venv
 env/
+!examples/simBenchmarks/RLbench/configs/env/
+!examples/simBenchmarks/RLbench/configs/env/*.yaml
 venv/
 ENV/
 env.bak/

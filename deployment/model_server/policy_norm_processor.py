@@ -24,7 +24,7 @@ training — there is no second source of truth for normalization math.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 import torch
@@ -235,6 +235,19 @@ def _build_dataset_metadata(
     )
 
 
+def _instantiate_data_config(data_config: Any, model_cfg: Mapping[str, Any]) -> Any:
+    """Instantiate dynamic benchmark configs with the checkpoint action horizon."""
+    if not isinstance(data_config, type):
+        return data_config
+    action_cfg = model_cfg.get("framework", {}).get("action_model", {})
+    action_horizon = action_cfg.get("action_horizon")
+    if action_horizon is None:
+        action_horizon = int(action_cfg.get("future_action_window_size", 0)) + 1
+    if not action_horizon:
+        raise ValueError("Cannot instantiate DataConfig without an action_horizon")
+    return data_config(action_horizon=int(action_horizon))
+
+
 class PolicyNormProcessor:
     """Server-side normalization helper backed by training-time transforms.
 
@@ -274,7 +287,7 @@ class PolicyNormProcessor:
                 f"(available: {sorted(ROBOT_TYPE_CONFIG_MAP.keys())}). "
                 "Make sure the example's data_registry/data_config.py is importable."
             )
-        self._data_config = ROBOT_TYPE_CONFIG_MAP[robot_type]
+        self._data_config = _instantiate_data_config(ROBOT_TYPE_CONFIG_MAP[robot_type], cfg)
         self._action_keys: List[str] = list(self._data_config.action_keys)
         self._state_keys: List[str] = list(getattr(self._data_config, "state_keys", []))
 
@@ -353,6 +366,34 @@ class PolicyNormProcessor:
     @property
     def transform(self) -> ComposedModalityTransform:
         return self._transform
+
+    def apply_state(self, state: np.ndarray) -> np.ndarray:
+        """Normalize a flat eval-time state with the training-time transform."""
+        state = np.asarray(state, dtype=np.float32)
+        if state.ndim == 1:
+            state = state[None, :]
+        if state.ndim != 2:
+            raise ValueError(f"Expected state shape (B, D), got {state.shape}")
+        expected_dim = sum(self._state_key_dims[key] for key in self._state_keys)
+        if state.shape[-1] != expected_dim:
+            raise ValueError(
+                f"State dimension {state.shape[-1]} does not match training contract {expected_dim}; "
+                f"state_keys={self._state_keys}, state_key_dims={self._state_key_dims}"
+            )
+        split_state: Dict[str, np.ndarray] = {}
+        cursor = 0
+        for key in self._state_keys:
+            dim = self._state_key_dims[key]
+            split_state[key] = state[:, cursor : cursor + dim]
+            cursor += dim
+        normalized = self._transform.apply(split_state)
+        values = []
+        for key in self._state_keys:
+            value = normalized[key]
+            if isinstance(value, torch.Tensor):
+                value = value.detach().cpu().numpy()
+            values.append(np.asarray(value, dtype=np.float32))
+        return np.concatenate(values, axis=-1)
 
     # ------------------------------------------------------------------
     # Inverse path (model output → env action)

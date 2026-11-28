@@ -187,7 +187,13 @@ class PolicyServerWrapper:
                 )
         proc = self._get_processor(effective_key)
 
-        out = self._framework.predict_action(examples=examples, **kwargs)
+        prepared_examples = []
+        for example in examples:
+            prepared = dict(example)
+            if "state" in prepared:
+                prepared["state"] = proc.apply_state(prepared["state"])
+            prepared_examples.append(prepared)
+        out = self._framework.predict_action(examples=prepared_examples, **kwargs)
         normalized = np.asarray(out["normalized_actions"])  # (B, T, D)
 
         unnorm = np.stack(
